@@ -141,7 +141,7 @@ public class ClassLoaderITCase extends TestLogger {
 		TestEnvironment.unsetAsContext();
 	}
 
-	@Test
+	//@Test
 	public void testCustomSplitJobWithCustomClassLoaderJar() throws IOException, ProgramInvocationException {
 
 		PackagedProgram inputSplitTestProg = new PackagedProgram(new File(INPUT_SPLITS_PROG_JAR_FILE));
@@ -155,7 +155,7 @@ public class ClassLoaderITCase extends TestLogger {
 		inputSplitTestProg.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testStreamingCustomSplitJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		PackagedProgram streamingInputSplitTestProg = new PackagedProgram(new File(STREAMING_INPUT_SPLITS_PROG_JAR_FILE));
 
@@ -168,7 +168,7 @@ public class ClassLoaderITCase extends TestLogger {
 		streamingInputSplitTestProg.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testCustomSplitJobWithCustomClassLoaderPath() throws IOException, ProgramInvocationException {
 		URL classpath = new File(INPUT_SPLITS_PROG_JAR_FILE).toURI().toURL();
 		PackagedProgram inputSplitTestProg2 = new PackagedProgram(new File(INPUT_SPLITS_PROG_JAR_FILE));
@@ -182,7 +182,7 @@ public class ClassLoaderITCase extends TestLogger {
 		inputSplitTestProg2.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testStreamingClassloaderJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		// regular streaming job
 		PackagedProgram streamingProg = new PackagedProgram(new File(STREAMING_PROG_JAR_FILE));
@@ -196,7 +196,7 @@ public class ClassLoaderITCase extends TestLogger {
 		streamingProg.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testCheckpointedStreamingClassloaderJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		// checkpointed streaming job with custom classes for the checkpoint (FLINK-2543)
 		// the test also ensures that user specific exceptions are serializable between JobManager <--> JobClient.
@@ -231,7 +231,7 @@ public class ClassLoaderITCase extends TestLogger {
 		}
 	}
 
-	@Test
+	//@Test
 	public void testKMeansJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		PackagedProgram kMeansProg = new PackagedProgram(
 			new File(KMEANS_JAR_PATH),
@@ -250,7 +250,7 @@ public class ClassLoaderITCase extends TestLogger {
 		kMeansProg.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testUserCodeTypeJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		PackagedProgram userCodeTypeProg = new PackagedProgram(new File(USERCODETYPE_JAR_PATH));
 
@@ -263,7 +263,7 @@ public class ClassLoaderITCase extends TestLogger {
 		userCodeTypeProg.invokeInteractiveModeForExecution();
 	}
 
-	@Test
+	//@Test
 	public void testCheckpointingCustomKvStateJobWithCustomClassLoader() throws IOException, ProgramInvocationException {
 		File checkpointDir = FOLDER.newFolder();
 		File outputDir = FOLDER.newFolder();
@@ -290,7 +290,7 @@ public class ClassLoaderITCase extends TestLogger {
 	/**
 	 * Tests disposal of a savepoint, which contains custom user code KvState.
 	 */
-	@Test
+	//@Test
 	public void testDisposeSavepointWithCustomKvState() throws Exception {
 		ClusterClient<?> clusterClient = new MiniClusterClient(new Configuration(), testCluster);
 
@@ -379,5 +379,32 @@ public class ClassLoaderITCase extends TestLogger {
 		// make sure, the execution is finished to not influence other test methods
 		invokeThread.join(deadline.timeLeft().toMillis());
 		assertFalse("Program invoke thread still running", invokeThread.isAlive());
+	}
+
+	@Test
+	public void test() throws Exception {
+		for (int i = 0; i < 1000; i++) {
+			this.testCheckpointedStreamingClassloaderJobWithCustomClassLoader();
+			this.tearDown();
+			//this.testCheckpointingCustomKvStateJobWithCustomClassLoader();
+			this.testCustomSplitJobWithCustomClassLoaderJar();
+			this.tearDown();
+			this.testCustomSplitJobWithCustomClassLoaderPath();
+			this.tearDown();
+			this.testDisposeSavepointWithCustomKvState();
+			this.tearDown();
+			this.testKMeansJobWithCustomClassLoader();
+			this.tearDown();
+			this.testStreamingClassloaderJobWithCustomClassLoader();
+			this.tearDown();
+			this.testStreamingCustomSplitJobWithCustomClassLoader();
+			this.tearDown();
+			this.testUserCodeTypeJobWithCustomClassLoader();
+			this.tearDown();
+			System.out.println("iteration " + i);
+			i++;
+			tearDownClass();
+			setUp();
+		}
 	}
 }
