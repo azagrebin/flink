@@ -1,0 +1,228 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.contrib.streaming.state.ttl;
+
+import org.apache.flink.api.common.state.ListStateDescriptor;
+import org.apache.flink.api.common.state.MapStateDescriptor;
+import org.apache.flink.api.common.state.StateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
+import org.apache.flink.api.common.typeutils.base.ListSerializer;
+import org.apache.flink.core.memory.DataInputDeserializer;
+import org.apache.flink.runtime.state.RegisteredKeyValueStateBackendMetaInfo;
+import org.apache.flink.runtime.state.RegisteredStateMetaInfoBase;
+import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
+import org.apache.flink.runtime.state.ttl.TtlStateFactory;
+import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
+import org.apache.flink.runtime.state.ttl.TtlUtils;
+import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.Preconditions;
+
+import org.rocksdb.ColumnFamilyOptions;
+import org.rocksdb.DBOptions;
+import org.rocksdb.FlinkCompactionFilter;
+import org.rocksdb.FlinkCompactionFilter.FlinkCompactionFilterFactory;
+import org.rocksdb.InfoLogLevel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+
+import java.io.IOException;
+
+/** RocksDB compaction filter utils for state with TTL. */
+public class RocksDbTtlCompactFilterUtils {
+	private static final Logger LOG = LoggerFactory.getLogger(FlinkCompactionFilter.class);
+
+	/** Enables RocksDb compaction filter for State with TTL. */
+	private final boolean enableTtlCompactionFilter;
+
+	public RocksDbTtlCompactFilterUtils(boolean enableTtlCompactionFilter) {
+		this.enableTtlCompactionFilter = enableTtlCompactionFilter;
+	}
+
+	public FlinkCompactionFilterFactory setCompactFilterIfStateTtl(
+		TtlTimeProvider ttlTimeProvider,
+		@Nonnull StateMetaInfoSnapshot stateMetaInfoSnapshot,
+		@Nonnull ColumnFamilyOptions options) {
+
+		boolean keyValueState = stateMetaInfoSnapshot.getBackendStateType() == StateMetaInfoSnapshot.BackendStateType.KEY_VALUE;
+		if (enableTtlCompactionFilter && keyValueState) {
+			@SuppressWarnings("unchecked")
+			TypeSerializerSnapshot<?> stateSerializerSnapshot = Preconditions.checkNotNull(
+				(TypeSerializerSnapshot<?>) stateMetaInfoSnapshot.getTypeSerializerSnapshot(
+					StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER));
+			TypeSerializer<?> serializer = stateSerializerSnapshot.restoreSerializer();
+			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(serializer)) {
+				return createAndSetCompactFilterFactory(ttlTimeProvider, options);
+			}
+		}
+		return null;
+	}
+
+	public FlinkCompactionFilterFactory setCompactFilterIfStateTtl(
+		TtlTimeProvider ttlTimeProvider,
+		@Nonnull RegisteredStateMetaInfoBase metaInfoBase,
+		@Nonnull ColumnFamilyOptions options) {
+
+		if (enableTtlCompactionFilter && metaInfoBase instanceof RegisteredKeyValueStateBackendMetaInfo) {
+			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase = (RegisteredKeyValueStateBackendMetaInfo) metaInfoBase;
+			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(kvMetaInfoBase.getStateSerializer())) {
+				return createAndSetCompactFilterFactory(ttlTimeProvider, options);
+			}
+		}
+		return null;
+	}
+
+	private static FlinkCompactionFilterFactory createAndSetCompactFilterFactory(
+		TtlTimeProvider ttlTimeProvider, @Nonnull ColumnFamilyOptions options) {
+
+		FlinkCompactionFilterFactory compactionFilterFactory =
+			new FlinkCompactionFilterFactory(new TimeProviderWrapper(ttlTimeProvider), createRocksDbNativeLogger());
+		//noinspection resource
+		options.setCompactionFilterFactory(compactionFilterFactory);
+		return compactionFilterFactory;
+	}
+
+	private static org.rocksdb.Logger createRocksDbNativeLogger() {
+		if (LOG.isDebugEnabled()) {
+			// options are always needed for org.rocksdb.Logger construction (no other constructor)
+			// the logger level gets configured from the options in native code
+			try (DBOptions opts = new DBOptions().setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL)) {
+				return new org.rocksdb.Logger(opts) {
+					@Override
+					protected void log(InfoLogLevel infoLogLevel, String logMsg) {
+						LOG.debug("RocksDB filter native code log: " + logMsg);
+					}
+				};
+			}
+		} else {
+			return null;
+		}
+	}
+
+	public void configCompactFilter(
+			@Nonnull StateDescriptor<?, ?> stateDesc,
+			TypeSerializer<?> stateSerializer,
+			FlinkCompactionFilterFactory compactionFilterFactory) {
+		StateTtlConfig ttlConfig = stateDesc.getTtlConfig();
+		if (ttlConfig.isEnabled() && ttlConfig.getCleanupStrategies().inRocksdbCompactFilter()) {
+			if (!enableTtlCompactionFilter) {
+				LOG.warn("Cannot configure RocksDB TTL compaction filter for state <{}>: " +
+					"feature is disabled for the state backend.", stateDesc.getName());
+			}
+			Preconditions.checkNotNull(compactionFilterFactory);
+			long ttl = ttlConfig.getTtl().toMilliseconds();
+
+			StateTtlConfig.RocksdbCompactFilterCleanupStrategy rocksdbCompactFilterCleanupStrategy =
+				ttlConfig.getCleanupStrategies().getRocksdbCompactFilterCleanupStrategy();
+			Preconditions.checkNotNull(rocksdbCompactFilterCleanupStrategy);
+			long queryTimeAfterNumEntries =
+				rocksdbCompactFilterCleanupStrategy.getQueryTimeAfterNumEntries();
+
+			FlinkCompactionFilter.Config config;
+			if (stateDesc instanceof ListStateDescriptor) {
+				TypeSerializer<?> elemSerializer = ((ListSerializer<?>) stateSerializer).getElementSerializer();
+				int len = elemSerializer.getLength();
+				if (len > 0) {
+					config = FlinkCompactionFilter.Config.createForFixedElementList(
+						ttl, queryTimeAfterNumEntries,len + 1); // plus one byte for list element delimiter
+				} else {
+					config = FlinkCompactionFilter.Config.createForList(
+						ttl, queryTimeAfterNumEntries,
+						new ListElementFilterFactory<>(elemSerializer.duplicate()));
+				}
+			} else if (stateDesc instanceof MapStateDescriptor) {
+				config = FlinkCompactionFilter.Config.createForMap(ttl, queryTimeAfterNumEntries);
+			} else {
+				config = FlinkCompactionFilter.Config.createForValue(ttl, queryTimeAfterNumEntries);
+			}
+			compactionFilterFactory.configure(config);
+		}
+	}
+
+	private static class ListElementFilterFactory<T> implements FlinkCompactionFilter.ListElementFilterFactory {
+		private final TypeSerializer<T> serializer;
+
+		private ListElementFilterFactory(TypeSerializer<T> serializer) {
+			this.serializer = serializer;
+		}
+
+		@Override
+		public FlinkCompactionFilter.ListElementFilter createListElementFilter() {
+			return new ListElementFilter<>(serializer);
+		}
+	}
+
+	private static class TimeProviderWrapper implements FlinkCompactionFilter.TimeProvider {
+		private final TtlTimeProvider ttlTimeProvider;
+
+		private TimeProviderWrapper(TtlTimeProvider ttlTimeProvider) {
+			this.ttlTimeProvider = ttlTimeProvider;
+		}
+
+		@Override
+		public long currentTimestamp() {
+			return ttlTimeProvider.currentTimestamp();
+		}
+	}
+
+	private static class ListElementFilter<T> implements FlinkCompactionFilter.ListElementFilter {
+		private final TypeSerializer<T> serializer;
+		private DataInputDeserializer input;
+		private DataInputDeserializer ts;
+
+		private ListElementFilter(TypeSerializer<T> serializer) {
+			this.serializer = serializer;
+			this.input = new DataInputDeserializer();
+			this.ts = new DataInputDeserializer();
+		}
+
+		@Override
+		public int nextUnexpiredOffset(byte[] bytes, long ttl, long currentTimestamp) {
+			input.setBuffer(bytes);
+			while (input.available() > 0) {
+				try {
+					long timestamp = getCurrentTimestamp(bytes);
+					if (!TtlUtils.expired(timestamp, ttl, currentTimestamp)) {
+						break;
+					}
+					nextElement();
+				} catch (IOException e) {
+					throw new FlinkRuntimeException("Failed to deserialize list element for TTL compaction filter", e);
+				}
+			}
+			return input.getPosition();
+		}
+
+		private long getCurrentTimestamp(byte[] bytes) throws IOException {
+			int pos = input.getPosition();
+			ts.setBuffer(bytes, pos, Long.BYTES);
+			return ts.readLong();
+		}
+
+		private void nextElement() throws IOException {
+			serializer.deserialize(input);
+			if (input.available() > 0) {
+				input.skipBytesToRead(1);
+			}
+		}
+	}
+}
