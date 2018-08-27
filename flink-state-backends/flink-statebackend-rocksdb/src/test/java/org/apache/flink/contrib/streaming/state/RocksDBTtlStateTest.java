@@ -18,6 +18,8 @@
 
 package org.apache.flink.contrib.streaming.state;
 
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.ttl.StateBackendTestContext;
@@ -28,6 +30,9 @@ import org.apache.flink.util.TernaryBoolean;
 
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
+import org.rocksdb.ColumnFamilyOptions;
+import org.rocksdb.DBOptions;
+import org.rocksdb.FlinkCompactionFilter;
 
 import java.io.IOException;
 
@@ -57,6 +62,30 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		}
 		RocksDBStateBackend backend = new RocksDBStateBackend(new FsStateBackend(checkpointPath), TernaryBoolean.FALSE);
 		backend.setDbStoragePath(dbPath);
+		backend.setOptions(new OptionsFactory() {
+			private static final long serialVersionUID = -3791222437886983105L;
+
+			@Override
+			public DBOptions createDBOptions(DBOptions currentOptions) {
+				return currentOptions;
+			}
+
+			@Override
+			public ColumnFamilyOptions createColumnOptions(ColumnFamilyOptions currentOptions) {
+				return currentOptions.setCompactionFilter(
+					new FlinkCompactionFilter(getStateType(), ttlConfig.getTtl().toMilliseconds(), null));
+			}
+		});
 		return backend;
+	}
+
+	private FlinkCompactionFilter.StateType getStateType() {
+		if (ctx.ttlState instanceof ListState) {
+			return FlinkCompactionFilter.StateType.List;
+		} else if (ctx.ttlState instanceof MapState) {
+			return FlinkCompactionFilter.StateType.Map;
+		} else {
+			return FlinkCompactionFilter.StateType.Value;
+		}
 	}
 }

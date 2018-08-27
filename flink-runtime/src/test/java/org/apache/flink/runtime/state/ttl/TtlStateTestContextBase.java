@@ -22,8 +22,8 @@ import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 
-abstract class TtlStateTestContextBase<S extends InternalKvState<?, String, ?>, UV, GV> {
-	S ttlState;
+public abstract class TtlStateTestContextBase<S extends InternalKvState<?, String, ?>, UV, GV> {
+	public S ttlState;
 
 	UV updateEmpty;
 	UV updateUnexpired;

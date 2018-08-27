@@ -49,7 +49,7 @@ public abstract class TtlStateTestBase {
 
 	private MockTtlTimeProvider timeProvider;
 	private StateBackendTestContext sbetc;
-	private StateTtlConfig ttlConfig;
+	protected StateTtlConfig ttlConfig;
 
 	@Before
 	public void setup() {
