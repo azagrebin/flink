@@ -47,8 +47,8 @@ import static org.junit.Assume.assumeThat;
 public abstract class TtlStateTestBase {
 	private static final long TTL = 100;
 
-	private MockTtlTimeProvider timeProvider;
-	private StateBackendTestContext sbetc;
+	protected MockTtlTimeProvider timeProvider;
+	protected StateBackendTestContext sbetc;
 	protected StateTtlConfig ttlConfig;
 
 	@Before
@@ -76,7 +76,7 @@ public abstract class TtlStateTestBase {
 	}
 
 	@SuppressWarnings("unchecked")
-	private <S extends InternalKvState<?, String, ?>, UV> TtlStateTestContextBase<S, UV, ?> ctx() {
+	protected <S extends InternalKvState<?, String, ?>, UV> TtlStateTestContextBase<S, UV, ?> ctx() {
 		return (TtlStateTestContextBase<S, UV, ?>) ctx;
 	}
 
@@ -85,7 +85,7 @@ public abstract class TtlStateTestBase {
 		return (TtlMergingStateTestContext<?, UV, ?>) ctx;
 	}
 
-	private void initTest() throws Exception {
+	protected void initTest() throws Exception {
 		initTest(StateTtlConfig.UpdateType.OnCreateAndWrite, StateTtlConfig.StateVisibility.NeverReturnExpired);
 	}
 

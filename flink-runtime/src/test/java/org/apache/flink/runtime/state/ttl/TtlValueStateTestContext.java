@@ -48,17 +48,17 @@ class TtlValueStateTestContext extends TtlStateTestContextBase<TtlValueState<?, 
 	}
 
 	@Override
-	void update(String value) throws Exception {
+	public void update(String value) throws Exception {
 		ttlState.update(value);
 	}
 
 	@Override
-	String get() throws Exception {
+	public String get() throws Exception {
 		return ttlState.value();
 	}
 
 	@Override
-	Object getOriginal() throws Exception {
+	public Object getOriginal() throws Exception {
 		return ttlState.original.value();
 	}
 }

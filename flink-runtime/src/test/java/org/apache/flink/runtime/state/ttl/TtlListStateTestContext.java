@@ -49,17 +49,17 @@ class TtlListStateTestContext
 	}
 
 	@Override
-	void update(List<Integer> value) throws Exception {
+	public void update(List<Integer> value) throws Exception {
 		ttlState.addAll(value);
 	}
 
 	@Override
-	Iterable<Integer> get() throws Exception {
+	public Iterable<Integer> get() throws Exception {
 		return StreamSupport.stream(ttlState.get().spliterator(), false).collect(Collectors.toList());
 	}
 
 	@Override
-	Object getOriginal() throws Exception {
+	public Object getOriginal() throws Exception {
 		return ttlState.original.get() == null ? emptyValue : ttlState.original.get();
 	}
 

@@ -29,12 +29,15 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.TernaryBoolean;
 
 import org.junit.Rule;
+import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.DBOptions;
 import org.rocksdb.FlinkCompactionFilter;
 
 import java.io.IOException;
+
+import static org.junit.Assert.assertEquals;
 
 /** Test suite for rocksdb state TTL. */
 public class RocksDBTtlStateTest extends TtlStateTestBase {
@@ -73,7 +76,10 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 			@Override
 			public ColumnFamilyOptions createColumnOptions(ColumnFamilyOptions currentOptions) {
 				return currentOptions.setCompactionFilter(
-					new FlinkCompactionFilter(getStateType(), ttlConfig.getTtl().toMilliseconds(), null));
+					new FlinkCompactionFilter(
+						getStateType(),
+						ttlConfig.getTtl().toMilliseconds(),
+						timeProvider::currentTimestamp));
 			}
 		});
 		return backend;
@@ -87,5 +93,25 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		} else {
 			return FlinkCompactionFilter.StateType.Value;
 		}
+	}
+
+	@Test
+	public void testCompactFilter() throws Exception {
+		initTest();
+		//noinspection resource
+		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
+
+		timeProvider.time = 0;
+		sbetc.setCurrentKey("k1");
+		ctx().update(ctx().updateEmpty);
+		sbetc.setCurrentKey("k2");
+		ctx().update(ctx().updateEmpty);
+
+		timeProvider.time = 120;
+		keyedBackend.db.compactRange(keyedBackend.kvStateInformation.values().iterator().next().f0);
+		sbetc.setCurrentKey("k1");
+		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
+		sbetc.setCurrentKey("k2");
+		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
 	}
 }

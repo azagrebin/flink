@@ -49,17 +49,17 @@ class TtlReducingStateTestContext
 	}
 
 	@Override
-	void update(Integer value) throws Exception {
+	public void update(Integer value) throws Exception {
 		ttlState.add(value);
 	}
 
 	@Override
-	Integer get() throws Exception {
+	public Integer get() throws Exception {
 		return ttlState.get();
 	}
 
 	@Override
-	Object getOriginal() throws Exception {
+	public Object getOriginal() throws Exception {
 		return ttlState.original.get();
 	}
 

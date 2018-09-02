@@ -109,7 +109,8 @@ public abstract class StateBackendTestContext {
 		}
 	}
 
-	void setCurrentKey(String key) {
+	public void setCurrentKey(String key) {
+		//noinspection resource
 		Preconditions.checkNotNull(keyedStateBackend, "keyed backend is not initialised");
 		keyedStateBackend.setCurrentKey(key);
 	}
@@ -121,5 +122,10 @@ public abstract class StateBackendTestContext {
 		S state = keyedStateBackend.getOrCreateKeyedState(StringSerializer.INSTANCE, stateDescriptor);
 		((InternalKvState<?, N, ?>) state).setCurrentNamespace(defaultNamespace);
 		return state;
+	}
+
+	@SuppressWarnings("unchecked")
+	public <B extends AbstractKeyedStateBackend> B getKeyedStateBackend() {
+		return (B) keyedStateBackend;
 	}
 }

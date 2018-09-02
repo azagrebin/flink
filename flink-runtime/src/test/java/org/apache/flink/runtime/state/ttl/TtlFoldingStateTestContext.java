@@ -39,17 +39,17 @@ class TtlFoldingStateTestContext extends TtlStateTestContextBase<TtlFoldingState
 	}
 
 	@Override
-	void update(Long value) throws Exception {
+	public void update(Long value) throws Exception {
 		ttlState.add(value);
 	}
 
 	@Override
-	String get() throws Exception {
+	public String get() throws Exception {
 		return ttlState.get();
 	}
 
 	@Override
-	Object getOriginal() throws Exception {
+	public Object getOriginal() throws Exception {
 		return ttlState.original.get();
 	}
 
