@@ -18,11 +18,11 @@
 
 package org.apache.flink.contrib.streaming.state;
 
-import org.apache.flink.api.common.state.ListState;
-import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.ttl.StateBackendTestContext;
+import org.apache.flink.runtime.state.ttl.TtlListStateTestContext;
+import org.apache.flink.runtime.state.ttl.TtlMapStateTestContext;
 import org.apache.flink.runtime.state.ttl.TtlStateTestBase;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -31,6 +31,7 @@ import org.apache.flink.util.TernaryBoolean;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.DBOptions;
 import org.rocksdb.FlinkCompactionFilter;
@@ -86,9 +87,9 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 	}
 
 	private FlinkCompactionFilter.StateType getStateType() {
-		if (ctx.ttlState instanceof ListState) {
+		if (ctx instanceof TtlListStateTestContext) {
 			return FlinkCompactionFilter.StateType.List;
-		} else if (ctx.ttlState instanceof MapState) {
+		} else if (ctx instanceof TtlMapStateTestContext) {
 			return FlinkCompactionFilter.StateType.Map;
 		} else {
 			return FlinkCompactionFilter.StateType.Value;
@@ -102,16 +103,17 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
 
 		timeProvider.time = 0;
-		sbetc.setCurrentKey("k1");
+		sbetc.setCurrentKey("k1_" + ctx.ttlState.getClass().getSimpleName());
 		ctx().update(ctx().updateEmpty);
-		sbetc.setCurrentKey("k2");
+		sbetc.setCurrentKey("k2_" + ctx.ttlState.getClass().getSimpleName());
 		ctx().update(ctx().updateEmpty);
 
 		timeProvider.time = 120;
-		keyedBackend.db.compactRange(keyedBackend.kvStateInformation.values().iterator().next().f0);
-		sbetc.setCurrentKey("k1");
+		ColumnFamilyHandle cfh = keyedBackend.kvStateInformation.values().iterator().next().f0;
+		keyedBackend.db.compactRange(cfh);
+		sbetc.setCurrentKey("k1_" + ctx.ttlState.getClass().getSimpleName());
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
-		sbetc.setCurrentKey("k2");
+		sbetc.setCurrentKey("k2_" + ctx.ttlState.getClass().getSimpleName());
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
 	}
 }

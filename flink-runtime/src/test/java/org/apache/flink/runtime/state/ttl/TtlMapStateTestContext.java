@@ -24,7 +24,8 @@ import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.StringSerializer;
 
-abstract class TtlMapStateTestContext<UV, GV>
+/** Test suite for {@link TtlMapState}. */
+public abstract class TtlMapStateTestContext<UV, GV>
 	extends TtlStateTestContextBase<TtlMapState<?, String, Integer, String>, UV, GV> {
 	@SuppressWarnings("unchecked")
 	@Override

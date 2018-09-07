@@ -33,7 +33,7 @@ import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
 /** Test suite for {@link TtlListState}. */
-class TtlListStateTestContext
+public class TtlListStateTestContext
 	extends TtlMergingStateTestContext<TtlListState<?, String, Integer>, List<Integer>, Iterable<Integer>> {
 	@Override
 	void initTestValues() {

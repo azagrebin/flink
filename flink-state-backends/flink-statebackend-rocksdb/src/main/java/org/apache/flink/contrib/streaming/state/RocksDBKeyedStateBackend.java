@@ -89,10 +89,12 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ResourceGuard;
 import org.apache.flink.util.StateMigrationException;
 
+import org.rocksdb.BlockBasedTableConfig;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.DBOptions;
+import org.rocksdb.MemTableConfig;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.WriteOptions;
@@ -210,7 +212,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 * Information about the k/v states, maintained in the order as we create them. This is used to retrieve the
 	 * column family that is used for a state and also for sanity checks when restoring.
 	 */
-	protected final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> kvStateInformation;
+	private final LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> kvStateInformation;
 
 	/**
 	 * Map of state names to their corresponding restored state meta info.
@@ -269,6 +271,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		// ensure that we use the right merge operator, because other code relies on this
 		this.columnOptions = Preconditions.checkNotNull(columnFamilyOptions)
 			.setMergeOperatorName(MERGE_OPERATOR_NAME);
+
+		BlockBasedTableConfig table_options = new BlockBasedTableConfig();
+		table_options.setBlockSize((Long)flags_.get(Flag.block_size))
+			.setBlockCacheSize((Long)flags_.get(Flag.cache_size))
+			.setCacheNumShardBits(
+				(Integer)flags_.get(Flag.cache_numshardbits));
 
 		this.dbOptions = Preconditions.checkNotNull(dbOptions);
 
