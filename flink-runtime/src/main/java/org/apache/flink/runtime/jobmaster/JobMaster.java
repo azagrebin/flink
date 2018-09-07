@@ -128,6 +128,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 
@@ -184,6 +185,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 	private final SlotPoolGateway slotPoolGateway;
 
 	private final RestartStrategy restartStrategy;
+
+	private final Upscaler upscaler;
 
 	// --------- BackPressure --------
 
@@ -297,6 +300,13 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 		this.resourceManagerConnection = null;
 		this.establishedResourceManagerConnection = null;
+
+		this.upscaler = new Upscaler(
+			3000L,
+			newParallelism -> rescaleJob(newParallelism, RescalingBehaviour.STRICT, Time.seconds(3L)),
+			new Upscaler.RescalingStrategyImpl(jobGraph),
+			rpcService.getScheduledExecutor(),
+			getMainThreadExecutor());
 	}
 
 	//----------------------------------------------------------------------------------------------
