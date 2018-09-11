@@ -27,16 +27,22 @@ import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
 import org.apache.flink.util.Preconditions;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 class Upscaler {
+	private final Logger log = LoggerFactory.getLogger(getClass());
+
 	private final long debounceTimeoutMilli;
 	private final RescalingOperation rescalingOperation;
 	private final RescalingStrategy rescalingStrategy;
@@ -70,25 +76,34 @@ class Upscaler {
 	}
 
 	void disconnectResourceManager() {
+		log.info("Cancel up-scaling attempts");
 		upscalingAttempts.cancel(false);
 		this.resourceManagerGateway = null;
 	}
 
 	private ScheduledFuture<?> startUpscalingAttempts(long debounceTimeoutMilli) {
+		log.info("Start up-scaling attempts");
 		return scheduledExecutor.scheduleWithFixedDelay(
 			this::tryToUpscale, 0L, debounceTimeoutMilli, TimeUnit.MILLISECONDS);
 	}
 
+	private final AtomicInteger attemptNum = new AtomicInteger(0);
+
 	private void tryToUpscale() {
 		rescalingExecutor.execute(() -> {
+				log.info("Upscaling attempt {}: resourceManagerGateway " +
+					(resourceManagerGateway == null ? "is null" : "is not null"), attemptNum.get());
 				if (resourceManagerGateway != null) {
 					resourceManagerGateway
 						.requestResourceOverview(Time.milliseconds(debounceTimeoutMilli))
 						.thenAcceptAsync(resourceOverview -> {
 							int slotsNumber = resourceOverview.getNumberRegisteredSlots();
 							int newParallelism = rescalingStrategy.calcMaxParallelism(slotsNumber);
+							log.info("Upscaling attempt {}: slots {}, newParallelism {}, currentParallelism {}",
+								attemptNum.get(), slotsNumber, newParallelism, currentParallelism);
 							if (newParallelism > currentParallelism) {
 								rescalingOperation.rescale(newParallelism);
+								currentParallelism = newParallelism;
 							}
 						}, rescalingExecutor);
 				}
