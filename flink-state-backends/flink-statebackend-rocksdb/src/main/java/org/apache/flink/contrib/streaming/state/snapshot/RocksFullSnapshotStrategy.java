@@ -22,6 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend.RocksDbKvStateInfo;
 import org.apache.flink.contrib.streaming.state.RocksIteratorWrapper;
 import org.apache.flink.contrib.streaming.state.iterator.RocksStatesPerKeyGroupMergeIterator;
 import org.apache.flink.contrib.streaming.state.iterator.RocksTransformingIteratorWrapper;
@@ -90,7 +91,7 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 		@Nonnull RocksDB db,
 		@Nonnull ResourceGuard rocksDBResourceGuard,
 		@Nonnull TypeSerializer<K> keySerializer,
-		@Nonnull LinkedHashMap<String, Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> kvStateInformation,
+		@Nonnull LinkedHashMap<String, RocksDbKvStateInfo> kvStateInformation,
 		@Nonnull KeyGroupRange keyGroupRange,
 		@Nonnegative int keyGroupPrefixBytes,
 		@Nonnull LocalRecoveryConfig localRecoveryConfig,
@@ -122,13 +123,13 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 			createCheckpointStreamSupplier(checkpointId, primaryStreamFactory, checkpointOptions);
 
 		final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots = new ArrayList<>(kvStateInformation.size());
-		final List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy =
+		final List<RocksDbKvStateInfo> metaDataCopy =
 			new ArrayList<>(kvStateInformation.size());
 
-		for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> tuple2 : kvStateInformation.values()) {
+		for (RocksDbKvStateInfo stateInfo : kvStateInformation.values()) {
 			// snapshot meta info
-			stateMetaInfoSnapshots.add(tuple2.f1.snapshot());
-			metaDataCopy.add(tuple2);
+			stateMetaInfoSnapshots.add(stateInfo.metaInfo.snapshot());
+			metaDataCopy.add(stateInfo);
 		}
 
 		final ResourceGuard.Lease lease = rocksDBResourceGuard.acquireResource();
@@ -192,7 +193,7 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 		private List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
 		@Nonnull
-		private List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy;
+		private List<RocksDbKvStateInfo> metaDataCopy;
 
 		@Nonnull
 		private final String logPathString;
@@ -202,7 +203,7 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 			@Nonnull ResourceGuard.Lease dbLease,
 			@Nonnull Snapshot snapshot,
 			@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots,
-			@Nonnull List<Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase>> metaDataCopy,
+			@Nonnull List<RocksDbKvStateInfo> metaDataCopy,
 			@Nonnull String logPathString) {
 
 			this.checkpointStreamSupplier = checkpointStreamSupplier;
@@ -273,10 +274,10 @@ public class RocksFullSnapshotStrategy<K> extends RocksDBSnapshotStrategyBase<K>
 
 			int kvStateId = 0;
 
-			for (Tuple2<ColumnFamilyHandle, RegisteredStateMetaInfoBase> tuple2 : metaDataCopy) {
+			for (RocksDbKvStateInfo stateInfo : metaDataCopy) {
 
 				RocksIteratorWrapper rocksIteratorWrapper =
-					getRocksIterator(db, tuple2.f0, tuple2.f1, readOptions);
+					getRocksIterator(db, stateInfo.columnFamilyHandle, stateInfo.metaInfo, readOptions);
 
 				kvStateIterators.add(Tuple2.of(rocksIteratorWrapper, kvStateId));
 				++kvStateId;

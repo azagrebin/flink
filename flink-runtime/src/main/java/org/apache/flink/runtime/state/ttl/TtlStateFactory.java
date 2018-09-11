@@ -189,7 +189,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 	}
 
 	/** Serializer for user state value with TTL. */
-	private static class TtlSerializer<T> extends CompositeSerializer<TtlValue<T>> {
+	public static class TtlSerializer<T> extends CompositeSerializer<TtlValue<T>> {
 		private static final long serialVersionUID = 131020282727167064L;
 
 		TtlSerializer(TypeSerializer<T> userValueSerializer) {
