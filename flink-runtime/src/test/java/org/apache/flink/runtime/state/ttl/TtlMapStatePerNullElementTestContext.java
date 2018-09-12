@@ -18,22 +18,15 @@
 
 package org.apache.flink.runtime.state.ttl;
 
-/** Common functions related to State TTL. */
-class TtlUtils {
-	static <V> boolean expired(TtlValue<V> ttlValue, long ttl, TtlTimeProvider timeProvider) {
-		return ttlValue != null && expired(ttlValue.getLastAccessTimestamp(), ttl, timeProvider);
-	}
+class TtlMapStatePerNullElementTestContext extends TtlMapStatePerElementTestContext {
+	@Override
+	void initTestValues() {
+		updateEmpty = null;
+		updateUnexpired = null;
+		updateExpired = null;
 
-	static boolean expired(long ts, long ttl, TtlTimeProvider timeProvider) {
-		return getExpirationTimestamp(ts, ttl) <= timeProvider.currentTimestamp();
-	}
-
-	private static long getExpirationTimestamp(long ts, long ttl) {
-		long ttlWithoutOverflow = ts > 0 ? Math.min(Long.MAX_VALUE - ts, ttl) : ttl;
-		return ts + ttlWithoutOverflow;
-	}
-
-	static <V> TtlValue<V> wrapWithTs(V value, long ts) {
-		return new TtlValue<>(value, ts);
+		getUpdateEmpty = null;
+		getUnexpired = null;
+		getUpdateExpired = null;
 	}
 }
