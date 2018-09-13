@@ -26,14 +26,15 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializerConfigSnapshot;
 import org.apache.flink.api.common.typeutils.UnloadableDummyTypeSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.runtime.NullableSerializer;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.util.Preconditions;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 
 /**
  * A serializer for {@link Map}. The serializer relies on a key serializer and a value serializer
@@ -41,7 +42,7 @@ import java.util.HashMap;
  *
  * <p>The serialization format for the map is as follows: four bytes for the length of the map,
  * followed by the serialized representation of each key-value pair. To allow null values, each value
- * is prefixed by a null marker.
+ * can be optionally prefixed by a null marker, e.g. if the value serializer does not support the null value.
  *
  * @param <K> The type of the keys in the map.
  * @param <V> The type of the values in the map.
@@ -50,22 +51,40 @@ import java.util.HashMap;
 public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 
 	private static final long serialVersionUID = -6885593032367050078L;
-	
-	/** The serializer for the keys in the map */
+
+	/** The serializer for the keys in the map. */
 	private final TypeSerializer<K> keySerializer;
 
-	/** The serializer for the values in the map */
+	/** The serializer for the values in the map. */
 	private final TypeSerializer<V> valueSerializer;
+
+	/** Whether this map serializer adds null marker byte or not. */
+	private final boolean nullMarkerAdded;
+
+	/**
+	 * Creates a map serializer that uses the given serializers to serialize the key-value pairs in the map.
+	 *
+	 * <p>The serialized value is prepended with the null marker.
+	 *
+	 * @param keySerializer The serializer for the keys in the map
+	 * @param valueSerializer The serializer for the values in the map
+	 */
+	public MapSerializer(TypeSerializer<K> keySerializer, TypeSerializer<V> valueSerializer) {
+		this(keySerializer, valueSerializer, true);
+	}
 
 	/**
 	 * Creates a map serializer that uses the given serializers to serialize the key-value pairs in the map.
 	 *
 	 * @param keySerializer The serializer for the keys in the map
 	 * @param valueSerializer The serializer for the values in the map
+	 * @param addNullMarker whether to add the null marker, e.g. if the value serializer does not support the null value
 	 */
-	public MapSerializer(TypeSerializer<K> keySerializer, TypeSerializer<V> valueSerializer) {
+	public MapSerializer(TypeSerializer<K> keySerializer, TypeSerializer<V> valueSerializer, boolean addNullMarker) {
 		this.keySerializer = Preconditions.checkNotNull(keySerializer, "The key serializer cannot be null");
+		valueSerializer = addNullMarker ? NullableSerializer.wrap(valueSerializer) : valueSerializer;
 		this.valueSerializer = Preconditions.checkNotNull(valueSerializer, "The value serializer cannot be null.");
+		this.nullMarkerAdded = addNullMarker;
 	}
 
 	// ------------------------------------------------------------------------
@@ -78,6 +97,11 @@ public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 
 	public TypeSerializer<V> getValueSerializer() {
 		return valueSerializer;
+	}
+
+	/** Whether this map serializer adds null marker byte or not. */
+	public boolean isNullMarkerAdded() {
+		return nullMarkerAdded;
 	}
 
 	// ------------------------------------------------------------------------
@@ -110,7 +134,7 @@ public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 
 		for (Map.Entry<K, V> entry : from.entrySet()) {
 			K newKey = keySerializer.copy(entry.getKey());
-			V newValue = entry.getValue() == null ? null : valueSerializer.copy(entry.getValue());
+			V newValue = valueSerializer.copy(entry.getValue());
 
 			newMap.put(newKey, newValue);
 		}
@@ -135,13 +159,7 @@ public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 
 		for (Map.Entry<K, V> entry : map.entrySet()) {
 			keySerializer.serialize(entry.getKey(), target);
-
-			if (entry.getValue() == null) {
-				target.writeBoolean(true);
-			} else {
-				target.writeBoolean(false);
-				valueSerializer.serialize(entry.getValue(), target);
-			}
+			valueSerializer.serialize(entry.getValue(), target);
 		}
 	}
 
@@ -152,10 +170,7 @@ public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 		final Map<K, V> map = new HashMap<>(size);
 		for (int i = 0; i < size; ++i) {
 			K key = keySerializer.deserialize(source);
-
-			boolean isNull = source.readBoolean();
-			V value = isNull ? null : valueSerializer.deserialize(source);
-
+			V value = valueSerializer.deserialize(source);
 			map.put(key, value);
 		}
 
@@ -174,13 +189,7 @@ public final class MapSerializer<K, V> extends TypeSerializer<Map<K, V>> {
 
 		for (int i = 0; i < size; ++i) {
 			keySerializer.copy(source, target);
-			
-			boolean isNull = source.readBoolean();
-			target.writeBoolean(isNull);
-			
-			if (!isNull) {
-				valueSerializer.copy(source, target);
-			}
+			valueSerializer.copy(source, target);
 		}
 	}
 

@@ -112,4 +112,25 @@ public class MapStateDescriptor<UK, UV> extends StateDescriptor<MapState<UK, UV>
 
 		return ((MapSerializer<UK, UV>) rawSerializer).getValueSerializer();
 	}
+
+	/**
+	 * Disable null value marker byte in serialized value.
+	 *
+	 * <p>By default map state uses {@link MapSerializer}
+	 * which explicitly prepends the value bytes serialized by provided value serializer with a null marker byte.
+	 * This allows to support null values in map state even if the provided value serializer does not support them.
+	 * On the other hand it comes with memory cost of this one byte per map entry.
+	 * This method allows to switch off this behaviour to spare storage if null values are not needed
+	 * or value serializer has its own support for them.
+	 */
+	public void disableNullValueMarkerInStateSerializer() {
+		if (serializer != null) {
+			MapSerializer<UK, UV> mapSerializer = (MapSerializer<UK, UV>) serializer;
+			serializer = new MapSerializer<>(mapSerializer.getKeySerializer(), mapSerializer.getValueSerializer(), false);
+		}
+		if (typeInfo != null) {
+			MapTypeInfo<UK, UV> mapTypeInfo = (MapTypeInfo<UK, UV>) typeInfo;
+			typeInfo = new MapTypeInfo<>(mapTypeInfo.getKeyTypeInfo(), mapTypeInfo.getValueTypeInfo(), false);
+		}
+	}
 }

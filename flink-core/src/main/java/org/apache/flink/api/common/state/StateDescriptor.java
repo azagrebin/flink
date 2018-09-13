@@ -88,7 +88,7 @@ public abstract class StateDescriptor<S extends State, T> implements Serializabl
 	/** The type information describing the value type. Only used to if the serializer
 	 * is created lazily. */
 	@Nullable
-	private TypeInformation<T> typeInfo;
+	protected TypeInformation<T> typeInfo;
 
 	/** Name for queries against state created from this StateDescriptor. */
 	@Nullable

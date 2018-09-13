@@ -155,7 +155,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			
 			for (T datum : testData) {
 				T copy = serializer.copy(datum);
-				copy.toString();
+				checkToString(copy);
 				deepEquals("Copied element is not equal to the original element.", datum, copy);
 			}
 		}
@@ -174,7 +174,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			
 			for (T datum : testData) {
 				T copy = serializer.copy(datum, serializer.createInstance());
-				copy.toString();
+				checkToString(copy);
 				deepEquals("Copied element is not equal to the original element.", datum, copy);
 			}
 		}
@@ -195,7 +195,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			
 			for (T datum : testData) {
 				T copy = serializer.copy(datum, target);
-				copy.toString();
+				checkToString(copy);
 				deepEquals("Copied element is not equal to the original element.", datum, copy);
 				target = copy;
 			}
@@ -221,7 +221,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 				assertTrue("No data available during deserialization.", in.available() > 0);
 				
 				T deserialized = serializer.deserialize(serializer.createInstance(), in);
- 				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", value, deserialized);
 				
@@ -252,7 +252,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 				assertTrue("No data available during deserialization.", in.available() > 0);
 				
 				T deserialized = serializer.deserialize(reuseValue, in);
-				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", value, deserialized);
 				
@@ -284,7 +284,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			int num = 0;
 			while (in.available() > 0) {
 				T deserialized = serializer.deserialize(in);
-				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", testData[num], deserialized);
 				num++;
@@ -316,7 +316,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			int num = 0;
 			while (in.available() > 0) {
 				T deserialized = serializer.deserialize(reuseValue, in);
-				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", testData[num], deserialized);
 				reuseValue = deserialized;
@@ -351,7 +351,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 				assertTrue("No data available copying.", toVerify.available() > 0);
 				
 				T deserialized = serializer.deserialize(serializer.createInstance(), toVerify);
-				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", value, deserialized);
 				
@@ -388,7 +388,7 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 			
 			while (toVerify.available() > 0) {
 				T deserialized = serializer.deserialize(serializer.createInstance(), toVerify);
-				deserialized.toString();
+				checkToString(deserialized);
 
 				deepEquals("Deserialized value if wrong.", testData[num], deserialized);
 				num++;
@@ -427,6 +427,10 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 	// --------------------------------------------------------------------------------------------
 	
 	protected void deepEquals(String message, T should, T is) {
+		Assert.assertTrue((should == null && is == null) || (should != null && is != null));
+		if (should == null) {
+			return;
+		}
 		if (should.getClass().isArray()) {
 			if (should instanceof boolean[]) {
 				Assert.assertTrue(message, Arrays.equals((boolean[]) should, (boolean[]) is));
@@ -540,6 +544,12 @@ public abstract class SerializerTestBase<T> extends TestLogger {
 		@Override
 		public int hashCode() {
 			return getClass().hashCode();
+		}
+	}
+
+	private static <T> void checkToString(T value) {
+		if (value != null) {
+			value.toString();
 		}
 	}
 }

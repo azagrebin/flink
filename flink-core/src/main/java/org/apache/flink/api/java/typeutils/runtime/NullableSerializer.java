@@ -155,7 +155,7 @@ public class NullableSerializer<T> extends TypeSerializer<T> {
 	public boolean equals(Object obj) {
 		return obj == this ||
 			(obj != null && obj.getClass() == getClass() &&
-				originalSerializer.equals(((NullableSerializer) originalSerializer).originalSerializer));
+				originalSerializer.equals(((NullableSerializer) obj).originalSerializer));
 	}
 
 	@Override
