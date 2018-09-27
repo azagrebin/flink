@@ -21,6 +21,7 @@ package org.apache.flink.runtime.state.heap;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.state.RegisteredKeyValueStateBackendMetaInfo;
@@ -28,6 +29,7 @@ import org.apache.flink.runtime.state.StateSnapshot;
 import org.apache.flink.runtime.state.StateSnapshotTransformer;
 import org.apache.flink.runtime.state.StateTransformationFunction;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
+import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nonnull;
@@ -36,6 +38,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -182,6 +185,11 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 			.filter(Objects::nonNull)
 			.map(namespaces -> namespaces.getOrDefault(namespace, Collections.emptyMap()))
 			.flatMap(namespaceSate -> namespaceSate.keySet().stream());
+	}
+
+	@Override
+	public CloseableIterator<Tuple2<N, K>> getNamespaceKeyIterator() {
+		return CloseableIterator.adapterForIterator(new NamespaceKeyIterator());
 	}
 
 	// ------------------------------------------------------------------------
@@ -409,6 +417,64 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 				}
 			}
 			return filtered;
+		}
+	}
+
+	/**
+	 * Iterator over (namespace, key) pairs in a {@link NestedMapsStateTable}.
+	 *
+	 * <p>This iterator does not tolerate concurrent modifications of state table and
+	 * supports removing of underlying next key state
+	 * but only right after calling next() without calling hasNext() in between.
+	 */
+	class NamespaceKeyIterator implements Iterator<Tuple2<N, K>> {
+		private int keyGropuIndex;
+		private Iterator<Map.Entry<N, Map<K, S>>> namespaceIterator;
+		private Map.Entry<N, Map<K, S>> namespace;
+		private Iterator<K> keyIterator;
+		private boolean nextCalled;
+
+		NamespaceKeyIterator() {
+			keyGropuIndex = 0;
+			namespaceIterator = state[keyGropuIndex].entrySet().iterator();
+			namespace = null;
+			keyIterator = null;
+			nextCalled = false;
+			advanceNamespace();
+		}
+
+		@Override
+		public boolean hasNext() {
+			nextCalled = false;
+			advanceNamespace();
+			return keyIterator != null && keyIterator.hasNext();
+		}
+
+		@Override
+		public Tuple2<N, K> next() {
+			Tuple2<N, K> next = hasNext() ? Tuple2.of(namespace.getKey(), keyIterator.next()) : null;
+			nextCalled = true;
+			return next;
+		}
+
+		private void advanceNamespace() {
+			while ((keyIterator == null || !keyIterator.hasNext()) && namespaceIterator.hasNext()) {
+				namespace = namespaceIterator.next();
+				keyIterator = namespace.getValue().keySet().iterator();
+			}
+		}
+
+		@Override
+		public void remove() {
+			if (!nextCalled) {
+				throw new IllegalStateException("Remove is supported only right after calling next(), without hasNext()");
+			}
+			if (namespace != null) {
+				keyIterator.remove();
+				if (namespace.getValue().isEmpty()) {
+					namespaceIterator.remove();
+				}
+			}
 		}
 	}
 }

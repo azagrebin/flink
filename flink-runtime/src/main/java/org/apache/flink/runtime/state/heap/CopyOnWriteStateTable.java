@@ -20,8 +20,10 @@ package org.apache.flink.runtime.state.heap;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.state.RegisteredKeyValueStateBackendMetaInfo;
 import org.apache.flink.runtime.state.StateTransformationFunction;
+import org.apache.flink.util.CloseableIterator;
 import org.apache.flink.util.MathUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -1101,6 +1103,76 @@ public class CopyOnWriteStateTable<K, N, S> extends StateTable<K, N, S> implemen
 		@Override
 		public void remove() {
 			throw new UnsupportedOperationException("Read-only iterator");
+		}
+	}
+
+	@Override
+	public CloseableIterator<Tuple2<N, K>> getNamespaceKeyIterator() {
+		return CloseableIterator.adapterForIterator(new NamespaceKeyIterator());
+	}
+
+	/**
+	 * Iterator over (namespace, key) pairs in a {@link CopyOnWriteStateTable}.
+	 *
+	 * <p>This iterator is lazy and has relaxed consistency.
+	 * It outputs (namespace, key) pairs which existed at some point in time and there can be duplicates.
+	 * It tolerates concurrent modifications and
+	 * supports removing of underlying next key state if it currently exists otherwise nothing is done.
+	 */
+	class NamespaceKeyIterator implements Iterator<Tuple2<N, K>> {
+		private StateTableEntry<K, N, S>[] activeTable;
+		private int nextTablePosition;
+		private StateTableEntry<K, N, S> nextEntry;
+		private Tuple2<N, K> entryToReturn;
+
+		NamespaceKeyIterator() {
+			this.activeTable = primaryTable;
+			this.nextTablePosition = 0;
+			this.nextEntry = getBootstrapEntry();
+			next();
+		}
+
+		@Override
+		public boolean hasNext() {
+			return nextEntry != null;
+		}
+
+		@Override
+		public Tuple2<N, K> next() {
+			entryToReturn = Tuple2.of(nextEntry.namespace, nextEntry.key);
+			StateTableEntry<K, N, S> next = nextEntry.next;
+
+			// consider both sub-tables tables to cover the case of rehash
+			while (next == null) {
+
+				StateTableEntry<K, N, S>[] tab = activeTable;
+
+				while (nextTablePosition < tab.length) {
+					next = tab[nextTablePosition++];
+
+					if (next != null) {
+						nextEntry = next;
+						return entryToReturn;
+					}
+				}
+
+				if (activeTable == incrementalRehashTable || activeTable != primaryTable) {
+					break;
+				}
+
+				if (activeTable == primaryTable) {
+					activeTable = incrementalRehashTable;
+					nextTablePosition = 0;
+				}
+			}
+
+			nextEntry = next;
+			return entryToReturn;
+		}
+
+		@Override
+		public void remove() {
+			CopyOnWriteStateTable.this.remove(entryToReturn.f1, entryToReturn.f0);
 		}
 	}
 }
