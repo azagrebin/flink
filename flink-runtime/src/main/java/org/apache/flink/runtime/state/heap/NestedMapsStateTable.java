@@ -436,18 +436,17 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 
 		NamespaceKeyIterator() {
 			keyGropuIndex = 0;
-			namespaceIterator = state[keyGropuIndex].entrySet().iterator();
 			namespace = null;
 			keyIterator = null;
 			nextCalled = false;
-			advanceNamespace();
+			nextKeyIterator();
 		}
 
 		@Override
 		public boolean hasNext() {
 			nextCalled = false;
-			advanceNamespace();
-			return keyIterator != null && keyIterator.hasNext();
+			nextKeyIterator();
+			return keyIteratorHasNext();
 		}
 
 		@Override
@@ -457,11 +456,38 @@ public class NestedMapsStateTable<K, N, S> extends StateTable<K, N, S> {
 			return next;
 		}
 
-		private void advanceNamespace() {
-			while ((keyIterator == null || !keyIterator.hasNext()) && namespaceIterator.hasNext()) {
-				namespace = namespaceIterator.next();
-				keyIterator = namespace.getValue().keySet().iterator();
+		private void nextKeyIterator() {
+			while (!keyIteratorHasNext()) {
+				nextNamespaceIterator();
+				if (namespaceIteratorHasNext()) {
+					namespace = namespaceIterator.next();
+					keyIterator = namespace.getValue().keySet().iterator();
+				} else {
+					break;
+				}
 			}
+		}
+
+		private void nextNamespaceIterator() {
+			while (!namespaceIteratorHasNext()) {
+				while (keyGropuIndex < state.length && state[keyGropuIndex] == null) {
+					keyGropuIndex++;
+				}
+				if (keyGropuIndex < state.length && state[keyGropuIndex] != null) {
+					namespaceIterator = state[keyGropuIndex].entrySet().iterator();
+					keyGropuIndex++;
+				} else {
+					break;
+				}
+			}
+		}
+
+		private boolean keyIteratorHasNext() {
+			return keyIterator != null && keyIterator.hasNext();
+		}
+
+		private boolean namespaceIteratorHasNext() {
+			return namespaceIterator != null && namespaceIterator.hasNext();
 		}
 
 		@Override

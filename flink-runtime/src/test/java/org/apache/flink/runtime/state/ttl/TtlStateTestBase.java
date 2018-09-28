@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
+import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
@@ -402,6 +403,10 @@ public abstract class TtlStateTestBase {
 
 	@Test
 	public void testIncrementalCleanup() throws Exception {
+		assumeThat(this, anyOf(
+			instanceOf(HeapAsyncSnapshotTtlStateTest.class),
+			instanceOf(HeapSyncSnapshotTtlStateTest.class)));
+
 		initTest(getConfBuilder(TTL).cleanupIncrementally(5, false).build());
 
 		timeProvider.time = 0;

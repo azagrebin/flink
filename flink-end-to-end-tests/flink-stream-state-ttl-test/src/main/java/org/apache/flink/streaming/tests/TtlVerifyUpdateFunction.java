@@ -65,6 +65,7 @@ import java.util.stream.StreamSupport;
 class TtlVerifyUpdateFunction
 	extends RichFlatMapFunction<TtlStateUpdate, String> implements CheckpointedFunction {
 	private static final Logger LOG = LoggerFactory.getLogger(TtlVerifyUpdateFunction.class);
+	private static final long serialVersionUID = 2155682100112401673L;
 
 	@Nonnull
 	private final StateTtlConfig ttlConfig;
@@ -163,6 +164,8 @@ class TtlVerifyUpdateFunction
 	}
 
 	private static class UpdateStat implements Serializable {
+		private static final long serialVersionUID = -4557720969995878873L;
+
 		final long reportStatAfterUpdatesNum;
 		long updates = 0;
 		long clashes = 0;

@@ -72,8 +72,12 @@ class TtlIncrementalCleanup<K, N> {
 		} catch (Throwable t) {
 			throw new FlinkRuntimeException("Failed to incrementally clean up state with TTL", t);
 		} finally {
-			keyContext.setCurrentKey(currentKey);
-			ttlState.setCurrentNamespace(currentNamespace);
+			if (currentKey != null) {
+				keyContext.setCurrentKey(currentKey);
+			}
+			if (currentNamespace != null) {
+				ttlState.setCurrentNamespace(currentNamespace);
+			}
 		}
 	}
 
