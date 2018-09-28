@@ -436,7 +436,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 				env.getUserClassLoader(),
 				instanceBasePath,
 				getDbOptions(),
-				getColumnOptions(),
+				this::getColumnOptions,
 				kvStateRegistry,
 				keySerializer,
 				numberOfKeyGroups,

@@ -31,6 +31,6 @@ public abstract class TtlMapStateTestContext<UV, GV>
 	@Override
 	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new MapStateDescriptor<>(
-			"TtlTestMapState", IntSerializer.INSTANCE, StringSerializer.INSTANCE);
+			getName(), IntSerializer.INSTANCE, StringSerializer.INSTANCE);
 	}
 }

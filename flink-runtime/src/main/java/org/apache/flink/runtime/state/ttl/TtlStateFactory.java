@@ -112,6 +112,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 	private IS createValueState() throws Exception {
 		ValueStateDescriptor<TtlValue<SV>> ttlDescriptor = new ValueStateDescriptor<>(
 			stateDesc.getName(), new TtlSerializer<>(stateDesc.getSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlValueState<>(
 			originalStateFactory.createInternalState(namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
 			ttlConfig, timeProvider, stateDesc.getSerializer());
@@ -122,6 +123,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 		ListStateDescriptor<T> listStateDesc = (ListStateDescriptor<T>) stateDesc;
 		ListStateDescriptor<TtlValue<T>> ttlDescriptor = new ListStateDescriptor<>(
 			stateDesc.getName(), new TtlSerializer<>(listStateDesc.getElementSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlListState<>(
 			originalStateFactory.createInternalState(
 				namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
@@ -135,6 +137,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 			stateDesc.getName(),
 			mapStateDesc.getKeySerializer(),
 			new TtlSerializer<>(mapStateDesc.getValueSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlMapState<>(
 			originalStateFactory.createInternalState(namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
 			ttlConfig, timeProvider, mapStateDesc.getSerializer());
@@ -147,6 +150,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 			stateDesc.getName(),
 			new TtlReduceFunction<>(reducingStateDesc.getReduceFunction(), ttlConfig, timeProvider),
 			new TtlSerializer<>(stateDesc.getSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlReducingState<>(
 			originalStateFactory.createInternalState(namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
 			ttlConfig, timeProvider, stateDesc.getSerializer());
@@ -160,6 +164,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 			aggregatingStateDescriptor.getAggregateFunction(), ttlConfig, timeProvider);
 		AggregatingStateDescriptor<IN, TtlValue<SV>, OUT> ttlDescriptor = new AggregatingStateDescriptor<>(
 			stateDesc.getName(), ttlAggregateFunction, new TtlSerializer<>(stateDesc.getSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlAggregatingState<>(
 			originalStateFactory.createInternalState(namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
 			ttlConfig, timeProvider, stateDesc.getSerializer(), ttlAggregateFunction);
@@ -175,6 +180,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 			ttlInitAcc,
 			new TtlFoldFunction<>(foldingStateDescriptor.getFoldFunction(), ttlConfig, timeProvider, initAcc),
 			new TtlSerializer<>(stateDesc.getSerializer()));
+		ttlDescriptor.enableTimeToLive(stateDesc.getTtlConfig());
 		return (IS) new TtlFoldingState<>(
 			originalStateFactory.createInternalState(namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
 			ttlConfig, timeProvider, stateDesc.getSerializer());

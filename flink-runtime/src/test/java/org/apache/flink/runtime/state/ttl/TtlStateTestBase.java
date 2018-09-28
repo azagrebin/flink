@@ -45,7 +45,7 @@ import static org.junit.Assume.assumeThat;
 /** State TTL base test suite. */
 @RunWith(Parameterized.class)
 public abstract class TtlStateTestBase {
-	private static final long TTL = 100;
+	protected static final long TTL = 100;
 
 	protected MockTtlTimeProvider timeProvider;
 	protected StateBackendTestContext sbetc;
@@ -105,11 +105,11 @@ public abstract class TtlStateTestBase {
 			.build());
 	}
 
-	private static StateTtlConfig.Builder getConfBuilder(long ttl) {
+	protected static StateTtlConfig.Builder getConfBuilder(long ttl) {
 		return StateTtlConfig.newBuilder(Time.milliseconds(ttl));
 	}
 
-	private void initTest(StateTtlConfig ttlConfig) throws Exception {
+	protected void initTest(StateTtlConfig ttlConfig) throws Exception {
 		this.ttlConfig = ttlConfig;
 		sbetc.createAndRestoreKeyedStateBackend();
 		sbetc.restoreSnapshot(null);

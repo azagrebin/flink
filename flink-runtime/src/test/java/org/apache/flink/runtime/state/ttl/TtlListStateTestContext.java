@@ -66,7 +66,7 @@ public class TtlListStateTestContext
 	@SuppressWarnings("unchecked")
 	@Override
 	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
-		return (StateDescriptor<US, SV>) new ListStateDescriptor<>("TtlTestListState", IntSerializer.INSTANCE);
+		return (StateDescriptor<US, SV>) new ListStateDescriptor<>(getName(), IntSerializer.INSTANCE);
 	}
 
 	@Override

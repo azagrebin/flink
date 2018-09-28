@@ -49,7 +49,7 @@ class TtlAggregatingStateTestContext
 	@Override
 	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new AggregatingStateDescriptor<>(
-			"TtlTestAggregatingState", AGGREGATE, LongSerializer.INSTANCE);
+			getName(), AGGREGATE, LongSerializer.INSTANCE);
 	}
 
 	@Override

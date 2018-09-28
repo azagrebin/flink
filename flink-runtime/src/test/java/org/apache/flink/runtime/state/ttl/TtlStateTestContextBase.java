@@ -46,6 +46,10 @@ public abstract class TtlStateTestContextBase<S extends InternalKvState<?, Strin
 
 	public abstract Object getOriginal() throws Exception;
 
+	public String getName() {
+		return this.getClass().getSimpleName();
+	}
+
 	@Override
 	public String toString() {
 		return this.getClass().getSimpleName();

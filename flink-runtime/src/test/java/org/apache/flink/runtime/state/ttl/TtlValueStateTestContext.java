@@ -44,7 +44,7 @@ class TtlValueStateTestContext extends TtlStateTestContextBase<TtlValueState<?, 
 	@Override
 	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new ValueStateDescriptor<>(
-			"TtlValueTestState", StringSerializer.INSTANCE);
+			getName(), StringSerializer.INSTANCE);
 	}
 
 	@Override

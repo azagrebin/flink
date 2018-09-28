@@ -217,9 +217,14 @@ public class StateTtlConfig implements Serializable {
 		/** Cleanup expired state in full snapshot on checkpoint. */
 		@Nonnull
 		public Builder cleanupFullSnapshot() {
-			cleanupStrategies.strategies.put(
-				CleanupStrategies.Strategies.FULL_STATE_SCAN_SNAPSHOT,
-				new CleanupStrategies.CleanupStrategy() {  });
+			cleanupStrategies.activate(CleanupStrategies.Strategies.FULL_STATE_SCAN_SNAPSHOT);
+			return this;
+		}
+
+		/** Cleanup expired state while Rocksdb compaction is running. */
+		@Nonnull
+		public Builder cleanupInRocksdbCompactFilter() {
+			cleanupStrategies.activate(CleanupStrategies.Strategies.ROCKSDB_COMPACTION_FILTER);
 			return this;
 		}
 
@@ -254,9 +259,14 @@ public class StateTtlConfig implements Serializable {
 	public static class CleanupStrategies implements Serializable {
 		private static final long serialVersionUID = -1617740467277313524L;
 
+		private static final CleanupStrategy EMPTY_STRATEGY = new CleanupStrategy() {
+			private static final long serialVersionUID = 1373998465131443873L;
+		};
+
 		/** Fixed strategies ordinals in {@code strategies} config field. */
 		enum Strategies {
-			FULL_STATE_SCAN_SNAPSHOT
+			FULL_STATE_SCAN_SNAPSHOT,
+			ROCKSDB_COMPACTION_FILTER
 		}
 
 		/** Base interface for cleanup strategies configurations. */
@@ -266,8 +276,20 @@ public class StateTtlConfig implements Serializable {
 
 		final EnumMap<Strategies, CleanupStrategy> strategies = new EnumMap<>(Strategies.class);
 
+		public void activate(Strategies strategy) {
+			activate(strategy, EMPTY_STRATEGY);
+		}
+
+		public void activate(Strategies strategy, CleanupStrategy config) {
+			strategies.put(strategy, config);
+		}
+
 		public boolean inFullSnapshot() {
 			return strategies.containsKey(Strategies.FULL_STATE_SCAN_SNAPSHOT);
+		}
+
+		public boolean inRocksdbCompactFilter() {
+			return strategies.containsKey(Strategies.ROCKSDB_COMPACTION_FILTER);
 		}
 	}
 }

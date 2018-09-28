@@ -26,6 +26,7 @@ import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.ReducingStateDescriptor;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.CompatibilityResult;
 import org.apache.flink.api.common.typeutils.CompatibilityUtil;
@@ -90,7 +91,6 @@ import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ResourceGuard;
 import org.apache.flink.util.StateMigrationException;
 
-import org.rocksdb.AbstractCompactionFilter;
 import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
@@ -735,9 +735,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 					rocksDBKeyedStateBackend.restoredKvStateMetaInfos.put(restoredMetaInfo.getName(), restoredMetaInfo);
 
-					ColumnFamilyHandle columnFamily = rocksDBKeyedStateBackend.createColumnFamily(stateMetaInfo);
-
-					registeredColumn = new RocksDbKvStateInfo(columnFamily, stateMetaInfo);
+					registeredColumn = rocksDBKeyedStateBackend.createColumnFamily(stateMetaInfo);
 					rocksDBKeyedStateBackend.kvStateInformation.put(stateMetaInfo.getName(), registeredColumn);
 
 				} else {
@@ -1135,11 +1133,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				new ArrayList<>(stateMetaInfoSnapshots.size());
 
 			for (StateMetaInfoSnapshot stateMetaInfoSnapshot : stateMetaInfoSnapshots) {
-				RegisteredStateMetaInfoBase stateMetaInfo =
-					RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(stateMetaInfoSnapshot);
 				ColumnFamilyDescriptor columnFamilyDescriptor = new ColumnFamilyDescriptor(
 					stateMetaInfoSnapshot.getName().getBytes(ConfigConstants.DEFAULT_CHARSET),
-					stateBackend.createColumnFamilyOptions(stateMetaInfo));
+					stateBackend.createColumnFamilyOptions()); // TODO: TTL CLEANUP
 
 				columnFamilyDescriptors.add(columnFamilyDescriptor);
 				stateBackend.restoredKvStateMetaInfos.put(stateMetaInfoSnapshot.getName(), stateMetaInfoSnapshot);
@@ -1385,67 +1381,71 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				stateDesc.getSerializer(),
 				snapshotTransformer);
 
-			ColumnFamilyHandle columnFamily = createColumnFamily(newMetaInfo);
-
-			stateInfo = new RocksDbKvStateInfo(columnFamily, newMetaInfo);
+			stateInfo = createColumnFamily(newMetaInfo);
 		}
+		configCompactFilter(stateDesc, stateInfo);
 		kvStateInformation.put(stateDesc.getName(), stateInfo);
 		return Tuple2.of(stateInfo.columnFamilyHandle, newMetaInfo);
 	}
 
-	/**
-	 * Creates a column family handle for use with a k/v state.
-	 */
-	private ColumnFamilyHandle createColumnFamily(RegisteredStateMetaInfoBase metaInfoBase) {
-		return createColumnFamily(metaInfoBase.getName(), createColumnFamilyOptions());
+	private void configCompactFilter(StateDescriptor<?, ?> stateDesc, RocksDbKvStateInfo stateInfo) {
+		StateTtlConfig ttlConfig = stateDesc.getTtlConfig();
+		if (ttlConfig.isEnabled() && ttlConfig.getCleanupStrategies().inRocksdbCompactFilter()) {
+			assert stateInfo.compactionFilter != null;
+			FlinkCompactionFilter.StateType type;
+			int timestampOffset = 0;
+			if (stateDesc instanceof ListStateDescriptor) {
+				type = FlinkCompactionFilter.StateType.List;
+			} else if (stateDesc instanceof MapStateDescriptor) {
+				type = FlinkCompactionFilter.StateType.Map;
+				timestampOffset = 1;
+			} else {
+				type = FlinkCompactionFilter.StateType.Value;
+			}
+			boolean useSystemTime = ttlConfig.getTimeCharacteristic() == StateTtlConfig.TimeCharacteristic.ProcessingTime;
+			stateInfo.compactionFilter.configure(type, timestampOffset, ttlConfig.getTtl().toMilliseconds(), useSystemTime);
+		}
 	}
 
 	/**
 	 * Creates a column family handle for use with a k/v state.
 	 */
-	private ColumnFamilyHandle createColumnFamily(String name, ColumnFamilyOptions options) {
+	private RocksDbKvStateInfo createColumnFamily(RegisteredStateMetaInfoBase metaInfoBase) {
+		String name = metaInfoBase.getName();
+		ColumnFamilyOptions options = createColumnFamilyOptions();
 		byte[] nameBytes = name.getBytes(ConfigConstants.DEFAULT_CHARSET);
 		Preconditions.checkState(!Arrays.equals(RocksDB.DEFAULT_COLUMN_FAMILY, nameBytes),
 			"The chosen state name 'default' collides with the name of the default column family!");
 
 		ColumnFamilyDescriptor columnDescriptor = new ColumnFamilyDescriptor(nameBytes, options);
 
+		ColumnFamilyHandle columnFamilyHandle;
 		try {
-			return db.createColumnFamily(columnDescriptor);
+			//noinspection resource
+			columnFamilyHandle = db.createColumnFamily(columnDescriptor);
 		} catch (RocksDBException e) {
 			throw new FlinkRuntimeException("Error creating ColumnFamilyHandle.", e);
 		}
+		FlinkCompactionFilter compactFilter = setCompactFilterIfStateTtl(metaInfoBase, options);
+		return new RocksDbKvStateInfo(columnFamilyHandle, compactFilter, metaInfoBase);
 	}
 
 	private ColumnFamilyOptions createColumnFamilyOptions() {
 		return columnFamilyOptionsSupplier.get().setMergeOperatorName(MERGE_OPERATOR_NAME);
 	}
 
-	private ColumnFamilyOptions createColumnFamilyOptions(RegisteredStateMetaInfoBase metaInfoBase) {
-		return setCompactFilterIfStateTtl(metaInfoBase, createColumnFamilyOptions());
-	}
-
-	private ColumnFamilyOptions setCompactFilterIfStateTtl(
+	private FlinkCompactionFilter setCompactFilterIfStateTtl(
 		RegisteredStateMetaInfoBase metaInfoBase, ColumnFamilyOptions options) {
 		if (metaInfoBase instanceof RegisteredKeyValueStateBackendMetaInfo) {
 			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase = (RegisteredKeyValueStateBackendMetaInfo) metaInfoBase;
 			if (kvMetaInfoBase.getStateSerializer() instanceof TtlStateFactory.TtlSerializer) {
-				FlinkCompactionFilter.StateType type;
-				switch (kvMetaInfoBase.getStateType()) {
-					case LIST:
-						type = FlinkCompactionFilter.StateType.List;
-						break;
-					case MAP:
-						type = FlinkCompactionFilter.StateType.Map;
-						break;
-					default:
-						type = FlinkCompactionFilter.StateType.Value;
-				}
-				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter(type, Long.MAX_VALUE, null);
-				return options.setCompactionFilter(compactFilter);
+				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter();
+				//noinspection resource
+				options.setCompactionFilter(compactFilter);
+				return compactFilter;
 			}
 		}
-		return options;
+		return null;
 	}
 
 	@Override
@@ -1600,12 +1600,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		RocksDbKvStateInfo stateInfo = kvStateInformation.get(stateName);
 
 		if (stateInfo == null) {
-			final ColumnFamilyHandle columnFamilyHandle = createColumnFamily(stateName, createColumnFamilyOptions());
-
 			RegisteredPriorityQueueStateBackendMetaInfo<T> metaInfo =
 				new RegisteredPriorityQueueStateBackendMetaInfo<>(stateName, byteOrderedElementSerializer);
-
-			stateInfo = new RocksDbKvStateInfo(columnFamilyHandle, metaInfo);
+			stateInfo = createColumnFamily(metaInfo);
 			kvStateInformation.put(stateName, stateInfo);
 		} else {
 			// TODO we implement the simple way of supporting the current functionality, mimicking keyed state
@@ -1653,7 +1650,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** Rocks DB specific information about the k/v states. */
 	public static class RocksDbKvStateInfo {
 		public final ColumnFamilyHandle columnFamilyHandle;
-		private final AbstractCompactionFilter<?> compactionFilter;
+		private final FlinkCompactionFilter compactionFilter;
 		public final RegisteredStateMetaInfoBase metaInfo;
 
 		private RocksDbKvStateInfo(
@@ -1664,11 +1661,16 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		private RocksDbKvStateInfo(
 			ColumnFamilyHandle columnFamilyHandle,
-			AbstractCompactionFilter<?> compactionFilter,
+			FlinkCompactionFilter compactionFilter,
 			RegisteredStateMetaInfoBase metaInfo) {
 			this.columnFamilyHandle = columnFamilyHandle;
 			this.compactionFilter = compactionFilter;
 			this.metaInfo = metaInfo;
 		}
+	}
+
+	@VisibleForTesting
+	Map<String, RocksDbKvStateInfo> getKvStateInformation() {
+		return kvStateInformation;
 	}
 }

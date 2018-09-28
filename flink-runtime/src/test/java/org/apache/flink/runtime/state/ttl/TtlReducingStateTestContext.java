@@ -45,7 +45,7 @@ class TtlReducingStateTestContext
 	@Override
 	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new ReducingStateDescriptor<>(
-			"TtlTestReducingState", REDUCE, IntSerializer.INSTANCE);
+			getName(), REDUCE, IntSerializer.INSTANCE);
 	}
 
 	@Override

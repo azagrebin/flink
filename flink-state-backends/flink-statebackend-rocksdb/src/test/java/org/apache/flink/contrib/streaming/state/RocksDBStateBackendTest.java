@@ -241,7 +241,7 @@ public class RocksDBStateBackendTest extends StateBackendTestBase<RocksDBStateBa
 				Thread.currentThread().getContextClassLoader(),
 				tempFolder.newFolder(),
 				mock(DBOptions.class),
-				columnFamilyOptions,
+				() -> columnFamilyOptions,
 				mock(TaskKvStateRegistry.class),
 				IntSerializer.INSTANCE,
 				1,
