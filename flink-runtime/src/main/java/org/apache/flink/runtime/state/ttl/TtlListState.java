@@ -40,12 +40,16 @@ import java.util.NoSuchElementException;
 class TtlListState<K, N, T> extends
 	AbstractTtlState<K, N, List<T>, List<TtlValue<T>>, InternalListState<K, N, TtlValue<T>>>
 	implements InternalListState<K, N, T> {
+	private final boolean useAddAllInsteadOfUpdate;
+
 	TtlListState(
 		InternalListState<K, N, TtlValue<T>> originalState,
 		StateTtlConfig config,
 		TtlTimeProvider timeProvider,
-		TypeSerializer<List<T>> valueSerializer) {
+		TypeSerializer<List<T>> valueSerializer,
+		boolean useAddAllInsteadOfUpdate) {
 		super(originalState, config, timeProvider, valueSerializer);
+		this.useAddAllInsteadOfUpdate = useAddAllInsteadOfUpdate;
 	}
 
 	@Override
@@ -81,7 +85,7 @@ class TtlListState<K, N, T> extends
 			}
 		}
 		if (!unexpiredWithUpdatedTs.isEmpty()) {
-			original.update(unexpiredWithUpdatedTs);
+			updateOriginal(unexpiredWithUpdatedTs);
 		}
 	}
 
@@ -121,14 +125,24 @@ class TtlListState<K, N, T> extends
 	@Override
 	public void updateInternal(List<T> valueToStore) throws Exception {
 		Preconditions.checkNotNull(valueToStore, "List of values to update cannot be null.");
-		original.updateInternal(withTs(valueToStore));
+		updateOriginal(withTs(valueToStore));
+	}
+
+	private void updateOriginal(List<TtlValue<T>> values) throws Exception {
+		if (useAddAllInsteadOfUpdate) {
+			original.clear();
+			original.addAll(values);
+		} else {
+			original.update(values);
+		}
 	}
 
 	private List<TtlValue<T>> withTs(List<T> values) {
+		long currentTimestamp = timeProvider.currentTimestamp();
 		List<TtlValue<T>> withTs = new ArrayList<>(values.size());
 		for (T value : values) {
 			Preconditions.checkNotNull(value, "You cannot have null element in a ListState.");
-			withTs.add(wrapWithTs(value));
+			withTs.add(TtlUtils.wrapWithTs(value, currentTimestamp));
 		}
 		return withTs;
 	}

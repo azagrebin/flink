@@ -127,7 +127,7 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 		return (IS) new TtlListState<>(
 			originalStateFactory.createInternalState(
 				namespaceSerializer, ttlDescriptor, getSnapshotTransformFactory()),
-			ttlConfig, timeProvider, listStateDesc.getSerializer());
+			ttlConfig, timeProvider, listStateDesc.getSerializer(), resolveUseAddInsteadOfUpdateInListState());
 	}
 
 	@SuppressWarnings("unchecked")
@@ -192,6 +192,11 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 		} else {
 			return new TtlStateSnapshotTransformer.Factory<>(timeProvider, ttl);
 		}
+	}
+
+	private boolean resolveUseAddInsteadOfUpdateInListState() {
+		return ttlConfig.getCleanupStrategies().inRocksdbCompactFilter() &&
+			ttlConfig.getCleanupStrategies().rocksdbCompactFilterStrategy().isUseOnlyMergeOperationsInListState();
 	}
 
 	/** Serializer for user state value with TTL. */
