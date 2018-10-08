@@ -125,7 +125,7 @@ public abstract class TtlStateTestBase {
 			(InternalKvState<?, String, ?>) sbetc.createState(stateDescriptor, "defaultNamespace");
 	}
 
-	private void takeAndRestoreSnapshot() throws Exception {
+	protected void takeAndRestoreSnapshot() throws Exception {
 		KeyedStateHandle snapshot = sbetc.takeSnapshot();
 		sbetc.createAndRestoreKeyedStateBackend();
 		sbetc.restoreSnapshot(snapshot);

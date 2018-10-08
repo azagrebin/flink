@@ -29,7 +29,9 @@ import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.CompositeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.base.ListSerializer;
 import org.apache.flink.api.common.typeutils.base.LongSerializer;
+import org.apache.flink.api.common.typeutils.base.MapSerializer;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.state.KeyedStateFactory;
 import org.apache.flink.runtime.state.StateSnapshotTransformer.StateSnapshotTransformFactory;
@@ -236,6 +238,15 @@ public class TtlStateFactory<N, SV, S extends State, IS extends S> {
 			Preconditions.checkNotNull(originalSerializers);
 			Preconditions.checkArgument(originalSerializers.length == 2);
 			return new TtlSerializer<>(precomputed, (TypeSerializer<T>) originalSerializers[1]);
+		}
+
+		public static boolean isTtlStateSerializer(TypeSerializer<?> typeSerializer) {
+			boolean ttlSerializer = typeSerializer instanceof TtlStateFactory.TtlSerializer;
+			boolean ttlListSerializer = typeSerializer instanceof ListSerializer &&
+				((ListSerializer) typeSerializer).getElementSerializer() instanceof TtlStateFactory.TtlSerializer;
+			boolean ttlMapSerializer = typeSerializer instanceof MapSerializer &&
+				((MapSerializer) typeSerializer).getValueSerializer() instanceof TtlStateFactory.TtlSerializer;
+			return ttlSerializer || ttlListSerializer || ttlMapSerializer;
 		}
 	}
 }

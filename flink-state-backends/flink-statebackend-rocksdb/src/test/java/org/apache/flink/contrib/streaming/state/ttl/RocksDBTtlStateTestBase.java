@@ -16,8 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.contrib.streaming.state;
+package org.apache.flink.contrib.streaming.state.ttl;
 
+import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
+import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.runtime.state.ttl.StateBackendTestContext;
@@ -29,14 +31,13 @@ import org.apache.flink.util.TernaryBoolean;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.rocksdb.ColumnFamilyHandle;
 
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
 
-/** Test suite for rocksdb state TTL. */
-public class RocksDBTtlStateTest extends TtlStateTestBase {
+/** Base test suite for rocksdb state TTL. */
+public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 	@Rule
 	public final TemporaryFolder tempFolder = new TemporaryFolder();
 
@@ -45,12 +46,14 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		return new StateBackendTestContext(timeProvider) {
 			@Override
 			protected StateBackend createStateBackend() {
-				return RocksDBTtlStateTest.this.createStateBackend();
+				return RocksDBTtlStateTestBase.this.createStateBackend();
 			}
 		};
 	}
 
-	private StateBackend createStateBackend() {
+	abstract StateBackend createStateBackend();
+
+	StateBackend createStateBackend(TernaryBoolean enableIncrementalCheckpointing) {
 		String dbPath;
 		String checkpointPath;
 		try {
@@ -59,13 +62,22 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		} catch (IOException e) {
 			throw new FlinkRuntimeException("Failed to init rocksdb test state backend");
 		}
-		RocksDBStateBackend backend = new RocksDBStateBackend(new FsStateBackend(checkpointPath), TernaryBoolean.FALSE);
+		RocksDBStateBackend backend = new RocksDBStateBackend(new FsStateBackend(checkpointPath), enableIncrementalCheckpointing);
 		backend.setDbStoragePath(dbPath);
 		return backend;
 	}
 
 	@Test
 	public void testCompactFilter() throws Exception {
+		testCompactFilter(false);
+	}
+
+	@Test
+	public void testCompactFilterWithSnapshot() throws Exception {
+		testCompactFilter(true);
+	}
+
+	private void testCompactFilter(boolean takeSnapshot) throws Exception {
 		initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().build());
 		//noinspection resource
 		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
@@ -76,9 +88,13 @@ public class RocksDBTtlStateTest extends TtlStateTestBase {
 		sbetc.setCurrentKey("k2_" + ctx().getName());
 		ctx().update(ctx().updateEmpty);
 
+		if (takeSnapshot) {
+			takeAndRestoreSnapshot();
+			keyedBackend = sbetc.getKeyedStateBackend();
+		}
+
 		timeProvider.time = 120;
-		ColumnFamilyHandle cfh = keyedBackend.getKvStateInformation().get(ctx().getName()).columnFamilyHandle;
-		keyedBackend.db.compactRange(cfh);
+		keyedBackend.compactRangeForKvState(ctx().getName());
 
 		sbetc.setCurrentKey("k1_" + ctx().getName());
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
