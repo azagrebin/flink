@@ -42,7 +42,7 @@ class TtlValueStateTestContext extends TtlStateTestContextBase<TtlValueState<?, 
 
 	@SuppressWarnings("unchecked")
 	@Override
-	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
+	public <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new ValueStateDescriptor<>(
 			getName(), StringSerializer.INSTANCE);
 	}

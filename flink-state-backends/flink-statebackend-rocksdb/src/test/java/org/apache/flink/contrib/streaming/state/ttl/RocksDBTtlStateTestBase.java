@@ -18,6 +18,7 @@
 
 package org.apache.flink.contrib.streaming.state.ttl;
 
+import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
@@ -35,6 +36,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 /** Base test suite for rocksdb state TTL. */
 public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
@@ -77,28 +79,47 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		testCompactFilter(true);
 	}
 
+	@SuppressWarnings("resource")
 	private void testCompactFilter(boolean takeSnapshot) throws Exception {
-		initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().build());
+		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().build());
 		//noinspection resource
 		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
 
-		timeProvider.time = 0;
-		sbetc.setCurrentKey("k1_" + ctx().getName());
+		timeProvider.time = 0L;
+		keyedBackend.setCompactFilterTime(stateDesc, 0L);
+		keyedBackend.compactRangeForKvState(ctx().getName());
 		ctx().update(ctx().updateEmpty);
-		sbetc.setCurrentKey("k2_" + ctx().getName());
-		ctx().update(ctx().updateEmpty);
+		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
 
 		if (takeSnapshot) {
 			takeAndRestoreSnapshot();
 			keyedBackend = sbetc.getKeyedStateBackend();
 		}
 
-		timeProvider.time = 120;
+		timeProvider.time = 50L;
+		keyedBackend.setCompactFilterTime(stateDesc, 50L);
 		keyedBackend.compactRangeForKvState(ctx().getName());
+		ctx().update(ctx().updateUnexpired);
+		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
 
-		sbetc.setCurrentKey("k1_" + ctx().getName());
-		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
-		sbetc.setCurrentKey("k2_" + ctx().getName());
+		if (takeSnapshot) {
+			takeAndRestoreSnapshot();
+			keyedBackend = sbetc.getKeyedStateBackend();
+		}
+
+		timeProvider.time = 120L;
+		keyedBackend.setCompactFilterTime(stateDesc, 120L);
+		keyedBackend.compactRangeForKvState(ctx().getName());
+		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
+
+		if (takeSnapshot) {
+			takeAndRestoreSnapshot();
+			keyedBackend = sbetc.getKeyedStateBackend();
+		}
+
+		timeProvider.time = 170L;
+		keyedBackend.setCompactFilterTime(stateDesc, 170L);
+		keyedBackend.compactRangeForKvState(ctx().getName());
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
 	}
 }

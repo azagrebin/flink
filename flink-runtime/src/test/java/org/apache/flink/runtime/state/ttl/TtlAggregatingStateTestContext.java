@@ -47,7 +47,7 @@ class TtlAggregatingStateTestContext
 
 	@SuppressWarnings("unchecked")
 	@Override
-	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
+	public <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new AggregatingStateDescriptor<>(
 			getName(), AGGREGATE, LongSerializer.INSTANCE);
 	}

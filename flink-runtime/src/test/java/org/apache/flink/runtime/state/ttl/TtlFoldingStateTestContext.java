@@ -55,7 +55,7 @@ class TtlFoldingStateTestContext extends TtlStateTestContextBase<TtlFoldingState
 
 	@SuppressWarnings("unchecked")
 	@Override
-	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
+	public <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new FoldingStateDescriptor<>(
 			getName(), "1",  FOLD, StringSerializer.INSTANCE);
 	}

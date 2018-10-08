@@ -43,7 +43,7 @@ class TtlReducingStateTestContext
 
 	@SuppressWarnings("unchecked")
 	@Override
-	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
+	public <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new ReducingStateDescriptor<>(
 			getName(), REDUCE, IntSerializer.INSTANCE);
 	}

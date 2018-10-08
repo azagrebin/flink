@@ -49,7 +49,7 @@ public abstract class TtlStateTestBase {
 
 	protected MockTtlTimeProvider timeProvider;
 	protected StateBackendTestContext sbetc;
-	protected StateTtlConfig ttlConfig;
+	private StateTtlConfig ttlConfig;
 
 	@Before
 	public void setup() {
@@ -85,7 +85,7 @@ public abstract class TtlStateTestBase {
 		return (TtlMergingStateTestContext<?, UV, ?>) ctx;
 	}
 
-	protected void initTest() throws Exception {
+	private void initTest() throws Exception {
 		initTest(StateTtlConfig.UpdateType.OnCreateAndWrite, StateTtlConfig.StateVisibility.NeverReturnExpired);
 	}
 
@@ -109,20 +109,22 @@ public abstract class TtlStateTestBase {
 		return StateTtlConfig.newBuilder(Time.milliseconds(ttl));
 	}
 
-	protected void initTest(StateTtlConfig ttlConfig) throws Exception {
+	protected <S extends State> StateDescriptor<S, Object> initTest(StateTtlConfig ttlConfig) throws Exception {
 		this.ttlConfig = ttlConfig;
 		sbetc.createAndRestoreKeyedStateBackend();
 		sbetc.restoreSnapshot(null);
-		createState();
+		StateDescriptor<S, Object> stateDesc = createState();
 		ctx().initTestValues();
+		return stateDesc;
 	}
 
 	@SuppressWarnings("unchecked")
-	private <S extends State> void createState() throws Exception {
+	private <S extends State> StateDescriptor<S, Object> createState() throws Exception {
 		StateDescriptor<S, Object> stateDescriptor = ctx().createStateDescriptor();
 		stateDescriptor.enableTimeToLive(ttlConfig);
 		ctx().ttlState =
 			(InternalKvState<?, String, ?>) sbetc.createState(stateDescriptor, "defaultNamespace");
+		return stateDescriptor;
 	}
 
 	protected void takeAndRestoreSnapshot() throws Exception {

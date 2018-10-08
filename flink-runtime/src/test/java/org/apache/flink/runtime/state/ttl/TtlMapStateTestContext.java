@@ -29,7 +29,7 @@ public abstract class TtlMapStateTestContext<UV, GV>
 	extends TtlStateTestContextBase<TtlMapState<?, String, Integer, String>, UV, GV> {
 	@SuppressWarnings("unchecked")
 	@Override
-	<US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
+	public <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor() {
 		return (StateDescriptor<US, SV>) new MapStateDescriptor<>(
 			getName(), IntSerializer.INSTANCE, StringSerializer.INSTANCE);
 	}

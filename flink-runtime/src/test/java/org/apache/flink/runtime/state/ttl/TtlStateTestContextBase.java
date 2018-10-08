@@ -27,8 +27,8 @@ public abstract class TtlStateTestContextBase<S extends InternalKvState<?, Strin
 	public S ttlState;
 
 	public UV updateEmpty;
-	UV updateUnexpired;
-	UV updateExpired;
+	public UV updateUnexpired;
+	public UV updateExpired;
 
 	GV getUpdateEmpty;
 	GV getUnexpired;
@@ -38,7 +38,7 @@ public abstract class TtlStateTestContextBase<S extends InternalKvState<?, Strin
 
 	abstract void initTestValues();
 
-	abstract <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor();
+	public abstract <US extends State, SV> StateDescriptor<US, SV> createStateDescriptor();
 
 	public abstract void update(UV value) throws Exception;
 

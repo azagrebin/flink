@@ -138,7 +138,7 @@ class RocksDBListState<K, N, V>
 		return result;
 	}
 
-	private static <V> V deserializeNextElement(DataInputDeserializer in, TypeSerializer<V> elementSerializer) {
+	public static <V> V deserializeNextElement(DataInputDeserializer in, TypeSerializer<V> elementSerializer) {
 		try {
 			if (in.available() > 0) {
 				V element = elementSerializer.deserialize(in);

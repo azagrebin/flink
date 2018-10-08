@@ -632,7 +632,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		/** Current data input view that wraps currentStateHandleInStream. */
 		private DataInputView currentStateHandleInView;
 		/** Current list of ColumnFamilyHandles for all column families we restore from currentKeyGroupsStateHandle. */
-		private List<ColumnFamilyHandle> currentStateHandleKVStateColumnFamilies;
+		private List<RocksDbKvStateInfo> currentKvStates;
 		/** The compression decorator that was used for writing the state, as determined by the meta data. */
 		private StreamCompressionDecorator keygroupStreamCompressionDecorator;
 
@@ -720,7 +720,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			List<StateMetaInfoSnapshot> restoredMetaInfos =
 				serializationProxy.getStateMetaInfoSnapshots();
-			currentStateHandleKVStateColumnFamilies = new ArrayList<>(restoredMetaInfos.size());
+			currentKvStates = new ArrayList<>(restoredMetaInfos.size());
 
 			for (StateMetaInfoSnapshot restoredMetaInfo : restoredMetaInfos) {
 
@@ -739,7 +739,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				} else {
 					// TODO with eager state registration in place, check here for serializer migration strategies
 				}
-				currentStateHandleKVStateColumnFamilies.add(registeredColumn.columnFamilyHandle);
+				currentKvStates.add(registeredColumn);
 			}
 		}
 
@@ -764,7 +764,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							DataInputViewStreamWrapper compressedKgInputView = new DataInputViewStreamWrapper(compressedKgIn);
 							//TODO this could be aware of keyGroupPrefixBytes and write only one byte if possible
 							int kvStateId = compressedKgInputView.readShort();
-							ColumnFamilyHandle handle = currentStateHandleKVStateColumnFamilies.get(kvStateId);
+							RocksDbKvStateInfo stateInfo = currentKvStates.get(kvStateId);
+							StateRestoreWriter stateRestoreWriter =
+								rocksDBKeyedStateBackend.createStateRestoreWriter(writeBatchWrapper, stateInfo);
 							//insert all k/v pairs into DB
 							boolean keyGroupHasMoreKeys = true;
 							while (keyGroupHasMoreKeys) {
@@ -773,17 +775,17 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 								if (hasMetaDataFollowsFlag(key)) {
 									//clear the signal bit in the key to make it ready for insertion again
 									clearMetaDataFollowsFlag(key);
-									writeBatchWrapper.put(handle, key, value);
+									stateRestoreWriter.restore(key, value);
 									//TODO this could be aware of keyGroupPrefixBytes and write only one byte if possible
 									kvStateId = END_OF_KEY_GROUP_MARK
 										& compressedKgInputView.readShort();
 									if (END_OF_KEY_GROUP_MARK == kvStateId) {
 										keyGroupHasMoreKeys = false;
 									} else {
-										handle = currentStateHandleKVStateColumnFamilies.get(kvStateId);
+										stateInfo = currentKvStates.get(kvStateId);
 									}
 								} else {
-									writeBatchWrapper.put(handle, key, value);
+									stateRestoreWriter.restore(key, value);
 								}
 							}
 						}
@@ -1433,6 +1435,17 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		return columnFamilyOptionsSupplier.get().setMergeOperatorName(MERGE_OPERATOR_NAME);
 	}
 
+	@FunctionalInterface
+	interface StateRestoreWriter {
+		void restore(@Nonnull byte[] key, @Nonnull byte[] value) throws RocksDBException, IOException;
+	}
+
+	private StateRestoreWriter createStateRestoreWriter(
+			@Nonnull RocksDBWriteBatchWrapper writeBatchWrapper,
+			@Nonnull RocksDbKvStateInfo kvStateInfo) {
+		return RocksDbTtlCompactFilterUtils.createStateRestoreWriter(writeBatchWrapper, kvStateInfo);
+	}
+
 	@Override
 	@Nonnull
 	public <N, SV, SEV, S extends State, IS extends S> IS createInternalState(
@@ -1658,5 +1671,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	public void compactRangeForKvState(String stateName) throws RocksDBException {
 		ColumnFamilyHandle cfh = kvStateInformation.get(stateName).columnFamilyHandle;
 		db.compactRange(cfh);
+	}
+
+	@VisibleForTesting
+	public void setCompactFilterTime(StateDescriptor<?, ?> stateDesc, long timestamp) {
+		RocksDbKvStateInfo kvStateInfo = kvStateInformation.get(stateDesc.getName());
+		RocksDbTtlCompactFilterUtils.configCompactFilter(stateDesc, kvStateInfo, false);
+		kvStateInfo.compactionFilter.setCurrentTimestamp(timestamp);
 	}
 }
