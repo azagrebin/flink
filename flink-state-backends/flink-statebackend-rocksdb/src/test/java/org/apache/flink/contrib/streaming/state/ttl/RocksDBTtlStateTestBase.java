@@ -32,6 +32,7 @@ import org.apache.flink.util.TernaryBoolean;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.rocksdb.RocksDBException;
 
 import java.io.IOException;
 
@@ -82,44 +83,48 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 	@SuppressWarnings("resource")
 	private void testCompactFilter(boolean takeSnapshot) throws Exception {
 		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().build());
-		//noinspection resource
-		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
 
-		timeProvider.time = 0L;
-		keyedBackend.setCompactFilterTime(stateDesc, 0L);
-		keyedBackend.compactRangeForKvState(ctx().getName());
+		setTimeAndCompact(stateDesc, 0L);
 		ctx().update(ctx().updateEmpty);
-		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
+		checkUnexpiredOriginalAvailable();
 
 		if (takeSnapshot) {
 			takeAndRestoreSnapshot();
-			keyedBackend = sbetc.getKeyedStateBackend();
 		}
 
-		timeProvider.time = 50L;
-		keyedBackend.setCompactFilterTime(stateDesc, 50L);
-		keyedBackend.compactRangeForKvState(ctx().getName());
+		setTimeAndCompact(stateDesc, 50L);
+		checkUnexpiredOriginalAvailable();
+		assertEquals("Unexpired state should be available", ctx().getUpdateEmpty, ctx().get());
+
 		ctx().update(ctx().updateUnexpired);
-		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
+		checkUnexpiredOriginalAvailable();
 
 		if (takeSnapshot) {
 			takeAndRestoreSnapshot();
-			keyedBackend = sbetc.getKeyedStateBackend();
 		}
 
-		timeProvider.time = 120L;
-		keyedBackend.setCompactFilterTime(stateDesc, 120L);
-		keyedBackend.compactRangeForKvState(ctx().getName());
-		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
+		setTimeAndCompact(stateDesc, 120L);
+		checkUnexpiredOriginalAvailable();
+		assertEquals("Unexpired state should be available after update", ctx().getUnexpired, ctx().get());
 
 		if (takeSnapshot) {
 			takeAndRestoreSnapshot();
-			keyedBackend = sbetc.getKeyedStateBackend();
 		}
 
-		timeProvider.time = 170L;
-		keyedBackend.setCompactFilterTime(stateDesc, 170L);
-		keyedBackend.compactRangeForKvState(ctx().getName());
+		setTimeAndCompact(stateDesc, 170L);
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
+		assertEquals("Expired state should be unavailable", ctx().emptyValue, ctx().get());
+	}
+
+	private void checkUnexpiredOriginalAvailable() throws Exception {
+		assertNotEquals("Unexpired original state should be available", ctx().emptyValue, ctx().getOriginal());
+	}
+
+	private void setTimeAndCompact(StateDescriptor<?, ?> stateDesc, long ts) throws RocksDBException {
+		@SuppressWarnings("resource")
+		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
+		timeProvider.time = ts;
+		keyedBackend.setCompactFilterTime(stateDesc, ts);
+		keyedBackend.compactRangeForKvState(ctx().getName());
 	}
 }

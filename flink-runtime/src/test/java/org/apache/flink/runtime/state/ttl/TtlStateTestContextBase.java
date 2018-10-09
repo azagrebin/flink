@@ -30,8 +30,8 @@ public abstract class TtlStateTestContextBase<S extends InternalKvState<?, Strin
 	public UV updateUnexpired;
 	public UV updateExpired;
 
-	GV getUpdateEmpty;
-	GV getUnexpired;
+	public GV getUpdateEmpty;
+	public GV getUnexpired;
 	GV getUpdateExpired;
 
 	public GV emptyValue = null;

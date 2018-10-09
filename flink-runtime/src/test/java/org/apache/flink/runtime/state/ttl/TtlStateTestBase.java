@@ -41,6 +41,7 @@ import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.assumeThat;
+import static org.junit.Assume.assumeTrue;
 
 /** State TTL base test suite. */
 @RunWith(Parameterized.class)
@@ -73,6 +74,10 @@ public abstract class TtlStateTestBase {
 			new TtlAggregatingStateTestContext(),
 			new TtlReducingStateTestContext(),
 			new TtlFoldingStateTestContext());
+	}
+
+	public boolean fullSnapshot() {
+		return true;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -285,21 +290,30 @@ public abstract class TtlStateTestBase {
 
 	@Test
 	public void testMultipleKeys() throws Exception {
-		testMultipleStateIdsWithSnapshotCleanup(id -> sbetc.setCurrentKey(id));
+		initTest();
+		testMultipleStateIds(id -> sbetc.setCurrentKey(id), false);
+	}
+
+	@Test
+	public void testMultipleKeysWithSnapshotCleanup() throws Exception {
+		assumeTrue("full snapshot strategy", fullSnapshot());
+		initTest(getConfBuilder(TTL).cleanupFullSnapshot().build());
+		// set time back after restore to see entry unexpired if it was not cleaned up in snapshot properly
+		testMultipleStateIds(id -> sbetc.setCurrentKey(id), true);
 	}
 
 	@Test
 	public void testMultipleNamespaces() throws Exception {
-		testMultipleStateIdsWithSnapshotCleanup(id -> ctx().ttlState.setCurrentNamespace(id));
+		initTest();
+		testMultipleStateIds(id -> ctx().ttlState.setCurrentNamespace(id), false);
 	}
 
-	private void testMultipleStateIdsWithSnapshotCleanup(Consumer<String> idChanger) throws Exception {
-		initTest();
-		testMultipleStateIds(idChanger, false);
-
+	@Test
+	public void testMultipleNamespacesWithSnapshotCleanup() throws Exception {
+		assumeTrue("full snapshot strategy", fullSnapshot());
 		initTest(getConfBuilder(TTL).cleanupFullSnapshot().build());
 		// set time back after restore to see entry unexpired if it was not cleaned up in snapshot properly
-		testMultipleStateIds(idChanger, true);
+		testMultipleStateIds(id -> ctx().ttlState.setCurrentNamespace(id), true);
 	}
 
 	private void testMultipleStateIds(Consumer<String> idChanger, boolean timeBackAfterRestore) throws Exception {
@@ -403,7 +417,7 @@ public abstract class TtlStateTestBase {
 	}
 
 	@After
-	public void tearDown() {
-		sbetc.disposeKeyedStateBackend();
+	public void tearDown() throws Exception {
+		sbetc.dispose();
 	}
 }

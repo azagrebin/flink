@@ -30,17 +30,19 @@ import org.apache.flink.runtime.state.AbstractKeyedStateBackend;
 import org.apache.flink.runtime.state.CheckpointStorageLocation;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.state.KeyedStateHandle;
+import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.SnapshotResult;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.internal.InternalKvState;
 import org.apache.flink.util.Preconditions;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.RunnableFuture;
 
 /** Base class for state backend test context. */
@@ -48,6 +50,8 @@ public abstract class StateBackendTestContext {
 	private final StateBackend stateBackend;
 	private final CheckpointStorageLocation checkpointStorageLocation;
 	private final TtlTimeProvider timeProvider;
+	private final SharedStateRegistry sharedStateRegistry;
+	private final List<KeyedStateHandle> snapshots;
 
 	private AbstractKeyedStateBackend<String> keyedStateBackend;
 
@@ -55,6 +59,8 @@ public abstract class StateBackendTestContext {
 		this.timeProvider = Preconditions.checkNotNull(timeProvider);
 		this.stateBackend = Preconditions.checkNotNull(createStateBackend());
 		this.checkpointStorageLocation = createCheckpointStorageLocation();
+		this.sharedStateRegistry = new SharedStateRegistry();
+		this.snapshots = new ArrayList<>();
 	}
 
 	protected abstract StateBackend createStateBackend();
@@ -82,6 +88,17 @@ public abstract class StateBackendTestContext {
 		}
 	}
 
+	void dispose() throws Exception {
+		disposeKeyedStateBackend();
+		for (KeyedStateHandle snapshot : snapshots) {
+			snapshot.discardState();
+		}
+		snapshots.clear();
+		if (sharedStateRegistry != null) {
+			sharedStateRegistry.close();
+		}
+	}
+
 	void disposeKeyedStateBackend() {
 		if (keyedStateBackend != null) {
 			keyedStateBackend.dispose();
@@ -89,7 +106,6 @@ public abstract class StateBackendTestContext {
 		}
 	}
 
-	@Nonnull
 	KeyedStateHandle takeSnapshot() throws Exception {
 		RunnableFuture<SnapshotResult<KeyedStateHandle>> snapshotRunnableFuture =
 			keyedStateBackend.snapshot(682375462392L, 10L,
@@ -97,7 +113,12 @@ public abstract class StateBackendTestContext {
 		if (!snapshotRunnableFuture.isDone()) {
 			snapshotRunnableFuture.run();
 		}
-		return snapshotRunnableFuture.get().getJobManagerOwnedSnapshot();
+		SnapshotResult<KeyedStateHandle> snapshotResult = snapshotRunnableFuture.get();
+		KeyedStateHandle jobManagerOwnedSnapshot = snapshotResult.getJobManagerOwnedSnapshot();
+		if (jobManagerOwnedSnapshot != null) {
+			jobManagerOwnedSnapshot.registerSharedStates(sharedStateRegistry);
+		}
+		return jobManagerOwnedSnapshot;
 	}
 
 	void restoreSnapshot(@Nullable KeyedStateHandle snapshot) throws Exception {
@@ -105,7 +126,7 @@ public abstract class StateBackendTestContext {
 			snapshot == null ? null : new StateObjectCollection<>(Collections.singleton(snapshot));
 		keyedStateBackend.restore(restoreState);
 		if (snapshot != null) {
-			snapshot.discardState();
+			snapshots.add(snapshot);
 		}
 	}
 

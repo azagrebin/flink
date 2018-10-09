@@ -27,4 +27,9 @@ public class IncSnapshotRocksDbTtlStateTest extends RocksDBTtlStateTestBase {
 	StateBackend createStateBackend() {
 		return createStateBackend(TernaryBoolean.TRUE);
 	}
+
+	@Override
+	public boolean fullSnapshot() {
+		return false;
+	}
 }
