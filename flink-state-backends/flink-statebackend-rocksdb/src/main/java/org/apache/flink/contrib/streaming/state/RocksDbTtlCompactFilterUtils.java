@@ -46,7 +46,7 @@ class RocksDbTtlCompactFilterUtils {
 		if (metaInfoBase instanceof RegisteredKeyValueStateBackendMetaInfo) {
 			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase = (RegisteredKeyValueStateBackendMetaInfo) metaInfoBase;
 			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(kvMetaInfoBase.getStateSerializer())) {
-				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter(InfoLogLevel.ERROR_LEVEL);
+				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter(InfoLogLevel.DEBUG_LEVEL);
 				//noinspection resource
 				options.setCompactionFilter(compactFilter);
 				return compactFilter;

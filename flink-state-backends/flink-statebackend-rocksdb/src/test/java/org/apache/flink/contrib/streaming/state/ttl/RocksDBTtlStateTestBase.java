@@ -19,6 +19,7 @@
 package org.apache.flink.contrib.streaming.state.ttl;
 
 import org.apache.flink.api.common.state.StateDescriptor;
+import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend;
 import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
@@ -82,9 +83,15 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 
 	@SuppressWarnings("resource")
 	private void testCompactFilter(boolean takeSnapshot) throws Exception {
-		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().build());
+		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().setStateVisibility(StateTtlConfig.StateVisibility.ReturnExpiredIfNotCleanedUp).build());
 
 		setTimeAndCompact(stateDesc, 0L);
+
+		sbetc.setCurrentKey("k1");
+		ctx().update(ctx().updateEmpty);
+		checkUnexpiredOriginalAvailable();
+
+		sbetc.setCurrentKey("k2");
 		ctx().update(ctx().updateEmpty);
 		checkUnexpiredOriginalAvailable();
 
@@ -93,6 +100,15 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		}
 
 		setTimeAndCompact(stateDesc, 50L);
+
+		sbetc.setCurrentKey("k1");
+		checkUnexpiredOriginalAvailable();
+		assertEquals("Unexpired state should be available", ctx().getUpdateEmpty, ctx().get());
+
+		ctx().update(ctx().updateUnexpired);
+		checkUnexpiredOriginalAvailable();
+
+		sbetc.setCurrentKey("k2");
 		checkUnexpiredOriginalAvailable();
 		assertEquals("Unexpired state should be available", ctx().getUpdateEmpty, ctx().get());
 
@@ -103,7 +119,14 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 			takeAndRestoreSnapshot();
 		}
 
+		//setTimeAndCompact(stateDesc, 80L); // TODO: test merged elements expiration
 		setTimeAndCompact(stateDesc, 120L);
+
+		sbetc.setCurrentKey("k1");
+		checkUnexpiredOriginalAvailable();
+		assertEquals("Unexpired state should be available after update", ctx().getUnexpired, ctx().get());
+
+		sbetc.setCurrentKey("k2");
 		checkUnexpiredOriginalAvailable();
 		assertEquals("Unexpired state should be available after update", ctx().getUnexpired, ctx().get());
 
@@ -112,6 +135,11 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		}
 
 		setTimeAndCompact(stateDesc, 170L);
+		sbetc.setCurrentKey("k1");
+		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
+		assertEquals("Expired state should be unavailable", ctx().emptyValue, ctx().get());
+
+		sbetc.setCurrentKey("k2");
 		assertEquals("Expired original state should be unavailable", ctx().emptyValue, ctx().getOriginal());
 		assertEquals("Expired state should be unavailable", ctx().emptyValue, ctx().get());
 	}
