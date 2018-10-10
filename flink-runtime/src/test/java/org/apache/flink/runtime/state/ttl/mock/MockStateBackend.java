@@ -39,6 +39,8 @@ import javax.annotation.Nullable;
 
 /** mack state backend. */
 public class MockStateBackend extends AbstractStateBackend {
+	private static final long serialVersionUID = 995676510267499393L;
+
 	@Override
 	public CompletedCheckpointStorageLocation resolveCheckpoint(String externalPointer) {
 		throw new UnsupportedOperationException();

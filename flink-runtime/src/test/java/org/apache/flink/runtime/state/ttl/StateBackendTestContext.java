@@ -99,7 +99,7 @@ public abstract class StateBackendTestContext {
 		}
 	}
 
-	void disposeKeyedStateBackend() {
+	private void disposeKeyedStateBackend() {
 		if (keyedStateBackend != null) {
 			keyedStateBackend.dispose();
 			keyedStateBackend = null;

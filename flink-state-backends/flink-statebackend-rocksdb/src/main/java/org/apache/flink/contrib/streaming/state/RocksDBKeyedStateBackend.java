@@ -385,7 +385,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			// ... continue with the ones created by Flink...
 			for (RocksDbKvStateInfo kvStateInfo : kvStateInformation.values()) {
 				IOUtils.closeQuietly(kvStateInfo.columnFamilyHandle);
-				IOUtils.closeQuietly(kvStateInfo.compactionFilter);
+				//IOUtils.closeQuietly(kvStateInfo.compactionFilter);
 			}
 
 			// ... and finally close the DB instance ...
@@ -396,6 +396,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			IOUtils.closeQuietly(dbOptions);
 			IOUtils.closeQuietly(writeOptions);
+
+			for (RocksDbKvStateInfo kvStateInfo : kvStateInformation.values()) {
+				IOUtils.closeQuietly(kvStateInfo.compactionFilter);
+			}
+
 			kvStateInformation.clear();
 			restoredKvStateMetaInfos.clear();
 
@@ -783,6 +788,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 										keyGroupHasMoreKeys = false;
 									} else {
 										stateInfo = currentKvStates.get(kvStateId);
+										stateRestoreWriter =
+											rocksDBKeyedStateBackend.createStateRestoreWriter(writeBatchWrapper, stateInfo);
 									}
 								} else {
 									stateRestoreWriter.restore(key, value);
@@ -851,7 +858,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			IncrementalLocalKeyedStateHandle localKeyedStateHandle;
 			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
-			Tuple2<List<ColumnFamilyDescriptor>, List<FlinkCompactionFilter>> columnFamilys;
+			Tuple2<List<ColumnFamilyDescriptor>, List<FlinkCompactionFilter>> columnFamilies;
 
 			// Recovery from remote incremental state.
 			Path temporaryRestoreInstancePath = new Path(
@@ -867,7 +874,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					transferAllStateDataToDirectory(restoreStateHandle, temporaryRestoreInstancePath);
 
 					stateMetaInfoSnapshots = readMetaData(restoreStateHandle.getMetaStateHandle());
-					columnFamilys = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
+					columnFamilies = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
 
 					// since we transferred all remote state to a local directory, we can use the same code as for
 					// local recovery.
@@ -883,7 +890,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					// Recovery from local incremental state.
 					localKeyedStateHandle = (IncrementalLocalKeyedStateHandle) rawStateHandle;
 					stateMetaInfoSnapshots = readMetaData(localKeyedStateHandle.getMetaDataState());
-					columnFamilys = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
+					columnFamilies = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
 				} else {
 					throw new IllegalStateException("Unexpected state handle type, " +
 						"expected " + IncrementalKeyedStateHandle.class + " or " + IncrementalLocalKeyedStateHandle.class +
@@ -892,8 +899,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				restoreLocalStateIntoFullInstance(
 					localKeyedStateHandle,
-					columnFamilys.f0,
-					columnFamilys.f1,
+					columnFamilies.f0,
+					columnFamilies.f1,
 					stateMetaInfoSnapshots);
 			} finally {
 				FileSystem restoreFileSystem = temporaryRestoreInstancePath.getFileSystem();
@@ -1013,6 +1020,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				for (ColumnFamilyHandle columnFamilyHandle : columnFamilyHandles) {
 					IOUtils.closeQuietly(columnFamilyHandle);
+				}
+
+				for (FlinkCompactionFilter compactionFilter : compactionFilters) {
+					IOUtils.closeQuietly(compactionFilter);
 				}
 
 				IOUtils.closeQuietly(db);
