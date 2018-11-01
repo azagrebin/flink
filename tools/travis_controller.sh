@@ -52,27 +52,8 @@ function getCurrentStage() {
 		(1)
 			echo "$STAGE_COMPILE"
 			;;
-		(2)
-			echo "$STAGE_CORE"
-			;;
-		(3)
-			echo "$STAGE_LIBRARIES"
-			;;
-		(4)
-			echo "$STAGE_CONNECTORS"
-			;;
-		(5)
-			echo "$STAGE_TESTS"
-			;;
-		(6)
-			echo "$STAGE_MISC"
-			;;
-		(7)
-			echo "$STAGE_CLEANUP"
-			;;
 		(*)
-			echo "Invalid stage detected ($STAGE_NUMBER)"
-			return 1
+			echo "$STAGE_CONNECTORS"
 			;;
 	esac
 
@@ -93,38 +74,6 @@ if [ $STAGE == "$STAGE_COMPILE" ]; then
 	MVN="mvn clean install -nsu -Dflink.forkCount=2 -Dflink.forkCountTestPackage=2 -Dmaven.javadoc.skip=true -B -DskipTests $PROFILE"
 	$MVN
 	EXIT_CODE=$?
-
-    if [ $EXIT_CODE == 0 ]; then
-        printf "\n\n==============================================================================\n"
-        printf "Checking dependency convergence\n"
-        printf "==============================================================================\n"
-
-        ./tools/check_dependency_convergence.sh
-        EXIT_CODE=$?
-    else
-        printf "\n==============================================================================\n"
-        printf "Previous build failure detected, skipping dependency-convergence check.\n"
-        printf "==============================================================================\n"
-    fi
-    
-    if [ $EXIT_CODE == 0 ]; then
-        check_shaded_artifacts
-        EXIT_CODE=$(($EXIT_CODE+$?))
-        check_shaded_artifacts_s3_fs hadoop
-        EXIT_CODE=$(($EXIT_CODE+$?))
-        check_shaded_artifacts_s3_fs presto
-        EXIT_CODE=$(($EXIT_CODE+$?))
-        check_shaded_artifacts_connector_elasticsearch ""
-        EXIT_CODE=$(($EXIT_CODE+$?))
-        check_shaded_artifacts_connector_elasticsearch 2
-        EXIT_CODE=$(($EXIT_CODE+$?))
-        check_shaded_artifacts_connector_elasticsearch 5
-        EXIT_CODE=$(($EXIT_CODE+$?))
-    else
-        echo "=============================================================================="
-        echo "Previous build failure detected, skipping shaded dependency check."
-        echo "=============================================================================="
-    fi
 
     if [ $EXIT_CODE == 0 ]; then
         echo "Creating cache build directory $CACHE_FLINK_DIR"

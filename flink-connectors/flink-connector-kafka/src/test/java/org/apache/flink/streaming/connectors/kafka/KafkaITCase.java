@@ -40,6 +40,7 @@ import org.apache.flink.streaming.util.serialization.KeyedDeserializationSchema;
 import org.apache.flink.streaming.util.serialization.KeyedSerializationSchemaWrapper;
 
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.annotation.Nullable;
@@ -51,6 +52,7 @@ import java.util.Optional;
 /**
  * IT cases for Kafka.
  */
+@Ignore
 public class KafkaITCase extends KafkaConsumerTestBase {
 
 	@BeforeClass

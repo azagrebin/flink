@@ -250,7 +250,11 @@ if [ $EXIT_CODE == 0 ]; then
 	# Run $MVN_TEST and pipe output to $MVN_OUT for the watchdog. The PID is written to $MVN_PID to
 	# allow the watchdog to kill $MVN if it is not producing any output anymore. $MVN_EXIT contains
 	# the exit code. This is important for Travis' build life-cycle (success/failure).
-	( $MVN_TEST & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
+	for i in `seq 1 20`;
+    do
+        echo "Start iteration $i"
+	    ( $MVN_TEST & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
+	done
 
 	EXIT_CODE=$(<$MVN_EXIT)
 

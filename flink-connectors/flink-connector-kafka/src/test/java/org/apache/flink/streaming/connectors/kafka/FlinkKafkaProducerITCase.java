@@ -33,6 +33,7 @@ import org.apache.flink.streaming.util.serialization.KeyedSerializationSchemaWra
 import kafka.server.KafkaServer;
 import org.apache.kafka.common.errors.ProducerFencedException;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -78,11 +79,13 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		extraProperties.put("isolation.level", "read_committed");
 	}
 
+	@Ignore
 	@Test
 	public void resourceCleanUpNone() throws Exception {
 		resourceCleanUp(FlinkKafkaProducer.Semantic.NONE);
 	}
 
+	@Ignore
 	@Test
 	public void resourceCleanUpAtLeastOnce() throws Exception {
 		resourceCleanUp(FlinkKafkaProducer.Semantic.AT_LEAST_ONCE);
@@ -119,6 +122,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 	 * This test ensures that transactions reusing transactional.ids (after returning to the pool) will not clash
 	 * with previous transactions using same transactional.ids.
 	 */
+	@Ignore
 	@Test
 	public void testRestoreToCheckpointAfterExceedingProducersPool() throws Exception {
 		String topic = "flink-kafka-producer-fail-before-notify";
@@ -162,6 +166,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		}
 	}
 
+	@Ignore
 	@Test
 	public void testFlinkKafkaProducer10FailBeforeNotify() throws Exception {
 		String topic = "flink-kafka-producer-fail-before-notify";
@@ -204,6 +209,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		deleteTestTopic(topic);
 	}
 
+	@Ignore
 	@Test
 	public void testFlinkKafkaProducer10FailTransactionCoordinatorBeforeNotify() throws Exception {
 		String topic = "flink-kafka-producer-fail-transaction-coordinator-before-notify";
@@ -258,6 +264,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 	 * If such transactions were left alone lingering it consumers would be unable to read committed records
 	 * that were created after this lingering transaction.
 	 */
+	@Ignore
 	@Test
 	public void testFailBeforeNotifyAndResumeWorkAfterwards() throws Exception {
 		String topic = "flink-kafka-producer-fail-before-notify";
@@ -300,6 +307,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		deleteTestTopic(topic);
 	}
 
+	@Ignore
 	@Test
 	public void testFailAndRecoverSameCheckpointTwice() throws Exception {
 		String topic = "flink-kafka-producer-fail-and-recover-same-checkpoint-twice";
@@ -517,6 +525,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		return outputStates;
 	}
 
+	@Ignore
 	@Test
 	public void testRecoverCommittedTransaction() throws Exception {
 		String topic = "flink-kafka-producer-recover-committed-transaction";
@@ -542,6 +551,7 @@ public class FlinkKafkaProducerITCase extends KafkaTestBase {
 		deleteTestTopic(topic);
 	}
 
+	@Ignore
 	@Test
 	public void testRunOutOfProducersInThePool() throws Exception {
 		String topic = "flink-kafka-run-out-of-producers";

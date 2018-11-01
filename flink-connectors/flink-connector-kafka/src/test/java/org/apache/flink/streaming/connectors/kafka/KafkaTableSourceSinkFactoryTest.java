@@ -27,6 +27,8 @@ import org.apache.flink.table.descriptors.KafkaValidator;
 import org.apache.flink.table.sources.RowtimeAttributeDescriptor;
 import org.apache.flink.types.Row;
 
+import org.junit.Ignore;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +38,7 @@ import java.util.Properties;
  * Test for {@link KafkaTableSource} and {@link KafkaTableSink} created
  * by {@link KafkaTableSourceSinkFactory}.
  */
+@Ignore
 public class KafkaTableSourceSinkFactoryTest extends KafkaTableSourceSinkFactoryTestBase {
 
 	@Override

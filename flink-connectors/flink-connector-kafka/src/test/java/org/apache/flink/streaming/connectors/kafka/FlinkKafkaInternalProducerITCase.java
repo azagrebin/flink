@@ -28,6 +28,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -40,6 +41,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Tests for our own {@link FlinkKafkaInternalProducer}.
  */
+@Ignore
 @SuppressWarnings("serial")
 public class FlinkKafkaInternalProducerITCase extends KafkaTestBase {
 	protected String transactionalId;

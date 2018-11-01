@@ -54,32 +54,7 @@ flink-queryable-state/flink-queryable-state-runtime,\
 flink-queryable-state/flink-queryable-state-client-java"
 
 MODULES_CONNECTORS="\
-flink-contrib/flink-connector-wikiedits,\
-flink-filesystems/flink-hadoop-fs,\
-flink-filesystems/flink-mapr-fs,\
-flink-filesystems/flink-s3-fs-base,\
-flink-filesystems/flink-s3-fs-hadoop,\
-flink-filesystems/flink-s3-fs-presto,\
-flink-formats/flink-avro,\
-flink-formats/flink-parquet,\
-flink-connectors/flink-hbase,\
-flink-connectors/flink-hcatalog,\
-flink-connectors/flink-hadoop-compatibility,\
-flink-connectors/flink-jdbc,\
-flink-connectors/flink-connector-cassandra,\
-flink-connectors/flink-connector-elasticsearch,\
-flink-connectors/flink-connector-elasticsearch2,\
-flink-connectors/flink-connector-elasticsearch5,\
-flink-connectors/flink-connector-elasticsearch6,\
-flink-connectors/flink-connector-elasticsearch-base,\
-flink-connectors/flink-connector-filesystem,\
-flink-connectors/flink-connector-kafka-0.9,\
-flink-connectors/flink-connector-kafka-0.10,\
-flink-connectors/flink-connector-kafka-0.11,\
-flink-connectors/flink-connector-kafka-base,\
-flink-connectors/flink-connector-nifi,\
-flink-connectors/flink-connector-rabbitmq,\
-flink-connectors/flink-connector-twitter"
+flink-connectors/flink-connector-kafka"
 
 MODULES_TESTS="\
 flink-tests"

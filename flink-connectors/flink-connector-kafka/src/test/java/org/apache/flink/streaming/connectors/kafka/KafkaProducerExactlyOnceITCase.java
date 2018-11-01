@@ -19,11 +19,13 @@
 package org.apache.flink.streaming.connectors.kafka;
 
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
  * IT cases for the {@link FlinkKafkaProducer}.
  */
+@Ignore
 @SuppressWarnings("serial")
 public class KafkaProducerExactlyOnceITCase extends KafkaProducerTestBase {
 	@BeforeClass
