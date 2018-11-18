@@ -221,36 +221,17 @@ public class StateTtlConfig implements Serializable {
 			return this;
 		}
 
-		/** Cleanup expired state while Rocksdb compaction is running. */
-		@Nonnull
-		public Builder cleanupInRocksdbCompactFilter() {
-			cleanupStrategies.activate(
-				CleanupStrategies.Strategies.ROCKSDB_COMPACTION_FILTER, new RocksdbCompactFilterStrategy());
-			return this;
-		}
-
 		/**
 		 * Cleanup expired state while Rocksdb compaction is running.
 		 *
 		 * <p>Due to specifics of RocksDB compaction filter,
 		 * cleanup is not properly guaranteed if put and merge operations are used at the same time:
 		 * https://github.com/facebook/rocksdb/blob/master/include/rocksdb/compaction_filter.h#L69
-		 *
-		 * <p>By default {@code cleanupInRocksdbCompactFilter()} forces List states with TTL
-		 * use only add operations. For example, 1 update operation replaces by 2 operations: clear and addAll.
-		 * This way List state uses only RocksDB merge operations.
-		 * In general, there should be no performance degradation.
-		 *
-		 * <p>Although, it is not recommended, this method enables the filter and allows to choose
-		 * whether to use only clear and merge operations or use put for update.
-		 *
-		 * @param useOnlyMergeOperationsInListState use only merge operation in List state
 		 */
 		@Nonnull
-		public Builder cleanupInRocksdbCompactFilter(boolean useOnlyMergeOperationsInListState) {
+		public Builder cleanupInRocksdbCompactFilter() {
 			cleanupStrategies.activate(
-				CleanupStrategies.Strategies.ROCKSDB_COMPACTION_FILTER,
-				new RocksdbCompactFilterStrategy(useOnlyMergeOperationsInListState));
+				CleanupStrategies.Strategies.ROCKSDB_COMPACTION_FILTER, new RocksdbCompactFilterStrategy());
 			return this;
 		}
 
@@ -324,21 +305,7 @@ public class StateTtlConfig implements Serializable {
 	}
 
 	/** RocksDB compaction filter TTL cleanup strategy configuration. */
-	public static class RocksdbCompactFilterStrategy implements CleanupStrategies.CleanupStrategy {
+	private static class RocksdbCompactFilterStrategy implements CleanupStrategies.CleanupStrategy {
 		private static final long serialVersionUID = -8683323206201982896L;
-
-		private final boolean useOnlyMergeOperationsInListState;
-
-		public RocksdbCompactFilterStrategy() {
-			this.useOnlyMergeOperationsInListState = true;
-		}
-
-		public RocksdbCompactFilterStrategy(boolean useOnlyMergeOperationsInListState) {
-			this.useOnlyMergeOperationsInListState = useOnlyMergeOperationsInListState;
-		}
-
-		public boolean isUseOnlyMergeOperationsInListState() {
-			return useOnlyMergeOperationsInListState;
-		}
 	}
 }

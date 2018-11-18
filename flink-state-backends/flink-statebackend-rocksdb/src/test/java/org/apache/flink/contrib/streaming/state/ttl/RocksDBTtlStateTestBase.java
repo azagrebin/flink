@@ -83,6 +83,7 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 
 	@SuppressWarnings("resource")
 	private void testCompactFilter(boolean takeSnapshot) throws Exception {
+		RocksDBKeyedStateBackend.useCustomTimeForTtlCompactFilter();
 		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL).cleanupInRocksdbCompactFilter().setStateVisibility(StateTtlConfig.StateVisibility.ReturnExpiredIfNotCleanedUp).build());
 
 		setTimeAndCompact(stateDesc, 0L);
@@ -119,7 +120,6 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 			takeAndRestoreSnapshot();
 		}
 
-		//setTimeAndCompact(stateDesc, 80L); // TODO: test merged elements expiration
 		setTimeAndCompact(stateDesc, 120L);
 
 		sbetc.setCurrentKey("k1");
@@ -152,7 +152,6 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		@SuppressWarnings("resource")
 		RocksDBKeyedStateBackend<String> keyedBackend = sbetc.getKeyedStateBackend();
 		timeProvider.time = ts;
-		keyedBackend.setCompactFilterTime(stateDesc, ts);
-		keyedBackend.compactRangeForKvState(ctx().getName());
+		keyedBackend.setCompactFilterTimeAndCompact(stateDesc, ts);
 	}
 }

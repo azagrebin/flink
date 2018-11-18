@@ -40,16 +40,13 @@ import java.util.NoSuchElementException;
 class TtlListState<K, N, T> extends
 	AbstractTtlState<K, N, List<T>, List<TtlValue<T>>, InternalListState<K, N, TtlValue<T>>>
 	implements InternalListState<K, N, T> {
-	private final boolean useAddAllInsteadOfUpdate;
 
 	TtlListState(
 		InternalListState<K, N, TtlValue<T>> originalState,
 		StateTtlConfig config,
 		TtlTimeProvider timeProvider,
-		TypeSerializer<List<T>> valueSerializer,
-		boolean useAddAllInsteadOfUpdate) {
+		TypeSerializer<List<T>> valueSerializer) {
 		super(originalState, config, timeProvider, valueSerializer);
-		this.useAddAllInsteadOfUpdate = useAddAllInsteadOfUpdate;
 	}
 
 	@Override
@@ -129,12 +126,7 @@ class TtlListState<K, N, T> extends
 	}
 
 	private void updateOriginal(List<TtlValue<T>> values) throws Exception {
-		if (useAddAllInsteadOfUpdate) {
-			original.clear();
-			original.addAll(values);
-		} else {
-			original.update(values);
-		}
+		original.update(values);
 	}
 
 	private List<TtlValue<T>> withTs(List<T> values) {

@@ -23,36 +23,52 @@ import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.StateDescriptor;
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
-import org.apache.flink.api.common.typeutils.base.ListSerializer;
 import org.apache.flink.contrib.streaming.state.RocksDBKeyedStateBackend.RocksDbKvStateInfo;
 import org.apache.flink.core.memory.DataInputDeserializer;
-import org.apache.flink.core.memory.DataOutputSerializer;
 import org.apache.flink.runtime.state.RegisteredKeyValueStateBackendMetaInfo;
 import org.apache.flink.runtime.state.RegisteredStateMetaInfoBase;
 import org.apache.flink.runtime.state.ttl.TtlStateFactory;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.rocksdb.ColumnFamilyOptions;
+import org.rocksdb.DBOptions;
 import org.rocksdb.FlinkCompactionFilter;
 import org.rocksdb.InfoLogLevel;
-import org.rocksdb.RocksDBException;
-
-import javax.annotation.Nonnull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
 class RocksDbTtlCompactFilterUtils {
+	private static final Logger LOG = LoggerFactory.getLogger(FlinkCompactionFilter.class);
+
 	static FlinkCompactionFilter setCompactFilterIfStateTtl(
 		RegisteredStateMetaInfoBase metaInfoBase, ColumnFamilyOptions options) {
 		if (metaInfoBase instanceof RegisteredKeyValueStateBackendMetaInfo) {
 			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase = (RegisteredKeyValueStateBackendMetaInfo) metaInfoBase;
 			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(kvMetaInfoBase.getStateSerializer())) {
-				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter(InfoLogLevel.DEBUG_LEVEL);
+				FlinkCompactionFilter compactFilter = new FlinkCompactionFilter(createLogger());
 				//noinspection resource
 				options.setCompactionFilter(compactFilter);
 				return compactFilter;
 			}
 		}
 		return null;
+	}
+
+	private static org.rocksdb.Logger createLogger() {
+		//if (LOG.isDebugEnabled()) {
+			try (DBOptions opts = new DBOptions().setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL)) {
+				return new org.rocksdb.Logger(opts) {
+					@Override
+					protected void log(InfoLogLevel infoLogLevel, String logMsg) {
+						System.out.println("Native code log: " + logMsg);
+					}
+				};
+			}
+//		} else {
+//			return null;
+//		}
 	}
 
 	static void configCompactFilter(StateDescriptor<?, ?> stateDesc, RocksDbKvStateInfo stateInfo) {
@@ -65,74 +81,53 @@ class RocksDbTtlCompactFilterUtils {
 		StateTtlConfig ttlConfig = stateDesc.getTtlConfig();
 		if (ttlConfig.isEnabled() && ttlConfig.getCleanupStrategies().inRocksdbCompactFilter()) {
 			assert stateInfo.compactionFilter != null;
-			FlinkCompactionFilter.StateType type;
-			int timestampOffset = 0;
+			FlinkCompactionFilter.Config config;
 			if (stateDesc instanceof ListStateDescriptor) {
-				type = FlinkCompactionFilter.StateType.List;
+				ListStateDescriptor<?> listStateDesc = (ListStateDescriptor<?>) stateDesc;
+				int len = listStateDesc.getElementSerializer().getLength();
+				if (len > 0) {
+					config = FlinkCompactionFilter.Config.createForFixedElementList(
+						0, ttlConfig.getTtl().toMilliseconds(), useSystemTime, len + 1);
+				} else {
+					config = FlinkCompactionFilter.Config.createForList(
+						0, ttlConfig.getTtl().toMilliseconds(), useSystemTime,
+						new ListElementIter<>(listStateDesc.getElementSerializer()));
+				}
 			} else if (stateDesc instanceof MapStateDescriptor) {
-				type = FlinkCompactionFilter.StateType.Map;
-				timestampOffset = 1;
+				config = FlinkCompactionFilter.Config.create(
+					FlinkCompactionFilter.StateType.Map, 1, ttlConfig.getTtl().toMilliseconds(), useSystemTime);
 			} else {
-				type = FlinkCompactionFilter.StateType.Value;
+				config = FlinkCompactionFilter.Config.create(
+					FlinkCompactionFilter.StateType.Value, 0, ttlConfig.getTtl().toMilliseconds(), useSystemTime);
 			}
-			stateInfo.compactionFilter.configure(type, timestampOffset, ttlConfig.getTtl().toMilliseconds(), useSystemTime);
+			stateInfo.compactionFilter.configure(config);
 		}
 	}
 
-	static RocksDBKeyedStateBackend.StateRestoreWriter createStateRestoreWriter(
-		@Nonnull RocksDBWriteBatchWrapper writeBatchWrapper,
-		@Nonnull RocksDbKvStateInfo kvStateInfo) {
-		if (kvStateInfo.metaInfo instanceof RegisteredKeyValueStateBackendMetaInfo) {
-			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase =
-				(RegisteredKeyValueStateBackendMetaInfo) kvStateInfo.metaInfo;
-			if (kvMetaInfoBase.getStateType() == StateDescriptor.Type.LIST &&
-				TtlStateFactory.TtlSerializer.isTtlStateSerializer(kvMetaInfoBase.getStateSerializer())) {
-				return new ListMergeStateRestoreWriter(writeBatchWrapper, kvStateInfo);
-			}
-		}
-		return (key, value) -> writeBatchWrapper.put(kvStateInfo.columnFamilyHandle, key, value);
-	}
+	private static class ListElementIter<T> implements FlinkCompactionFilter.ListElementIter {
+		private final TypeSerializer<T> serializer;
+		private DataInputDeserializer input;
 
-	private static class ListMergeStateRestoreWriter implements RocksDBKeyedStateBackend.StateRestoreWriter {
-		@Nonnull private final DataInputDeserializer dataInputView;
-		@Nonnull private final DataOutputSerializer dataOutputView;
-		@Nonnull private final RocksDBWriteBatchWrapper writeBatchWrapper;
-		@Nonnull private final RocksDbKvStateInfo kvStateInfo;
-		@Nonnull private final TypeSerializer<?> elementSerializer;
-
-		private ListMergeStateRestoreWriter(
-				@Nonnull RocksDBWriteBatchWrapper writeBatchWrapper,
-				@Nonnull RocksDbKvStateInfo kvStateInfo) {
-			this.dataInputView = new DataInputDeserializer();
-			this.dataOutputView = new DataOutputSerializer(128);
-			this.writeBatchWrapper = writeBatchWrapper;
-			this.kvStateInfo = kvStateInfo;
-			this.elementSerializer =
-				((ListSerializer<?>) ((RegisteredKeyValueStateBackendMetaInfo) kvStateInfo.metaInfo)
-					.getStateSerializer()).getElementSerializer();
+		private ListElementIter(TypeSerializer<T> serializer) {
+			this.serializer = serializer;
 		}
 
 		@Override
-		public void restore(@Nonnull byte[] key, @Nonnull byte[] value) throws RocksDBException, IOException {
-			dataInputView.setBuffer(value);
-			byte[] element;
-			while ((element = nextElement(dataInputView, dataOutputView, elementSerializer)) != null) {
-				writeBatchWrapper.merge(kvStateInfo.columnFamilyHandle, key, element);
-			}
+		public void setListBytes(byte[] bytes) {
+			input = new DataInputDeserializer(bytes);
 		}
-	}
 
-	private static <T> byte[] nextElement(
-		DataInputDeserializer dataInputView,
-		DataOutputSerializer dataOutputView,
-		TypeSerializer<T> elementSerializer) throws IOException {
-		dataOutputView.clear();
-		T value = RocksDBListState.deserializeNextElement(dataInputView, elementSerializer);
-		if (value != null) {
-			elementSerializer.serialize(value, dataOutputView);
-			return dataOutputView.getCopyOfBuffer();
-		} else {
-			return null;
+		@Override
+		public int nextOffset(int currentOffset) {
+			try {
+				serializer.deserialize(input);
+				if (input.available() > 0) {
+					input.skipBytesToRead(1);
+				}
+			} catch (IOException e) {
+				throw new FlinkRuntimeException("Failed to deserialize list element for TTL compaction filter", e);
+			}
+			return input.getPosition();
 		}
 	}
 }

@@ -770,8 +770,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 							//TODO this could be aware of keyGroupPrefixBytes and write only one byte if possible
 							int kvStateId = compressedKgInputView.readShort();
 							RocksDbKvStateInfo stateInfo = currentKvStates.get(kvStateId);
-							StateRestoreWriter stateRestoreWriter =
-								rocksDBKeyedStateBackend.createStateRestoreWriter(writeBatchWrapper, stateInfo);
 							//insert all k/v pairs into DB
 							boolean keyGroupHasMoreKeys = true;
 							while (keyGroupHasMoreKeys) {
@@ -780,7 +778,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 								if (hasMetaDataFollowsFlag(key)) {
 									//clear the signal bit in the key to make it ready for insertion again
 									clearMetaDataFollowsFlag(key);
-									stateRestoreWriter.restore(key, value);
+									writeBatchWrapper.put(stateInfo.columnFamilyHandle, key, value);
 									//TODO this could be aware of keyGroupPrefixBytes and write only one byte if possible
 									kvStateId = END_OF_KEY_GROUP_MARK
 										& compressedKgInputView.readShort();
@@ -788,11 +786,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 										keyGroupHasMoreKeys = false;
 									} else {
 										stateInfo = currentKvStates.get(kvStateId);
-										stateRestoreWriter =
-											rocksDBKeyedStateBackend.createStateRestoreWriter(writeBatchWrapper, stateInfo);
 									}
 								} else {
-									stateRestoreWriter.restore(key, value);
+									writeBatchWrapper.put(stateInfo.columnFamilyHandle, key, value);
 								}
 							}
 						}
@@ -1413,7 +1409,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			stateInfo = createColumnFamily(newMetaInfo);
 		}
-		RocksDbTtlCompactFilterUtils.configCompactFilter(stateDesc, stateInfo);
+		RocksDbTtlCompactFilterUtils.configCompactFilter(stateDesc, stateInfo, useSystemTimeForTtlCompactFilter);
 		kvStateInformation.put(stateDesc.getName(), stateInfo);
 		return Tuple2.of(stateInfo.columnFamilyHandle, newMetaInfo);
 	}
@@ -1444,17 +1440,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 	private ColumnFamilyOptions createColumnFamilyOptions() {
 		return columnFamilyOptionsSupplier.get().setMergeOperatorName(MERGE_OPERATOR_NAME);
-	}
-
-	@FunctionalInterface
-	interface StateRestoreWriter {
-		void restore(@Nonnull byte[] key, @Nonnull byte[] value) throws RocksDBException, IOException;
-	}
-
-	private StateRestoreWriter createStateRestoreWriter(
-			@Nonnull RocksDBWriteBatchWrapper writeBatchWrapper,
-			@Nonnull RocksDbKvStateInfo kvStateInfo) {
-		return RocksDbTtlCompactFilterUtils.createStateRestoreWriter(writeBatchWrapper, kvStateInfo);
 	}
 
 	@Override
@@ -1678,16 +1663,17 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 	}
 
+	private static boolean useSystemTimeForTtlCompactFilter = true;
+
 	@VisibleForTesting
-	public void compactRangeForKvState(String stateName) throws RocksDBException {
-		ColumnFamilyHandle cfh = kvStateInformation.get(stateName).columnFamilyHandle;
-		db.compactRange(cfh);
+	public static void useCustomTimeForTtlCompactFilter() {
+		useSystemTimeForTtlCompactFilter = false;
 	}
 
 	@VisibleForTesting
-	public void setCompactFilterTime(StateDescriptor<?, ?> stateDesc, long timestamp) {
+	public void setCompactFilterTimeAndCompact(StateDescriptor<?, ?> stateDesc, long timestamp) throws RocksDBException {
 		RocksDbKvStateInfo kvStateInfo = kvStateInformation.get(stateDesc.getName());
-		RocksDbTtlCompactFilterUtils.configCompactFilter(stateDesc, kvStateInfo, false);
 		kvStateInfo.compactionFilter.setCurrentTimestamp(timestamp);
+		db.compactRange(kvStateInfo.columnFamilyHandle);
 	}
 }
