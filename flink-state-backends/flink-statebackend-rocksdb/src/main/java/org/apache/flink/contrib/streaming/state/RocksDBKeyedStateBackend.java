@@ -36,7 +36,7 @@ import org.apache.flink.contrib.streaming.state.iterator.RocksStateKeysIterator;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksDBSnapshotStrategyBase;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksFullSnapshotStrategy;
 import org.apache.flink.contrib.streaming.state.snapshot.RocksIncrementalSnapshotStrategy;
-import org.apache.flink.contrib.streaming.state.ttl.RocksDbTtlCompactFilterUtils;
+import org.apache.flink.contrib.streaming.state.ttl.RocksDbTtlCompactFiltersManager;
 import org.apache.flink.core.fs.FSDataInputStream;
 import org.apache.flink.core.fs.FileStatus;
 import org.apache.flink.core.fs.FileSystem;
@@ -91,7 +91,6 @@ import org.rocksdb.ColumnFamilyDescriptor;
 import org.rocksdb.ColumnFamilyHandle;
 import org.rocksdb.ColumnFamilyOptions;
 import org.rocksdb.DBOptions;
-import org.rocksdb.FlinkCompactionFilter.FlinkCompactionFilterFactory;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.Snapshot;
@@ -253,7 +252,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 */
 	private RocksDBSerializedCompositeKeyBuilder<K> sharedRocksKeyBuilder;
 
-	private final RocksDbTtlCompactFilterUtils ttlCompactFilterUtils;
+	private final RocksDbTtlCompactFiltersManager ttlCompactFiltersManager;
 
 	public RocksDBKeyedStateBackend(
 		String operatorIdentifier,
@@ -279,7 +278,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		super(kvStateRegistry, keySerializer, userCodeClassLoader,
 			numberOfKeyGroups, keyGroupRange, executionConfig, ttlTimeProvider);
 
-		this.ttlCompactFilterUtils = new RocksDbTtlCompactFilterUtils(enableTtlCompactionFilter);
+		this.ttlCompactFiltersManager = new RocksDbTtlCompactFiltersManager(enableTtlCompactionFilter);
 
 		this.operatorIdentifier = Preconditions.checkNotNull(operatorIdentifier);
 
@@ -438,9 +437,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			IOUtils.closeQuietly(dbOptions);
 			IOUtils.closeQuietly(writeOptions);
 
-			for (RocksDbKvStateInfo kvStateInfo : kvStateInformation.values()) {
-				IOUtils.closeQuietly(kvStateInfo.compactionFilterFactory);
-			}
+			ttlCompactFiltersManager.disposeAndClearRegisteredCompactionFactories();
 
 			kvStateInformation.clear();
 
@@ -909,7 +906,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			IncrementalLocalKeyedStateHandle localKeyedStateHandle;
 			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
-			Tuple2<List<ColumnFamilyDescriptor>, List<FlinkCompactionFilterFactory>> columnFamilies;
+			List<ColumnFamilyDescriptor> descriptors;
 
 			// Recovery from remote incremental state.
 			Path temporaryRestoreInstancePath = new Path(
@@ -931,7 +928,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					}
 
 					stateMetaInfoSnapshots = readMetaData(restoreStateHandle.getMetaStateHandle());
-					columnFamilies = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
+					descriptors = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
 
 					// since we transferred all remote state to a local directory, we can use the same code as for
 					// local recovery.
@@ -947,7 +944,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					// Recovery from local incremental state.
 					localKeyedStateHandle = (IncrementalLocalKeyedStateHandle) rawStateHandle;
 					stateMetaInfoSnapshots = readMetaData(localKeyedStateHandle.getMetaDataState());
-					columnFamilies = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
+					descriptors = createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
 				} else {
 					throw new IllegalStateException("Unexpected state handle type, " +
 						"expected " + IncrementalKeyedStateHandle.class + " or " + IncrementalLocalKeyedStateHandle.class +
@@ -956,8 +953,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				restoreLocalStateIntoFullInstance(
 					localKeyedStateHandle,
-					columnFamilies.f0,
-					columnFamilies.f1,
+					descriptors,
 					stateMetaInfoSnapshots);
 			} finally {
 				FileSystem restoreFileSystem = temporaryRestoreInstancePath.getFileSystem();
@@ -994,8 +990,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 				Path temporaryRestoreInstancePath = new Path(stateBackend.instanceBasePath.getAbsolutePath() + UUID.randomUUID().toString());
 				try (RestoredDBInstance tmpRestoreDBInfo = restoreDBInstanceFromStateHandle(
-					(IncrementalKeyedStateHandle) rawStateHandle,
-					temporaryRestoreInstancePath);
+					(IncrementalKeyedStateHandle) rawStateHandle, temporaryRestoreInstancePath, false);
 					 RocksDBWriteBatchWrapper writeBatchWrapper = new RocksDBWriteBatchWrapper(stateBackend.db)) {
 
 					List<ColumnFamilyDescriptor> tmpColumnFamilyDescriptors = tmpRestoreDBInfo.columnFamilyDescriptors;
@@ -1007,7 +1002,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						ColumnFamilyDescriptor tmpColumnFamilyDescriptor = tmpColumnFamilyDescriptors.get(i);
 
 						ColumnFamilyHandle targetColumnFamilyHandle = getOrRegisterColumnFamilyHandle(
-							tmpColumnFamilyDescriptor, null, null, tmpRestoreDBInfo.stateMetaInfoSnapshots.get(i));
+							tmpColumnFamilyDescriptor, null, tmpRestoreDBInfo.stateMetaInfoSnapshots.get(i));
 
 						try (RocksIteratorWrapper iterator = getRocksIterator(tmpRestoreDBInfo.db, tmpColumnFamilyHandle)) {
 
@@ -1051,20 +1046,15 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			private final List<ColumnFamilyDescriptor> columnFamilyDescriptors;
 
 			@Nonnull
-			private final List<FlinkCompactionFilterFactory> compactionFilterFactories;
-
-			@Nonnull
 			private final List<StateMetaInfoSnapshot> stateMetaInfoSnapshots;
 
 			private RestoredDBInstance(
 				@Nonnull RocksDB db,
 				@Nonnull List<ColumnFamilyHandle> columnFamilyHandles,
 				@Nonnull List<ColumnFamilyDescriptor> columnFamilyDescriptors,
-				@Nonnull List<FlinkCompactionFilterFactory> compactionFilterFactories,
 				@Nonnull List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
 				this.db = db;
 				this.columnFamilyHandles = columnFamilyHandles;
-				this.compactionFilterFactories = compactionFilterFactories;
 				this.defaultColumnFamilyHandle = this.columnFamilyHandles.remove(0);
 				this.columnFamilyDescriptors = columnFamilyDescriptors;
 				this.stateMetaInfoSnapshots = stateMetaInfoSnapshots;
@@ -1079,17 +1069,14 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					IOUtils.closeQuietly(columnFamilyHandle);
 				}
 
-				for (FlinkCompactionFilterFactory compactionFilterFactory : compactionFilterFactories) {
-					IOUtils.closeQuietly(compactionFilterFactory);
-				}
-
 				IOUtils.closeQuietly(db);
 			}
 		}
 
 		private RestoredDBInstance restoreDBInstanceFromStateHandle(
 			IncrementalKeyedStateHandle restoreStateHandle,
-			Path temporaryRestoreInstancePath) throws Exception {
+			Path temporaryRestoreInstancePath,
+			boolean registerTtlCompactFilter) throws Exception {
 
 			try (RocksDBStateDownloader rocksDBStateDownloader =
 					 new RocksDBStateDownloader(stateBackend.numberOfTransferingThreads)) {
@@ -1103,24 +1090,23 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots =
 				readMetaData(restoreStateHandle.getMetaStateHandle());
 
-			Tuple2<List<ColumnFamilyDescriptor>, List<FlinkCompactionFilterFactory>> columnFamilys =
-				createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots);
+			List<ColumnFamilyDescriptor> descriptors =
+				createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots, registerTtlCompactFilter);
 
 			List<ColumnFamilyHandle> columnFamilyHandles =
 				new ArrayList<>(stateMetaInfoSnapshots.size() + 1);
 
 			RocksDB restoreDb = stateBackend.openDB(
 				temporaryRestoreInstancePath.getPath(),
-				columnFamilys.f0,
+				descriptors,
 				columnFamilyHandles);
 
-			return new RestoredDBInstance(restoreDb, columnFamilyHandles, columnFamilys.f0, columnFamilys.f1, stateMetaInfoSnapshots);
+			return new RestoredDBInstance(restoreDb, columnFamilyHandles, descriptors, stateMetaInfoSnapshots);
 		}
 
 		private ColumnFamilyHandle getOrRegisterColumnFamilyHandle(
 			ColumnFamilyDescriptor columnFamilyDescriptor,
 			ColumnFamilyHandle columnFamilyHandle,
-			FlinkCompactionFilterFactory compactionFilterFactory,
 			StateMetaInfoSnapshot stateMetaInfoSnapshot) throws RocksDBException {
 
 			RocksDbKvStateInfo registeredStateMetaInfoEntry =
@@ -1134,7 +1120,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				registeredStateMetaInfoEntry =
 					new RocksDbKvStateInfo(
 						columnFamilyHandle != null ? columnFamilyHandle : stateBackend.db.createColumnFamily(columnFamilyDescriptor),
-						compactionFilterFactory,
 						stateMetaInfo);
 
 				stateBackend.registerKvStateInformation(
@@ -1163,8 +1148,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				Path instancePath = new Path(stateBackend.instanceRocksDBPath.getAbsolutePath());
 				try {
 					restoreDBInfo = restoreDBInstanceFromStateHandle(
-						initialHandle,
-						instancePath);
+						initialHandle, instancePath, true);
 
 					RocksDBIncrementalCheckpointUtils.clipDBWithKeyGroupRange(
 						restoreDBInfo.db,
@@ -1182,7 +1166,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 						getOrRegisterColumnFamilyHandle(
 							restoreDBInfo.columnFamilyDescriptors.get(i),
 							restoreDBInfo.columnFamilyHandles.get(i),
-							restoreDBInfo.compactionFilterFactories.get(i),
 							restoreDBInfo.stateMetaInfoSnapshots.get(i));
 					}
 				} catch (Exception e) {
@@ -1210,27 +1193,30 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		/**
 		 * This method recreates and registers all {@link ColumnFamilyDescriptor} from Flink's state meta data snapshot.
 		 */
-		private Tuple2<List<ColumnFamilyDescriptor>, List<FlinkCompactionFilterFactory>> createAndRegisterColumnFamilyDescriptors(
-			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
+		private List<ColumnFamilyDescriptor> createAndRegisterColumnFamilyDescriptors(
+			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots, boolean registerTtlCompactFilter) {
 
 			List<ColumnFamilyDescriptor> columnFamilyDescriptors =
 				new ArrayList<>(stateMetaInfoSnapshots.size());
 
-			List<FlinkCompactionFilterFactory> compactionFilterFactories =
-				new ArrayList<>(stateMetaInfoSnapshots.size());
-
 			for (StateMetaInfoSnapshot stateMetaInfoSnapshot : stateMetaInfoSnapshots) {
 				ColumnFamilyOptions options = stateBackend.createColumnFamilyOptions();
-				FlinkCompactionFilterFactory compactionFilterFactory =
-					stateBackend.ttlCompactFilterUtils.setCompactFilterIfStateTtl(stateBackend.ttlTimeProvider, stateMetaInfoSnapshot, options);
+				if (registerTtlCompactFilter) {
+					stateBackend.ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(
+						stateBackend.ttlTimeProvider, stateMetaInfoSnapshot, options);
+				}
 				ColumnFamilyDescriptor columnFamilyDescriptor = new ColumnFamilyDescriptor(
 					stateMetaInfoSnapshot.getName().getBytes(ConfigConstants.DEFAULT_CHARSET),
 					options);
 
 				columnFamilyDescriptors.add(columnFamilyDescriptor);
-				compactionFilterFactories.add(compactionFilterFactory);
 			}
-			return Tuple2.of(columnFamilyDescriptors, compactionFilterFactories);
+			return columnFamilyDescriptors;
+		}
+
+		private List<ColumnFamilyDescriptor> createAndRegisterColumnFamilyDescriptors(
+			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) {
+			return createAndRegisterColumnFamilyDescriptors(stateMetaInfoSnapshots, true);
 		}
 
 		/**
@@ -1239,7 +1225,6 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		private void restoreLocalStateIntoFullInstance(
 			IncrementalLocalKeyedStateHandle restoreStateHandle,
 			List<ColumnFamilyDescriptor> columnFamilyDescriptors,
-			List<FlinkCompactionFilterFactory> compactionFilterFactories,
 			List<StateMetaInfoSnapshot> stateMetaInfoSnapshots) throws Exception {
 			// pick up again the old backend id, so the we can reference existing state
 			this.restoredBackendUID = restoreStateHandle.getBackendIdentifier();
@@ -1277,7 +1262,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(stateMetaInfoSnapshot);
 				stateBackend.registerKvStateInformation(
 					stateMetaInfoSnapshot.getName(),
-					new RocksDbKvStateInfo(columnFamilyHandle, compactionFilterFactories.get(i), stateMetaInfo));
+					new RocksDbKvStateInfo(columnFamilyHandle, stateMetaInfo));
 			}
 
 			// use the restore sst files as the base for succeeding checkpoints
@@ -1392,7 +1377,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				namespaceSerializer,
 				stateSerializer);
 
-			newRocksStateInfo = new RocksDbKvStateInfo(oldStateInfo.columnFamilyHandle, oldStateInfo.compactionFilterFactory, newMetaInfo);
+			newRocksStateInfo = new RocksDbKvStateInfo(oldStateInfo.columnFamilyHandle, newMetaInfo);
 			kvStateInformation.put(stateDesc.getName(), newRocksStateInfo);
 
 		} else {
@@ -1411,7 +1396,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			stateDesc, snapshotTransformFactory, newMetaInfo.getStateSerializer());
 		newMetaInfo.updateSnapshotTransformFactory(wrappedSnapshotTransformFactory);
 
-		ttlCompactFilterUtils.configCompactFilter(stateDesc, newMetaInfo.getStateSerializer(), newRocksStateInfo.compactionFilterFactory);
+		ttlCompactFiltersManager.configCompactFilter(stateDesc, newMetaInfo.getStateSerializer());
 
 		return Tuple2.of(newRocksStateInfo.columnFamilyHandle, newMetaInfo);
 	}
@@ -1516,14 +1501,13 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 */
 	private RocksDbKvStateInfo restoreStateInfo(StateMetaInfoSnapshot restoredMetaInfo) {
 		ColumnFamilyOptions options = createColumnFamilyOptions();
-		FlinkCompactionFilterFactory compactionFilterFactory =
-			ttlCompactFilterUtils.setCompactFilterIfStateTtl(ttlTimeProvider, restoredMetaInfo, options);
+		ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(ttlTimeProvider, restoredMetaInfo, options);
 		String name = restoredMetaInfo.getName();
 		// create a meta info for the state on restore;
 		// this allows us to retain the state in future snapshots even if it wasn't accessed
 		RegisteredStateMetaInfoBase stateMetaInfo =
 			RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(restoredMetaInfo);
-		return new RocksDbKvStateInfo(createColumnFamily(options, name), compactionFilterFactory, stateMetaInfo);
+		return new RocksDbKvStateInfo(createColumnFamily(options, name), stateMetaInfo);
 	}
 
 	/**
@@ -1531,10 +1515,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	 */
 	private RocksDbKvStateInfo createStateInfo(RegisteredStateMetaInfoBase metaInfoBase) {
 		ColumnFamilyOptions options = createColumnFamilyOptions();
-		FlinkCompactionFilterFactory compactionFilterFactory =
-			ttlCompactFilterUtils.setCompactFilterIfStateTtl(ttlTimeProvider, metaInfoBase, options);
+		ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(ttlTimeProvider, metaInfoBase, options);
 		String name = metaInfoBase.getName();
-		return new RocksDbKvStateInfo(createColumnFamily(options, name), compactionFilterFactory, metaInfoBase);
+		return new RocksDbKvStateInfo(createColumnFamily(options, name), metaInfoBase);
 	}
 
 	/**
@@ -1734,21 +1717,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** Rocks DB specific information about the k/v states. */
 	public static class RocksDbKvStateInfo {
 		public final ColumnFamilyHandle columnFamilyHandle;
-		final FlinkCompactionFilterFactory compactionFilterFactory;
 		public final RegisteredStateMetaInfoBase metaInfo;
 
 		private RocksDbKvStateInfo(
 			ColumnFamilyHandle columnFamilyHandle,
 			RegisteredStateMetaInfoBase metaInfo) {
-			this(columnFamilyHandle, null, metaInfo);
-		}
-
-		private RocksDbKvStateInfo(
-			ColumnFamilyHandle columnFamilyHandle,
-			FlinkCompactionFilterFactory compactionFilterFactory,
-			RegisteredStateMetaInfoBase metaInfo) {
 			this.columnFamilyHandle = columnFamilyHandle;
-			this.compactionFilterFactory = compactionFilterFactory;
 			this.metaInfo = metaInfo;
 		}
 	}

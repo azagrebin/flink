@@ -34,6 +34,7 @@ import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.state.ttl.TtlUtils;
 import org.apache.flink.runtime.state.ttl.TtlValue;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.IOUtils;
 import org.apache.flink.util.Preconditions;
 
 import org.rocksdb.ColumnFamilyOptions;
@@ -47,19 +48,24 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nonnull;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 
 /** RocksDB compaction filter utils for state with TTL. */
-public class RocksDbTtlCompactFilterUtils {
+public class RocksDbTtlCompactFiltersManager {
 	private static final Logger LOG = LoggerFactory.getLogger(FlinkCompactionFilter.class);
 
 	/** Enables RocksDb compaction filter for State with TTL. */
 	private final boolean enableTtlCompactionFilter;
 
-	public RocksDbTtlCompactFilterUtils(boolean enableTtlCompactionFilter) {
+	/** Registered compaction filter factories */
+	private final LinkedHashMap<String, FlinkCompactionFilterFactory> compactionFilterFactories;
+
+	public RocksDbTtlCompactFiltersManager(boolean enableTtlCompactionFilter) {
 		this.enableTtlCompactionFilter = enableTtlCompactionFilter;
+		this.compactionFilterFactories = new LinkedHashMap<>();
 	}
 
-	public FlinkCompactionFilterFactory setCompactFilterIfStateTtl(
+	public void setAndRegisterCompactFilterIfStateTtl(
 		TtlTimeProvider ttlTimeProvider,
 		@Nonnull StateMetaInfoSnapshot stateMetaInfoSnapshot,
 		@Nonnull ColumnFamilyOptions options) {
@@ -72,13 +78,12 @@ public class RocksDbTtlCompactFilterUtils {
 					StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER));
 			TypeSerializer<?> serializer = stateSerializerSnapshot.restoreSerializer();
 			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(serializer)) {
-				return createAndSetCompactFilterFactory(ttlTimeProvider, options);
+				createAndSetCompactFilterFactory(stateMetaInfoSnapshot.getName(), ttlTimeProvider, options);
 			}
 		}
-		return null;
 	}
 
-	public FlinkCompactionFilterFactory setCompactFilterIfStateTtl(
+	public void setAndRegisterCompactFilterIfStateTtl(
 		TtlTimeProvider ttlTimeProvider,
 		@Nonnull RegisteredStateMetaInfoBase metaInfoBase,
 		@Nonnull ColumnFamilyOptions options) {
@@ -86,20 +91,19 @@ public class RocksDbTtlCompactFilterUtils {
 		if (enableTtlCompactionFilter && metaInfoBase instanceof RegisteredKeyValueStateBackendMetaInfo) {
 			RegisteredKeyValueStateBackendMetaInfo kvMetaInfoBase = (RegisteredKeyValueStateBackendMetaInfo) metaInfoBase;
 			if (TtlStateFactory.TtlSerializer.isTtlStateSerializer(kvMetaInfoBase.getStateSerializer())) {
-				return createAndSetCompactFilterFactory(ttlTimeProvider, options);
+				createAndSetCompactFilterFactory(metaInfoBase.getName(), ttlTimeProvider, options);
 			}
 		}
-		return null;
 	}
 
-	private static FlinkCompactionFilterFactory createAndSetCompactFilterFactory(
-		TtlTimeProvider ttlTimeProvider, @Nonnull ColumnFamilyOptions options) {
+	private void createAndSetCompactFilterFactory(
+		String stateName, TtlTimeProvider ttlTimeProvider, @Nonnull ColumnFamilyOptions options) {
 
 		FlinkCompactionFilterFactory compactionFilterFactory =
 			new FlinkCompactionFilterFactory(new TimeProviderWrapper(ttlTimeProvider), createRocksDbNativeLogger());
 		//noinspection resource
 		options.setCompactionFilterFactory(compactionFilterFactory);
-		return compactionFilterFactory;
+		compactionFilterFactories.put(stateName, compactionFilterFactory);
 	}
 
 	private static org.rocksdb.Logger createRocksDbNativeLogger() {
@@ -121,8 +125,7 @@ public class RocksDbTtlCompactFilterUtils {
 
 	public void configCompactFilter(
 			@Nonnull StateDescriptor<?, ?> stateDesc,
-			TypeSerializer<?> stateSerializer,
-			FlinkCompactionFilterFactory compactionFilterFactory) {
+			TypeSerializer<?> stateSerializer) {
 		StateTtlConfig ttlConfig = stateDesc.getTtlConfig();
 		if (ttlConfig.isEnabled() && ttlConfig.getCleanupStrategies().inRocksdbCompactFilter()) {
 			if (!enableTtlCompactionFilter) {
@@ -130,6 +133,7 @@ public class RocksDbTtlCompactFilterUtils {
 					"feature is disabled for the state backend.", stateDesc.getName());
 				return;
 			}
+			FlinkCompactionFilterFactory compactionFilterFactory = compactionFilterFactories.get(stateDesc.getName());
 			Preconditions.checkNotNull(compactionFilterFactory);
 			long ttl = ttlConfig.getTtl().toMilliseconds();
 
@@ -220,5 +224,12 @@ public class RocksDbTtlCompactFilterUtils {
 			}
 			return ttlValue.getLastAccessTimestamp();
 		}
+	}
+
+	public void disposeAndClearRegisteredCompactionFactories() {
+		for (FlinkCompactionFilterFactory factory : compactionFilterFactories.values()) {
+			IOUtils.closeQuietly(factory);
+		}
+		compactionFilterFactories.clear();
 	}
 }
