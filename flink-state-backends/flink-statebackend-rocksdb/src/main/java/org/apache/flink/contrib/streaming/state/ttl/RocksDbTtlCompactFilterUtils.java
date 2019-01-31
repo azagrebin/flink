@@ -32,6 +32,7 @@ import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.apache.flink.runtime.state.ttl.TtlStateFactory;
 import org.apache.flink.runtime.state.ttl.TtlTimeProvider;
 import org.apache.flink.runtime.state.ttl.TtlUtils;
+import org.apache.flink.runtime.state.ttl.TtlValue;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
@@ -127,6 +128,7 @@ public class RocksDbTtlCompactFilterUtils {
 			if (!enableTtlCompactionFilter) {
 				LOG.warn("Cannot configure RocksDB TTL compaction filter for state <{}>: " +
 					"feature is disabled for the state backend.", stateDesc.getName());
+				return;
 			}
 			Preconditions.checkNotNull(compactionFilterFactory);
 			long ttl = ttlConfig.getTtl().toMilliseconds();
@@ -187,42 +189,36 @@ public class RocksDbTtlCompactFilterUtils {
 	private static class ListElementFilter<T> implements FlinkCompactionFilter.ListElementFilter {
 		private final TypeSerializer<T> serializer;
 		private DataInputDeserializer input;
-		private DataInputDeserializer ts;
 
 		private ListElementFilter(TypeSerializer<T> serializer) {
 			this.serializer = serializer;
 			this.input = new DataInputDeserializer();
-			this.ts = new DataInputDeserializer();
 		}
 
 		@Override
 		public int nextUnexpiredOffset(byte[] bytes, long ttl, long currentTimestamp) {
 			input.setBuffer(bytes);
+			int lastElementOffset = 0;
 			while (input.available() > 0) {
 				try {
-					long timestamp = getCurrentTimestamp(bytes);
+					long timestamp = nextElementLastAccessTimestamp();
 					if (!TtlUtils.expired(timestamp, ttl, currentTimestamp)) {
 						break;
 					}
-					nextElement();
+					lastElementOffset = input.getPosition();
 				} catch (IOException e) {
 					throw new FlinkRuntimeException("Failed to deserialize list element for TTL compaction filter", e);
 				}
 			}
-			return input.getPosition();
+			return lastElementOffset;
 		}
 
-		private long getCurrentTimestamp(byte[] bytes) throws IOException {
-			int pos = input.getPosition();
-			ts.setBuffer(bytes, pos, Long.BYTES);
-			return ts.readLong();
-		}
-
-		private void nextElement() throws IOException {
-			serializer.deserialize(input);
+		private long nextElementLastAccessTimestamp() throws IOException {
+			TtlValue<?> ttlValue = (TtlValue<?>) serializer.deserialize(input);
 			if (input.available() > 0) {
 				input.skipBytesToRead(1);
 			}
+			return ttlValue.getLastAccessTimestamp();
 		}
 	}
 }

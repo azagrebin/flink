@@ -20,6 +20,7 @@ package org.apache.flink.streaming.tests;
 
 import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.contrib.streaming.state.RocksDBStateBackend;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
@@ -56,8 +57,9 @@ public class DataStreamStateTTLTestProgram {
 
 		TtlTestConfig config = TtlTestConfig.fromArgs(pt);
 		StateTtlConfig ttlConfig = StateTtlConfig.newBuilder(config.ttl)
-			.cleanupIncrementally(5, true)
 			.cleanupFullSnapshot()
+			.cleanupIncrementally(5, true)
+			.cleanupInRocksdbCompactFilter()
 			.build();
 
 		env
@@ -82,6 +84,9 @@ public class DataStreamStateTTLTestProgram {
 		final MonotonicTTLTimeProvider ttlTimeProvider = new MonotonicTTLTimeProvider();
 
 		final StateBackend configuredBackend = env.getStateBackend();
+		if (configuredBackend instanceof RocksDBStateBackend) {
+			((RocksDBStateBackend) configuredBackend).enableTtlCompactionFilter();
+		}
 		final StateBackend stubBackend = new StubStateBackend(configuredBackend, ttlTimeProvider);
 		env.setStateBackend(stubBackend);
 
