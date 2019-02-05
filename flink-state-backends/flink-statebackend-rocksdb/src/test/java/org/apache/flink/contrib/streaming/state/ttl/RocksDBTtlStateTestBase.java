@@ -78,20 +78,34 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 
 	@Test
 	public void testCompactFilter() throws Exception {
-		testCompactFilter(false);
+		testCompactFilter(false, false);
 	}
 
 	@Test
 	public void testCompactFilterWithSnapshot() throws Exception {
-		testCompactFilter(true);
+		testCompactFilter(true, false);
+	}
+
+	@Test
+	public void testCompactFilterWithSnapshotAndRescalingAfterRestore() throws Exception {
+		testCompactFilter(true, true);
 	}
 
 	@SuppressWarnings("resource")
-	private void testCompactFilter(boolean takeSnapshot) throws Exception {
+	private void testCompactFilter(boolean takeSnapshot, boolean rescaleAfterRestore) throws Exception {
+		int numberOfKeyGroupsAfterRestore = StateBackendTestContext.NUMBER_OF_KEY_GROUPS;
+		if (rescaleAfterRestore) {
+			numberOfKeyGroupsAfterRestore *= 2;
+		}
+
 		StateDescriptor<?, ?> stateDesc = initTest(getConfBuilder(TTL)
 			.cleanupInRocksdbCompactFilter()
 			.setStateVisibility(StateTtlConfig.StateVisibility.ReturnExpiredIfNotCleanedUp)
 			.build());
+
+		if (takeSnapshot) {
+			takeAndRestoreSnapshot(numberOfKeyGroupsAfterRestore);
+		}
 
 		setTimeAndCompact(stateDesc, 0L);
 
@@ -104,7 +118,7 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		checkUnexpiredOriginalAvailable();
 
 		if (takeSnapshot) {
-			takeAndRestoreSnapshot();
+			takeAndRestoreSnapshot(numberOfKeyGroupsAfterRestore);
 		}
 
 		setTimeAndCompact(stateDesc, 50L);
@@ -124,7 +138,7 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		checkUnexpiredOriginalAvailable();
 
 		if (takeSnapshot) {
-			takeAndRestoreSnapshot();
+			takeAndRestoreSnapshot(numberOfKeyGroupsAfterRestore);
 		}
 
 		// compaction which should not touch unexpired data
@@ -142,7 +156,7 @@ public abstract class RocksDBTtlStateTestBase extends TtlStateTestBase {
 		assertEquals(UPDATED_UNEXPIRED_AVAIL, ctx().getUnexpired, ctx().get());
 
 		if (takeSnapshot) {
-			takeAndRestoreSnapshot();
+			takeAndRestoreSnapshot(numberOfKeyGroupsAfterRestore);
 		}
 
 		setTimeAndCompact(stateDesc, 170L);

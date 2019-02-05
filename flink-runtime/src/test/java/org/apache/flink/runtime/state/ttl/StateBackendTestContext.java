@@ -42,12 +42,13 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.RunnableFuture;
 
 /** Base class for state backend test context. */
 public abstract class StateBackendTestContext {
+	public static final int NUMBER_OF_KEY_GROUPS = 10;
+
 	private final StateBackend stateBackend;
 	private final CheckpointStorageLocation checkpointStorageLocation;
 	private final TtlTimeProvider timeProvider;
@@ -77,12 +78,16 @@ public abstract class StateBackendTestContext {
 	}
 
 	void createAndRestoreKeyedStateBackend() {
+		createAndRestoreKeyedStateBackend(NUMBER_OF_KEY_GROUPS);
+	}
+
+	void createAndRestoreKeyedStateBackend(int numberOfKeyGroups) {
 		Environment env = new DummyEnvironment();
 		try {
 			disposeKeyedStateBackend();
 			keyedStateBackend = stateBackend.createKeyedStateBackend(
-				env, new JobID(), "test", StringSerializer.INSTANCE, 10,
-				new KeyGroupRange(0, 9), env.getTaskKvStateRegistry(), timeProvider);
+				env, new JobID(), "test", StringSerializer.INSTANCE, numberOfKeyGroups,
+				new KeyGroupRange(0, numberOfKeyGroups - 1), env.getTaskKvStateRegistry(), timeProvider);
 		} catch (Exception e) {
 			throw new RuntimeException("unexpected", e);
 		}
@@ -94,9 +99,7 @@ public abstract class StateBackendTestContext {
 			snapshot.discardState();
 		}
 		snapshots.clear();
-		if (sharedStateRegistry != null) {
-			sharedStateRegistry.close();
-		}
+		sharedStateRegistry.close();
 	}
 
 	private void disposeKeyedStateBackend() {
@@ -127,8 +130,10 @@ public abstract class StateBackendTestContext {
 	}
 
 	void restoreSnapshot(@Nullable KeyedStateHandle snapshot) throws Exception {
+		Collection<KeyedStateHandle> snapshots = new ArrayList<>();
+		snapshots.add(snapshot);
 		Collection<KeyedStateHandle> restoreState =
-			snapshot == null ? null : new StateObjectCollection<>(Collections.singleton(snapshot));
+			snapshot == null ? null : new StateObjectCollection<>(snapshots);
 		keyedStateBackend.restore(restoreState);
 		if (snapshot != null) {
 			snapshots.add(snapshot);

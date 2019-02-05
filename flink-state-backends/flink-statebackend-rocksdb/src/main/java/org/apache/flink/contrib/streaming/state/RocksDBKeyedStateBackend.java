@@ -121,7 +121,7 @@ import java.util.Spliterators;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.RunnableFuture;
-import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -170,8 +170,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	/** String that identifies the operator that owns this backend. */
 	private final String operatorIdentifier;
 
-	/** The column family options supplier from the options factory. */
-	private final Supplier<ColumnFamilyOptions> columnFamilyOptionsSupplier;
+	/** Factory function to create column family options from state name. */
+	private final Function<String, ColumnFamilyOptions> columnFamilyOptionsFactory;
 
 	/** The DB options from the options factory. */
 	private final DBOptions dbOptions;
@@ -259,7 +259,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		ClassLoader userCodeClassLoader,
 		File instanceBasePath,
 		DBOptions dbOptions,
-		Supplier<ColumnFamilyOptions> columnFamilyOptionsSupplier,
+		Function<String, ColumnFamilyOptions> columnFamilyOptionsFactory,
 		TaskKvStateRegistry kvStateRegistry,
 		TypeSerializer<K> keySerializer,
 		int numberOfKeyGroups,
@@ -287,7 +287,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		this.rocksDBResourceGuard = new ResourceGuard();
 
 		// ensure that we use the right merge operator, because other code relies on this
-		this.columnFamilyOptionsSupplier = Preconditions.checkNotNull(columnFamilyOptionsSupplier);
+		this.columnFamilyOptionsFactory = Preconditions.checkNotNull(columnFamilyOptionsFactory);
 
 		this.dbOptions = Preconditions.checkNotNull(dbOptions);
 
@@ -417,15 +417,19 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				nativeMetricMonitor.close();
 			}
 
+			List<ColumnFamilyOptions> columnFamilyOptions = new ArrayList<>(kvStateInformation.values().size());
+
 			// RocksDB's native memory management requires that *all* CFs (including default) are closed before the
 			// DB is closed. See:
 			// https://github.com/facebook/rocksdb/wiki/RocksJava-Basics#opening-a-database-with-column-families
 			// Start with default CF ...
-			disposeColumnFamilyQuietly(defaultColumnFamily);
+			addColumnFamilyToCloseLater(columnFamilyOptions, defaultColumnFamily);
+			IOUtils.closeQuietly(defaultColumnFamily);
 
 			// ... continue with the ones created by Flink...
 			for (RocksDbKvStateInfo kvStateInfo : kvStateInformation.values()) {
-				disposeColumnFamilyQuietly(kvStateInfo.columnFamilyHandle);
+				addColumnFamilyToCloseLater(columnFamilyOptions, kvStateInfo.columnFamilyHandle);
+				IOUtils.closeQuietly(kvStateInfo.columnFamilyHandle);
 			}
 
 			// ... and finally close the DB instance ...
@@ -433,6 +437,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 			// invalidate the reference
 			db = null;
+
+			columnFamilyOptions.forEach(IOUtils::closeQuietly);
 
 			IOUtils.closeQuietly(dbOptions);
 			IOUtils.closeQuietly(writeOptions);
@@ -445,11 +451,12 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 	}
 
-	@SuppressWarnings("unused")
-	private void disposeColumnFamilyQuietly(ColumnFamilyHandle columnFamilyHandle) {
-		try (ColumnFamilyOptions optionsToClose = columnFamilyHandle.getDescriptor().getOptions()) {
-			IOUtils.closeQuietly(columnFamilyHandle);
-		} catch (Throwable t) {
+	private static void addColumnFamilyToCloseLater(
+		List<ColumnFamilyOptions> columnFamilyOptions, ColumnFamilyHandle columnFamilyHandle) {
+
+		try {
+			columnFamilyOptions.add(columnFamilyHandle.getDescriptor().getOptions());
+		} catch (RocksDBException e) {
 			// ignore
 		}
 	}
@@ -649,7 +656,9 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 		// we add the required descriptor for the default CF in FIRST position, see
 		// https://github.com/facebook/rocksdb/wiki/RocksJava-Basics#opening-a-database-with-column-families
-		columnFamilyDescriptors.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, createColumnFamilyOptions()));
+		columnFamilyDescriptors.add(new ColumnFamilyDescriptor(
+			RocksDB.DEFAULT_COLUMN_FAMILY,
+			createColumnFamilyOptions("default")));
 		columnFamilyDescriptors.addAll(stateColumnFamilyDescriptors);
 
 		RocksDB dbRef;
@@ -789,7 +798,11 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 					rocksDBKeyedStateBackend.kvStateInformation.get(restoredMetaInfo.getName());
 
 				if (registeredColumn == null) {
-					registeredColumn = rocksDBKeyedStateBackend.restoreStateInfo(restoredMetaInfo);
+					// create a meta info for the state on restore;
+					// this allows us to retain the state in future snapshots even if it wasn't accessed
+					RegisteredStateMetaInfoBase metaInfoBase =
+						RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(restoredMetaInfo);
+					registeredColumn = rocksDBKeyedStateBackend.createStateInfo(metaInfoBase);
 					rocksDBKeyedStateBackend.kvStateInformation.put(restoredMetaInfo.getName(), registeredColumn);
 
 				} else {
@@ -1200,7 +1213,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				new ArrayList<>(stateMetaInfoSnapshots.size());
 
 			for (StateMetaInfoSnapshot stateMetaInfoSnapshot : stateMetaInfoSnapshots) {
-				ColumnFamilyOptions options = stateBackend.createColumnFamilyOptions();
+				ColumnFamilyOptions options = stateBackend.createColumnFamilyOptions(stateMetaInfoSnapshot.getName());
 				if (registerTtlCompactFilter) {
 					stateBackend.ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(
 						stateBackend.ttlTimeProvider, stateMetaInfoSnapshot, options);
@@ -1497,24 +1510,10 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 	}
 
 	/**
-	 * Restores a state info from a restored meta info to use with a k/v state.
-	 */
-	private RocksDbKvStateInfo restoreStateInfo(StateMetaInfoSnapshot restoredMetaInfo) {
-		ColumnFamilyOptions options = createColumnFamilyOptions();
-		ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(ttlTimeProvider, restoredMetaInfo, options);
-		String name = restoredMetaInfo.getName();
-		// create a meta info for the state on restore;
-		// this allows us to retain the state in future snapshots even if it wasn't accessed
-		RegisteredStateMetaInfoBase stateMetaInfo =
-			RegisteredStateMetaInfoBase.fromMetaInfoSnapshot(restoredMetaInfo);
-		return new RocksDbKvStateInfo(createColumnFamily(options, name), stateMetaInfo);
-	}
-
-	/**
 	 * Creates a state info from a new meta info to use with a k/v state.
 	 */
 	private RocksDbKvStateInfo createStateInfo(RegisteredStateMetaInfoBase metaInfoBase) {
-		ColumnFamilyOptions options = createColumnFamilyOptions();
+		ColumnFamilyOptions options = createColumnFamilyOptions(metaInfoBase.getName());
 		ttlCompactFiltersManager.setAndRegisterCompactFilterIfStateTtl(ttlTimeProvider, metaInfoBase, options);
 		String name = metaInfoBase.getName();
 		return new RocksDbKvStateInfo(createColumnFamily(options, name), metaInfoBase);
@@ -1537,8 +1536,8 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		}
 	}
 
-	private ColumnFamilyOptions createColumnFamilyOptions() {
-		return columnFamilyOptionsSupplier.get().setMergeOperatorName(MERGE_OPERATOR_NAME);
+	private ColumnFamilyOptions createColumnFamilyOptions(String stateName) {
+		return columnFamilyOptionsFactory.apply(stateName).setMergeOperatorName(MERGE_OPERATOR_NAME);
 	}
 
 	@Override
@@ -1668,7 +1667,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 		RocksDbKvStateInfo stateInfo = kvStateInformation.get(stateName);
 
 		if (stateInfo == null) {
-			final ColumnFamilyHandle columnFamilyHandle = createColumnFamily(createColumnFamilyOptions(), stateName);
+			final ColumnFamilyHandle columnFamilyHandle = createColumnFamily(createColumnFamilyOptions(stateName), stateName);
 
 			RegisteredPriorityQueueStateBackendMetaInfo<T> metaInfo =
 				new RegisteredPriorityQueueStateBackendMetaInfo<>(stateName, byteOrderedElementSerializer);

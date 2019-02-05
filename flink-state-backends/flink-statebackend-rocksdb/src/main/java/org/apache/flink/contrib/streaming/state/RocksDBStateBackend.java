@@ -472,7 +472,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 				env.getUserClassLoader(),
 				instanceBasePath,
 				getDbOptions(),
-				this::getColumnOptions,
+				stateName -> getColumnOptions(),
 				kvStateRegistry,
 				keySerializer,
 				numberOfKeyGroups,
@@ -483,7 +483,7 @@ public class RocksDBStateBackend extends AbstractStateBackend implements Configu
 				localRecoveryConfig,
 				priorityQueueStateType,
 				ttlTimeProvider,
-			    enableTtlCompactionFilter.getOrDefault(TTL_COMPACT_FILTER_ENABLED.defaultValue()),
+				enableTtlCompactionFilter.getOrDefault(TTL_COMPACT_FILTER_ENABLED.defaultValue()),
 				getMemoryWatcherOptions(),
 				metricGroup);
 	}

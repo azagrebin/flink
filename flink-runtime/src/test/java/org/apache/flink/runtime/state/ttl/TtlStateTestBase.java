@@ -145,12 +145,16 @@ public abstract class TtlStateTestBase {
 		return stateDescriptor;
 	}
 
-	protected void takeAndRestoreSnapshot() throws Exception {
-		restoreSnapshot(sbetc.takeSnapshot());
+	private void takeAndRestoreSnapshot() throws Exception {
+		restoreSnapshot(sbetc.takeSnapshot(), StateBackendTestContext.NUMBER_OF_KEY_GROUPS);
 	}
 
-	private void restoreSnapshot(KeyedStateHandle snapshot) throws Exception {
-		sbetc.createAndRestoreKeyedStateBackend();
+	protected void takeAndRestoreSnapshot(int numberOfKeyGroupsAfterRestore) throws Exception {
+		restoreSnapshot(sbetc.takeSnapshot(), numberOfKeyGroupsAfterRestore);
+	}
+
+	private void restoreSnapshot(KeyedStateHandle snapshot, int numberOfKeyGroups) throws Exception {
+		sbetc.createAndRestoreKeyedStateBackend(numberOfKeyGroups);
 		sbetc.restoreSnapshot(snapshot);
 		sbetc.setCurrentKey("defaultKey");
 		createState();
@@ -410,9 +414,7 @@ public abstract class TtlStateTestBase {
 		sbetc.setCurrentKey("k2");
 		ctx().update(ctx().updateUnexpired);
 
-		sbetc.createAndRestoreKeyedStateBackend();
-		sbetc.restoreSnapshot(snapshot);
-		createState();
+		restoreSnapshot(snapshot, StateBackendTestContext.NUMBER_OF_KEY_GROUPS);
 
 		timeProvider.time = 180;
 		sbetc.setCurrentKey("k1");
@@ -466,7 +468,7 @@ public abstract class TtlStateTestBase {
 		KeyedStateHandle snapshot = snapshotRunnableFuture.get().getJobManagerOwnedSnapshot();
 		// restore snapshot which should discard concurrent updates
 		timeProvider.time = 50;
-		restoreSnapshot(snapshot);
+		restoreSnapshot(snapshot, StateBackendTestContext.NUMBER_OF_KEY_GROUPS);
 
 		// check rest unexpired, also after restore which should discard concurrent updates
 		checkUnexpiredKeys(keysToUpdate, INC_CLEANUP_ALL_KEYS, ctx().getUpdateEmpty);
