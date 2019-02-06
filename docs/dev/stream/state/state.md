@@ -397,7 +397,7 @@ val ttlConfig = StateTtlConfig
 This option is not applicable for the incremental checkpointing in the RocksDB state backend.
 
 **Notes:** 
-- For existing jobs, this cleanup strategy can be activated or disactivated anytime in `StateTtlConfig`, 
+- For existing jobs, this cleanup strategy can be activated or deactivated anytime in `StateTtlConfig`, 
 e.g. after restart from savepoint.
 
 ##### Incremental cleanup
@@ -443,7 +443,7 @@ The second parameter defines whether to trigger cleanup additionally per each re
 - If heap state backend is used with synchronous snapshotting, the global iterator keeps a copy of all keys 
 while iterating because of its specific implementation which does not support concurrent modifications. 
 Enabling of this feature will increase memory consumption then. Asynchronous snapshotting does not have this problem.
-- For existing jobs, this cleanup strategy can be activated or disactivated anytime in `StateTtlConfig`, 
+- For existing jobs, this cleanup strategy can be activated or deactivated anytime in `StateTtlConfig`, 
 e.g. after restart from savepoint.
 
 ##### Cleanup during RocksDB compaction
@@ -499,7 +499,7 @@ by activating debug level for `FlinkCompactionFilter`:
 The TTL filter has to parse timestamp of last access and check its expiration 
 for every stored state entry per key which is being compacted. 
 In case of collection state type (list or map) the check is also invoked per stored element.
-- For existing jobs, this cleanup strategy can be activated or disactivated anytime in `StateTtlConfig`, 
+- For existing jobs, this cleanup strategy can be activated or deactivated anytime in `StateTtlConfig`, 
 e.g. after restart from savepoint.
 
 ### State in the Scala DataStream API
