@@ -53,7 +53,7 @@ public class DataStreamStateTTLTestProgram {
 
 		setupEnvironment(env, pt);
 
-		final MonotonicTTLTimeProvider ttlTimeProvider = setBackendWithCustomTTLTimeProvider(env);
+		setBackendWithCustomTTLTimeProvider(env);
 
 		TtlTestConfig config = TtlTestConfig.fromArgs(pt);
 		StateTtlConfig ttlConfig = StateTtlConfig.newBuilder(config.ttl)
@@ -66,7 +66,7 @@ public class DataStreamStateTTLTestProgram {
 			.addSource(new TtlStateUpdateSource(config.keySpace, config.sleepAfterElements, config.sleepTime))
 			.name("TtlStateUpdateSource")
 			.keyBy(TtlStateUpdate::getKey)
-			.flatMap(new TtlVerifyUpdateFunction(ttlConfig, ttlTimeProvider, config.reportStatAfterUpdatesNum))
+			.flatMap(new TtlVerifyUpdateFunction(ttlConfig, config.reportStatAfterUpdatesNum))
 			.name("TtlVerifyUpdateFunction")
 			.addSink(new PrintSinkFunction<>())
 			.name("PrintFailedVerifications");
@@ -78,9 +78,8 @@ public class DataStreamStateTTLTestProgram {
 	 * Sets the state backend to a new {@link StubStateBackend} which has a {@link MonotonicTTLTimeProvider}.
 	 *
 	 * @param env The {@link StreamExecutionEnvironment} of the job.
-	 * @return The {@link MonotonicTTLTimeProvider}.
 	 */
-	private static MonotonicTTLTimeProvider setBackendWithCustomTTLTimeProvider(StreamExecutionEnvironment env) {
+	private static void setBackendWithCustomTTLTimeProvider(StreamExecutionEnvironment env) {
 		final MonotonicTTLTimeProvider ttlTimeProvider = new MonotonicTTLTimeProvider();
 
 		final StateBackend configuredBackend = env.getStateBackend();
@@ -89,7 +88,5 @@ public class DataStreamStateTTLTestProgram {
 		}
 		final StateBackend stubBackend = new StubStateBackend(configuredBackend, ttlTimeProvider);
 		env.setStateBackend(stubBackend);
-
-		return ttlTimeProvider;
 	}
 }
