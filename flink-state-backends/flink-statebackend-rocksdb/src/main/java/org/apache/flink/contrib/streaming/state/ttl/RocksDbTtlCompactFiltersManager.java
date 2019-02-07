@@ -57,7 +57,7 @@ public class RocksDbTtlCompactFiltersManager {
 	/** Enables RocksDb compaction filter for State with TTL. */
 	private final boolean enableTtlCompactionFilter;
 
-	/** Registered compaction filter factories */
+	/** Registered compaction filter factories. */
 	private final LinkedHashMap<String, FlinkCompactionFilterFactory> compactionFilterFactories;
 
 	public RocksDbTtlCompactFiltersManager(boolean enableTtlCompactionFilter) {
@@ -149,7 +149,7 @@ public class RocksDbTtlCompactFiltersManager {
 				int len = elemSerializer.getLength();
 				if (len > 0) {
 					config = FlinkCompactionFilter.Config.createForFixedElementList(
-						ttl, queryTimeAfterNumEntries,len + 1); // plus one byte for list element delimiter
+						ttl, queryTimeAfterNumEntries, len + 1); // plus one byte for list element delimiter
 				} else {
 					config = FlinkCompactionFilter.Config.createForList(
 						ttl, queryTimeAfterNumEntries,

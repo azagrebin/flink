@@ -933,7 +933,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 
 					// read state data.
 					try (RocksDBStateDownloader rocksDBStateDownloader =
-							 new RocksDBStateDownloader(stateBackend.numberOfTransferingThreads)) {
+							new RocksDBStateDownloader(stateBackend.numberOfTransferingThreads)) {
 						rocksDBStateDownloader.transferAllStateDataToDirectory(
 							restoreStateHandle,
 							temporaryRestoreInstancePath,
@@ -1004,7 +1004,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 				Path temporaryRestoreInstancePath = new Path(stateBackend.instanceBasePath.getAbsolutePath() + UUID.randomUUID().toString());
 				try (RestoredDBInstance tmpRestoreDBInfo = restoreDBInstanceFromStateHandle(
 					(IncrementalKeyedStateHandle) rawStateHandle, temporaryRestoreInstancePath, false);
-					 RocksDBWriteBatchWrapper writeBatchWrapper = new RocksDBWriteBatchWrapper(stateBackend.db)) {
+					RocksDBWriteBatchWrapper writeBatchWrapper = new RocksDBWriteBatchWrapper(stateBackend.db)) {
 
 					List<ColumnFamilyDescriptor> tmpColumnFamilyDescriptors = tmpRestoreDBInfo.columnFamilyDescriptors;
 					List<ColumnFamilyHandle> tmpColumnFamilyHandles = tmpRestoreDBInfo.columnFamilyHandles;
@@ -1092,7 +1092,7 @@ public class RocksDBKeyedStateBackend<K> extends AbstractKeyedStateBackend<K> {
 			boolean registerTtlCompactFilter) throws Exception {
 
 			try (RocksDBStateDownloader rocksDBStateDownloader =
-					 new RocksDBStateDownloader(stateBackend.numberOfTransferingThreads)) {
+					new RocksDBStateDownloader(stateBackend.numberOfTransferingThreads)) {
 				rocksDBStateDownloader.transferAllStateDataToDirectory(
 					restoreStateHandle,
 					temporaryRestoreInstancePath,
