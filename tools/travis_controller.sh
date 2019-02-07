@@ -90,7 +90,13 @@ EXIT_CODE=0
 
 # Run actual compile&test steps
 if [ $STAGE == "$STAGE_COMPILE" ]; then
-	MVN="mvn clean install -nsu -Dflink.forkCount=2 -Dflink.forkCountTestPackage=2 -Dmaven.javadoc.skip=true -B -DskipTests $PROFILE"
+    pwd
+    ls -la
+    ls -la frocksdb
+	./frocksdb/install.sh
+	ls -la $HOME/.m2/repository/com/data-artisans/frocksdbjni/5.17.2-artisans
+
+	MVN="mvn -U clean install -nsu -Dflink.forkCount=2 -Dflink.forkCountTestPackage=2 -Dmaven.javadoc.skip=true -B -DskipTests $PROFILE"
 	$MVN
 	EXIT_CODE=$?
 
