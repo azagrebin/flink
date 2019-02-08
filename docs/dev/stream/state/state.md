@@ -499,6 +499,9 @@ by activating debug level for `FlinkCompactionFilter`:
 The TTL filter has to parse timestamp of last access and check its expiration 
 for every stored state entry per key which is being compacted. 
 In case of collection state type (list or map) the check is also invoked per stored element.
+- If this feature is used with a list state which has elements with non-fixed byte length,
+the native TTL filter has to call additionally a Flink java type serializer of the element over JNI per each state entry
+where at least the first element has expired to determine the offset of the next unexpired element. 
 - For existing jobs, this cleanup strategy can be activated or deactivated anytime in `StateTtlConfig`, 
 e.g. after restart from savepoint.
 
