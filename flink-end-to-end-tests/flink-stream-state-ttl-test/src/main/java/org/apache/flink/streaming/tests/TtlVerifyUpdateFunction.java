@@ -24,7 +24,10 @@ import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.State;
 import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
@@ -34,6 +37,7 @@ import org.apache.flink.streaming.tests.verify.TtlUpdateContext;
 import org.apache.flink.streaming.tests.verify.TtlVerificationContext;
 import org.apache.flink.streaming.tests.verify.ValueWithTs;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +78,7 @@ class TtlVerifyUpdateFunction extends RichFlatMapFunction<TtlStateUpdate, String
 
 	private transient Map<String, State> states;
 	private transient Map<String, ListState<ValueWithTs<?>>> prevUpdatesByVerifierId;
+	private transient Map<String, ValueState<Integer>> prevUpdatesLenByVerifierId;
 
 	TtlVerifyUpdateFunction(
 			@Nonnull StateTtlConfig ttlConfig,
@@ -96,10 +101,15 @@ class TtlVerifyUpdateFunction extends RichFlatMapFunction<TtlStateUpdate, String
 			TtlStateUpdate updates,
 			TtlStateVerifier<?, ?> verifier) throws Exception {
 
+		int prevUpdatesSize = prevUpdatesLenByVerifierId.get(verifier.getId()).value();
 		List<ValueWithTs<?>> prevUpdates = getPrevUpdates(verifier.getId());
+		Preconditions.checkArgument(
+			prevUpdates.size() == 0 || prevUpdatesSize == prevUpdates.size(),
+			"prevUpdatesSize mismatch");
 		Object update = updates.getUpdate(verifier.getId());
 		TtlUpdateContext<?, ?> updateContext = performUpdate(verifier, update);
 		stat.update(prevUpdates.size());
+		prevUpdatesLenByVerifierId.get(verifier.getId()).update(prevUpdatesSize + 1);
 		prevUpdatesByVerifierId.get(verifier.getId()).add(updateContext.getUpdateWithTs());
 		return new TtlVerificationContext<>(updates.getKey(), verifier.getId(), prevUpdates, updateContext);
 	}
@@ -149,6 +159,14 @@ class TtlVerifyUpdateFunction extends RichFlatMapFunction<TtlStateUpdate, String
 					"TtlPrevValueState_" + v.getId(), typeSerializer);
 				KeyedStateStore store = context.getKeyedStateStore();
 				return store.getListState(stateDesc);
+			}));
+		prevUpdatesLenByVerifierId = TtlStateVerifier.VERIFIERS.stream()
+			.collect(Collectors.toMap(TtlStateVerifier::getId, v -> {
+				checkNotNull(v);
+				ValueStateDescriptor<Integer> stateDesc = new ValueStateDescriptor<>(
+					"TtlPrevValueLenState_" + v.getId(), IntSerializer.INSTANCE);
+				KeyedStateStore store = context.getKeyedStateStore();
+				return store.getState(stateDesc);
 			}));
 	}
 
