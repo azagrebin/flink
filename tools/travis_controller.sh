@@ -96,7 +96,9 @@ EXIT_CODE=0
 
 # Run actual compile&test steps
 if [ $STAGE == "$STAGE_COMPILE" ]; then
-	MVN="mvn clean install -nsu -Dflink.forkCount=2 -Dflink.forkCountTestPackage=2 -Dmaven.javadoc.skip=true -B -DskipTests $PROFILE"
+    mkdir -p ~/.m2/repository/com/data-artisans/flink-rocksdb-plugin/1.0
+    cp rocksdb-plugins/* ~/.m2/repository/com/data-artisans/flink-rocksdb-plugin/1.0/.
+	MVN="mvn -U clean install -nsu -Dflink.forkCount=2 -Dflink.forkCountTestPackage=2 -Dmaven.javadoc.skip=true -B -DskipTests $PROFILE"
 	$MVN
 	EXIT_CODE=$?
 
