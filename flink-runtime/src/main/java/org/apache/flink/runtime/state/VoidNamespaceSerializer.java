@@ -67,24 +67,24 @@ public final class VoidNamespaceSerializer extends TypeSerializerSingleton<VoidN
 		// We could just skip writing anything here, because of the way this is
 		// used with the state backends, but if it is ever used somewhere else
 		// (even though it is unlikely to happen), it would be a problem.
-		target.write(0);
+		//target.write(0);
 	}
 
 	@Override
 	public VoidNamespace deserialize(DataInputView source) throws IOException {
-		source.readByte();
+		//source.readByte();
 		return VoidNamespace.get();
 	}
 
 	@Override
 	public VoidNamespace deserialize(VoidNamespace reuse, DataInputView source) throws IOException {
-		source.readByte();
+		//source.readByte();
 		return VoidNamespace.get();
 	}
 
 	@Override
 	public void copy(DataInputView source, DataOutputView target) throws IOException {
-		target.write(source.readByte());
+		//target.write(source.readByte());
 	}
 
 	// -----------------------------------------------------------------------------------
