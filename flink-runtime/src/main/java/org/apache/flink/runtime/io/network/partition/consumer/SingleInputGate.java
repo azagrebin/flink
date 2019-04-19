@@ -21,10 +21,9 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.metrics.Counter;
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.ResultPartitionLocation;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.event.TaskEvent;
+import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
 import org.apache.flink.runtime.io.network.api.serialization.EventSerializer;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
@@ -36,7 +35,10 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.Buffe
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
 import org.apache.flink.runtime.taskmanager.TaskActions;
+import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.function.SupplierWithException;
 
 import org.slf4j.Logger;
@@ -53,6 +55,7 @@ import java.util.Optional;
 import java.util.Timer;
 import java.util.concurrent.CompletableFuture;
 
+import static org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel.isChannelLocal;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -325,39 +328,31 @@ public class SingleInputGate extends InputGate {
 		}
 	}
 
-	public void updateInputChannel(InputChannelDeploymentDescriptor icdd) throws IOException, InterruptedException {
+	public void updateInputChannel(PartitionInfo partitionInfo) throws IOException, InterruptedException {
 		synchronized (requestLock) {
 			if (isReleased) {
 				// There was a race with a task failure/cancel
 				return;
 			}
 
-			final IntermediateResultPartitionID partitionId = icdd.getConsumedPartitionId().getPartitionId();
+			ShuffleDeploymentDescriptor sdd = partitionInfo.getShuffleDeploymentDescriptor();
+			Preconditions.checkArgument(sdd instanceof DefaultShuffleDeploymentDescriptor,
+				"Tried to update unknown channel with unknown ShuffleDeploymentDescriptor %s.",
+				sdd.getClass().getName());
+			DefaultShuffleDeploymentDescriptor defaultSdd = (DefaultShuffleDeploymentDescriptor) sdd;
+
+			final IntermediateResultPartitionID partitionId = defaultSdd.getResultPartitionID().getPartitionId();
 
 			InputChannel current = inputChannels.get(partitionId);
 
 			if (current instanceof UnknownInputChannel) {
-
 				UnknownInputChannel unknownChannel = (UnknownInputChannel) current;
-
-				InputChannel newChannel;
-
-				ResultPartitionLocation partitionLocation = icdd.getConsumedPartitionLocation();
-
-				if (partitionLocation.isLocal()) {
-					newChannel = unknownChannel.toLocalInputChannel();
+				boolean isLocal = isChannelLocal(defaultSdd, partitionInfo.getConsumerResourceID());
+				InputChannel newChannel = isLocal ? unknownChannel.toLocalInputChannel() :
+					unknownChannel.toRemoteInputChannel(defaultSdd.getConnectionId());
+				if (!isLocal && this.isCreditBased) {
+					((RemoteInputChannel) newChannel).assignExclusiveSegments();
 				}
-				else if (partitionLocation.isRemote()) {
-					newChannel = unknownChannel.toRemoteInputChannel(partitionLocation.getConnectionId());
-
-					if (this.isCreditBased) {
-						((RemoteInputChannel) newChannel).assignExclusiveSegments();
-					}
-				}
-				else {
-					throw new IllegalStateException("Tried to update unknown channel with unknown channel.");
-				}
-
 				LOG.debug("{}: Updated unknown input channel to {}.", owningTaskName, newChannel);
 
 				inputChannels.put(partitionId, newChannel);
@@ -666,6 +661,7 @@ public class SingleInputGate extends InputGate {
 			InputChannel inputChannel = inputChannelsWithData.remove();
 			enqueuedInputChannelsWithData.clear(inputChannel.getChannelIndex());
 			return Optional.of(inputChannel);
+
 		}
 	}
 

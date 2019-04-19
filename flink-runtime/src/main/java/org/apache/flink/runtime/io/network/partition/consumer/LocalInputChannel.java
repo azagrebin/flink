@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.io.network.TaskEventPublisher;
@@ -28,6 +29,8 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartition.BufferAndBacklog;
 import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
+import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -263,5 +266,10 @@ public class LocalInputChannel extends InputChannel implements BufferAvailabilit
 	@Override
 	public String toString() {
 		return "LocalInputChannel [" + partitionId + "]";
+	}
+
+	static boolean isChannelLocal(ShuffleDeploymentDescriptor sdd, ResourceID consumerResourceId) {
+		return sdd instanceof DefaultShuffleDeploymentDescriptor &&
+			((DefaultShuffleDeploymentDescriptor) sdd).isLocalTo(consumerResourceId);
 	}
 }

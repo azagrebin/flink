@@ -254,6 +254,7 @@ public class ExecutionVertexCancelTest extends TestLogger {
 	public void testSendCancelAndReceiveFail() throws Exception {
 		final ExecutionGraph graph = ExecutionGraphTestUtils.createSimpleTestGraph();
 
+		graph.start(TestingComponentMainThreadExecutorServiceAdapter.forMainThread());
 		graph.scheduleForExecution();
 		ExecutionGraphTestUtils.switchAllVerticesToRunning(graph);
 		assertEquals(JobStatus.RUNNING, graph.getState());

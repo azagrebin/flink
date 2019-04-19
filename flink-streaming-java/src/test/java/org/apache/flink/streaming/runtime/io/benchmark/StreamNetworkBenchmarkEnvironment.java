@@ -23,13 +23,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.ResultPartitionLocation;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
-import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.NetworkEnvironmentBuilder;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
@@ -47,6 +44,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateFactory;
 import org.apache.flink.runtime.io.network.partition.consumer.UnionInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
 import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
 import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -54,6 +53,7 @@ import org.apache.flink.runtime.util.ConfigurationParserUtils;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 
@@ -236,19 +236,19 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 			final int channels) throws IOException {
 
 		InputGate[] gates = new InputGate[channels];
+		ResourceID localLocation = new ResourceID("local");
 		for (int channel = 0; channel < channels; ++channel) {
 			int finalChannel = channel;
-			InputChannelDeploymentDescriptor[] channelDescriptors = Arrays.stream(partitionIds)
-				.map(partitionId -> new InputChannelDeploymentDescriptor(
-					partitionId,
-					localMode ? ResultPartitionLocation.createLocal() : ResultPartitionLocation.createRemote(new ConnectionID(senderLocation, finalChannel))))
-				.toArray(InputChannelDeploymentDescriptor[]::new);
+			ShuffleDeploymentDescriptor[] channelDescriptors = Arrays.stream(partitionIds)
+				.map(partitionId -> localMode ?
+					createLocalSdd(partitionId, localLocation) : createRemoteSdd(partitionId, senderLocation, finalChannel))
+				.toArray(ShuffleDeploymentDescriptor[]::new);
 
 			final InputGateDeploymentDescriptor gateDescriptor = new InputGateDeploymentDescriptor(
 				dataSetID,
 				ResultPartitionType.PIPELINED_BOUNDED,
 				channel,
-				channelDescriptors);
+				channelDescriptors, localLocation);
 
 			SingleInputGate gate = new SingleInputGateFactory(
 				environment.getConfiguration(),
@@ -273,5 +273,19 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 		} else {
 			return gates[0];
 		}
+	}
+
+	private static ShuffleDeploymentDescriptor createLocalSdd(ResultPartitionID resultPartitionID, ResourceID location) {
+		return new DefaultShuffleDeploymentDescriptor(
+			location, new InetSocketAddress("localhost", 10000), resultPartitionID, 0);
+	}
+
+	private static ShuffleDeploymentDescriptor createRemoteSdd(
+		ResultPartitionID resultPartitionID, TaskManagerLocation senderLocation, int channel) {
+
+		return new DefaultShuffleDeploymentDescriptor(
+			senderLocation.getResourceID(),
+			new InetSocketAddress(senderLocation.address(),
+				senderLocation.dataPort()), resultPartitionID, channel);
 	}
 }

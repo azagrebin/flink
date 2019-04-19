@@ -375,7 +375,7 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		return getJobVertex().getInputDependencyConstraint();
 	}
 
-	public Either<SerializedValue<TaskInformation>, PermanentBlobKey> getTaskInformationOrBlobKey() throws IOException {
+	public Either<SerializedValue<TaskInformation>, PermanentBlobKey> getTaskInformationOrBlobKey() throws ExecutionGraphException {
 		// only one thread should offload the task information, so let's also let only one thread
 		// serialize the task information!
 		synchronized (stateMonitor) {
@@ -390,10 +390,16 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 					jobVertex.getInvokableClassName(),
 					jobVertex.getConfiguration());
 
-				taskInformationOrBlobKey = BlobWriter.serializeAndTryOffload(
-					taskInformation,
-					getJobId(),
-					blobWriter);
+				try {
+					taskInformationOrBlobKey = BlobWriter.serializeAndTryOffload(
+						taskInformation,
+						getJobId(),
+						blobWriter);
+				} catch (IOException e) {
+					throw new ExecutionGraphException(
+						"Could not create a serialized JobVertexInformation for " +
+							getJobVertexId(), e);
+				}
 			}
 
 			return taskInformationOrBlobKey;
@@ -529,7 +535,7 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 		for (int i = 0; i < vertices.length; i++) {
 			// allocate the next slot (future)
 			final Execution exec = vertices[i].getCurrentExecutionAttempt();
-			final CompletableFuture<Execution> allocationFuture = exec.allocateAndAssignSlotForExecution(
+			final CompletableFuture<Execution> allocationFuture = exec.allocateResourcesForExecution(
 				resourceProvider,
 				queued,
 				locationPreferenceConstraint,

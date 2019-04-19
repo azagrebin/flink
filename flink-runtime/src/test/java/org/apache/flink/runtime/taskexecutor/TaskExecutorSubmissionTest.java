@@ -25,33 +25,27 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.ResultPartitionLocation;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.ExecutionGraphException;
 import org.apache.flink.runtime.executiongraph.JobInformation;
-import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
-import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.partition.PartitionNotFoundException;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
-import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
-import org.apache.flink.runtime.jobmanager.Tasks;
 import org.apache.flink.runtime.jobmaster.JobMasterId;
 import org.apache.flink.runtime.jobmaster.TestingAbstractInvokables;
 import org.apache.flink.runtime.jobmaster.utils.TestingJobMasterGateway;
 import org.apache.flink.runtime.jobmaster.utils.TestingJobMasterGatewayBuilder;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
+import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
 import org.apache.flink.runtime.taskexecutor.exceptions.PartitionException;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.testtasks.BlockingNoOpInvokable;
@@ -66,7 +60,6 @@ import org.junit.Test;
 import org.junit.rules.TestName;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Collection;
@@ -74,6 +67,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static org.apache.flink.runtime.util.ShuffleTestUtil.createInputGateDeploymentDescriptor;
+import static org.apache.flink.runtime.util.ShuffleTestUtil.createPartitionInfo;
+import static org.apache.flink.runtime.util.ShuffleTestUtil.createResultPartitionDeploymentDescriptor;
+import static org.apache.flink.runtime.util.ShuffleTestUtil.createSddWithLocalConnection;
 import static org.hamcrest.CoreMatchers.startsWith;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
@@ -239,37 +236,14 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 
 	@Test(timeout = 10000L)
 	public void testRunJobWithForwardChannel() throws Exception {
-		final ExecutionAttemptID eid1 = new ExecutionAttemptID();
-		final ExecutionAttemptID eid2 = new ExecutionAttemptID();
+		ResourceID producerLocation = new ResourceID("local");
+		DefaultShuffleDeploymentDescriptor sdd =
+			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 
-		IntermediateResultPartitionID partitionId = new IntermediateResultPartitionID();
-
-		ResultPartitionDeploymentDescriptor task1ResultPartitionDescriptor =
-			new ResultPartitionDeploymentDescriptor(new IntermediateDataSetID(), partitionId, ResultPartitionType.PIPELINED, 1,
-				1, true);
-
-		InputGateDeploymentDescriptor task2InputGateDescriptor =
-			new InputGateDeploymentDescriptor(new IntermediateDataSetID(), ResultPartitionType.PIPELINED, 0,
-				new InputChannelDeploymentDescriptor[] {
-					new InputChannelDeploymentDescriptor(new ResultPartitionID(partitionId, eid1),
-						ResultPartitionLocation.createLocal()) });
-
-		final TaskDeploymentDescriptor tdd1 =
-			createTestTaskDeploymentDescriptor(
-				"Sender",
-				eid1,
-				TestingAbstractInvokables.Sender.class, 
-				1,
-				Collections.singletonList(task1ResultPartitionDescriptor),
-				Collections.emptyList());
-		final TaskDeploymentDescriptor tdd2 =
-			createTestTaskDeploymentDescriptor(
-				"Receiver",
-				eid2,
-				TestingAbstractInvokables.Receiver.class,
-				1,
-				Collections.emptyList(),
-				Collections.singletonList(task2InputGateDescriptor));
+		TaskDeploymentDescriptor tdd1 = createSender(sdd);
+		TaskDeploymentDescriptor tdd2 = createReceiver(sdd, producerLocation);
+		ExecutionAttemptID eid1 = tdd1.getExecutionAttemptId();
+		ExecutionAttemptID eid2 = tdd2.getExecutionAttemptId();
 
 		final CompletableFuture<Void> task1RunningFuture = new CompletableFuture<>();
 		final CompletableFuture<Void> task2RunningFuture = new CompletableFuture<>();
@@ -321,34 +295,14 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	 */
 	@Test(timeout = 10000L)
 	public void testCancellingDependentAndStateUpdateFails() throws Exception {
-		final ExecutionAttemptID eid1 = new ExecutionAttemptID();
-		final ExecutionAttemptID eid2 = new ExecutionAttemptID();
+		ResourceID producerLocation = new ResourceID("local");
+		DefaultShuffleDeploymentDescriptor sdd =
+			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 
-		IntermediateResultPartitionID partitionId = new IntermediateResultPartitionID();
-
-		ResultPartitionDeploymentDescriptor task1ResultPartitionDescriptor =
-			new ResultPartitionDeploymentDescriptor(new IntermediateDataSetID(), partitionId, ResultPartitionType.PIPELINED, 1,
-				1, true);
-
-		InputGateDeploymentDescriptor task2InputGateDescriptor =
-			new InputGateDeploymentDescriptor(new IntermediateDataSetID(), ResultPartitionType.PIPELINED, 0,
-				new InputChannelDeploymentDescriptor[] {
-					new InputChannelDeploymentDescriptor(new ResultPartitionID(partitionId, eid1),
-						ResultPartitionLocation.createLocal()) });
-
-		final TaskDeploymentDescriptor tdd1 =
-			createTestTaskDeploymentDescriptor("Sender",
-				eid1,
-				TestingAbstractInvokables.Sender.class, 1,
-				Collections.singletonList(task1ResultPartitionDescriptor),
-				Collections.emptyList());
-		final TaskDeploymentDescriptor tdd2 =
-			createTestTaskDeploymentDescriptor("Receiver",
-				eid2,
-				TestingAbstractInvokables.Receiver.class,
-				1,
-				Collections.emptyList(),
-				Collections.singletonList(task2InputGateDescriptor));
+		TaskDeploymentDescriptor tdd1 = createSender(sdd);
+		TaskDeploymentDescriptor tdd2 = createReceiver(sdd, producerLocation);
+		ExecutionAttemptID eid1 = tdd1.getExecutionAttemptId();
+		ExecutionAttemptID eid2 = tdd2.getExecutionAttemptId();
 
 		final CompletableFuture<Void> task1RunningFuture = new CompletableFuture<>();
 		final CompletableFuture<Void> task2RunningFuture = new CompletableFuture<>();
@@ -406,11 +360,6 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	 */
 	@Test(timeout = 10000L)
 	public void testRemotePartitionNotFound() throws Exception {
-		final ExecutionAttemptID eid = new ExecutionAttemptID();
-
-		final IntermediateDataSetID resultId = new IntermediateDataSetID();
-		final ResultPartitionID partitionId = new ResultPartitionID();
-
 		final int dataPort = NetUtils.getAvailablePort();
 		Configuration config = new Configuration();
 		config.setInteger(TaskManagerOptions.DATA_PORT, dataPort);
@@ -418,23 +367,10 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 		config.setInteger(TaskManagerOptions.NETWORK_REQUEST_BACKOFF_MAX, 200);
 
 		// Remote location (on the same TM though) for the partition
-		final ResultPartitionLocation loc = ResultPartitionLocation
-			.createRemote(new ConnectionID(
-				new InetSocketAddress("localhost", dataPort), 0));
-
-		final InputChannelDeploymentDescriptor[] inputChannelDeploymentDescriptors =
-			new InputChannelDeploymentDescriptor[] {
-				new InputChannelDeploymentDescriptor(partitionId, loc)};
-
-		final InputGateDeploymentDescriptor inputGateDeploymentDescriptor =
-			new InputGateDeploymentDescriptor(resultId, ResultPartitionType.PIPELINED, 0, inputChannelDeploymentDescriptors);
-
-		final TaskDeploymentDescriptor tdd =
-			createTestTaskDeploymentDescriptor("Receiver",
-				eid,
-				Tasks.AgnosticReceiver.class, 1,
-				Collections.emptyList(),
-				Collections.singletonList(inputGateDeploymentDescriptor));
+		DefaultShuffleDeploymentDescriptor sdd =
+			createSddWithLocalConnection(new IntermediateResultPartitionID(), new ResourceID("remote"), dataPort);
+		TaskDeploymentDescriptor tdd = createReceiver(sdd, new ResourceID("local"));
+		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
 
 		final CompletableFuture<Void> taskRunningFuture = new CompletableFuture<>();
 		final CompletableFuture<Void> taskFailedFuture = new CompletableFuture<>();
@@ -483,12 +419,13 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 			tmGateway.submitTask(tdd, env.getJobMasterId(), timeout).get();
 			taskRunningFuture.get();
 
+			ResourceID producerLocation = new ResourceID("local");
+			DefaultShuffleDeploymentDescriptor sdd =
+				createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
+
 			CompletableFuture<Acknowledge> updateFuture = tmGateway.updatePartitions(
 				eid,
-				Collections.singletonList(
-					new PartitionInfo(
-						new IntermediateDataSetID(),
-						new InputChannelDeploymentDescriptor(new ResultPartitionID(), ResultPartitionLocation.createLocal()))),
+				Collections.singletonList(createPartitionInfo(sdd, producerLocation)),
 				timeout);
 			try {
 				updateFuture.get();
@@ -504,26 +441,11 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	 */
 	@Test(timeout = 10000L)
 	public void testLocalPartitionNotFound() throws Exception {
-		final ExecutionAttemptID eid = new ExecutionAttemptID();
-
-		final IntermediateDataSetID resultId = new IntermediateDataSetID();
-		final ResultPartitionID partitionId = new ResultPartitionID();
-
-		final ResultPartitionLocation loc = ResultPartitionLocation.createLocal();
-
-		final InputChannelDeploymentDescriptor[] inputChannelDeploymentDescriptors =
-			new InputChannelDeploymentDescriptor[] {
-				new InputChannelDeploymentDescriptor(partitionId, loc)};
-
-		final InputGateDeploymentDescriptor inputGateDeploymentDescriptor =
-			new InputGateDeploymentDescriptor(resultId, ResultPartitionType.PIPELINED, 0, inputChannelDeploymentDescriptors);
-
-		final TaskDeploymentDescriptor tdd =
-			createTestTaskDeploymentDescriptor("Receiver",
-				eid,
-				Tasks.AgnosticReceiver.class,
-				1, Collections.emptyList(),
-				Collections.singletonList(inputGateDeploymentDescriptor));
+		ResourceID producerLocation = new ResourceID("local");
+		DefaultShuffleDeploymentDescriptor sdd =
+			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
+		TaskDeploymentDescriptor tdd = createReceiver(sdd, producerLocation);
+		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
 
 		Configuration config = new Configuration();
 		config.setInteger(TaskManagerOptions.NETWORK_REQUEST_BACKOFF_INITIAL, 100);
@@ -574,23 +496,10 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 		// operators
 		configuration.setString(TaskManagerOptions.MEMORY_SEGMENT_SIZE, "4096");
 
-		final ExecutionAttemptID eid = new ExecutionAttemptID();
-
-		final ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor = new ResultPartitionDeploymentDescriptor(
-			new IntermediateDataSetID(),
-			new IntermediateResultPartitionID(),
-			ResultPartitionType.PIPELINED,
-			1,
-			1,
-			true);
-
-		final TaskDeploymentDescriptor tdd = createTestTaskDeploymentDescriptor(
-			"test task",
-			eid,
-			TestingAbstractInvokables.TestInvokableRecordCancel.class,
-			1,
-			Collections.singletonList(resultPartitionDeploymentDescriptor),
-			Collections.emptyList());
+		DefaultShuffleDeploymentDescriptor sdd =
+			createSddWithLocalConnection(new IntermediateResultPartitionID(), new ResourceID("local"), 10000);
+		TaskDeploymentDescriptor tdd = createSender(sdd, TestingAbstractInvokables.TestInvokableRecordCancel.class);
+		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
 
 		final CompletableFuture<Void> taskRunningFuture = new CompletableFuture<>();
 
@@ -762,6 +671,33 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 			assertEquals(eid, responseAfterCancel.getExecutionAttemptID());
 			assertEquals(sampleId4, responseAfterCancel.getSampleId());
 		}
+	}
+
+	private TaskDeploymentDescriptor createSender(DefaultShuffleDeploymentDescriptor sdd) throws IOException {
+		return createSender(sdd, TestingAbstractInvokables.Sender.class);
+	}
+
+	private TaskDeploymentDescriptor createSender(
+		DefaultShuffleDeploymentDescriptor sdd,
+		Class<? extends AbstractInvokable> abstractInvokable) throws IOException {
+
+		return createTestTaskDeploymentDescriptor("Sender",
+			sdd.getResultPartitionID().getProducerId(),
+			abstractInvokable,
+			1,
+			Collections.singletonList(createResultPartitionDeploymentDescriptor(sdd)),
+			Collections.emptyList());
+	}
+
+	private TaskDeploymentDescriptor createReceiver(
+		DefaultShuffleDeploymentDescriptor sdd, ResourceID location) throws IOException {
+
+		return createTestTaskDeploymentDescriptor("Receiver",
+			new ExecutionAttemptID(),
+			TestingAbstractInvokables.Receiver.class,
+			1,
+			Collections.emptyList(),
+			Collections.singletonList(createInputGateDeploymentDescriptor(sdd, location)));
 	}
 
 	private TaskDeploymentDescriptor createTestTaskDeploymentDescriptor(

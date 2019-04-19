@@ -18,48 +18,64 @@
 
 package org.apache.flink.runtime.executiongraph;
 
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.deployment.TaskDeploymentDescriptorFactory;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.util.Preconditions;
+import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
 
+import javax.annotation.Nonnull;
 import java.io.Serializable;
 
 /**
  * Contains information where to find a partition. The partition is defined by the
- * {@link IntermediateDataSetID} and the partition location is specified by
- * {@link InputChannelDeploymentDescriptor}.
+ * {@link IntermediateDataSetID} and the partition is specified by
+ * {@link org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor}.
  */
 public class PartitionInfo implements Serializable {
 
 	private static final long serialVersionUID = 1724490660830968430L;
 
+	@Nonnull
 	private final IntermediateDataSetID intermediateDataSetID;
-	private final InputChannelDeploymentDescriptor inputChannelDeploymentDescriptor;
 
-	public PartitionInfo(IntermediateDataSetID intermediateResultPartitionID, InputChannelDeploymentDescriptor inputChannelDeploymentDescriptor) {
-		this.intermediateDataSetID = Preconditions.checkNotNull(intermediateResultPartitionID);
-		this.inputChannelDeploymentDescriptor = Preconditions.checkNotNull(inputChannelDeploymentDescriptor);
+	@Nonnull
+	private final ResourceID consumerResourceID;
+
+	@Nonnull
+	private final ShuffleDeploymentDescriptor shuffleDeploymentDescriptor;
+
+	public PartitionInfo(
+		@Nonnull IntermediateDataSetID intermediateResultPartitionID,
+		@Nonnull ResourceID consumerResourceID,
+		@Nonnull ShuffleDeploymentDescriptor shuffleDeploymentDescriptor) {
+
+		this.intermediateDataSetID = intermediateResultPartitionID;
+		this.consumerResourceID = consumerResourceID;
+		this.shuffleDeploymentDescriptor = shuffleDeploymentDescriptor;
 	}
 
+	@Nonnull
 	public IntermediateDataSetID getIntermediateDataSetID() {
 		return intermediateDataSetID;
 	}
 
-	public InputChannelDeploymentDescriptor getInputChannelDeploymentDescriptor() {
-		return inputChannelDeploymentDescriptor;
+	@Nonnull
+	public ResourceID getConsumerResourceID() {
+		return consumerResourceID;
+	}
+
+	@Nonnull
+	public ShuffleDeploymentDescriptor getShuffleDeploymentDescriptor() {
+		return shuffleDeploymentDescriptor;
 	}
 
 	// ------------------------------------------------------------------------
 
 	static PartitionInfo fromEdge(ExecutionEdge executionEdge) {
-		final InputChannelDeploymentDescriptor inputChannelDeploymentDescriptor = InputChannelDeploymentDescriptor.fromEdge(executionEdge);
-
-		Preconditions.checkState(
-			!inputChannelDeploymentDescriptor.getConsumedPartitionLocation().isUnknown(),
-			"PartitionInfo contains an unknown partition location.");
-
-		return new PartitionInfo(
-			executionEdge.getSource().getIntermediateResult().getId(),
-			inputChannelDeploymentDescriptor);
+		IntermediateDataSetID intermediateDataSetID = executionEdge.getSource().getIntermediateResult().getId();
+		ResourceID consumerResourceID = executionEdge.getTarget().getCurrentExecutionAttempt()
+			.getAssignedResource().getTaskManagerLocation().getResourceID();
+		ShuffleDeploymentDescriptor sdd = TaskDeploymentDescriptorFactory.getKnownConsumedPartitionSdd(executionEdge);
+		return new PartitionInfo(intermediateDataSetID, consumerResourceID, sdd);
 	}
 }

@@ -32,11 +32,10 @@ import org.apache.flink.runtime.blob.TransientBlobCache;
 import org.apache.flink.runtime.blob.VoidBlobStore;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.Executors;
-import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
-import org.apache.flink.runtime.deployment.ResultPartitionLocation;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -67,6 +66,8 @@ import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.query.KvStateRegistry;
+import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskexecutor.KvStateService;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
@@ -99,6 +100,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.flink.runtime.util.ShuffleTestUtil.createSddWithLocalConnection;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -270,18 +272,25 @@ public class TaskTest extends TestLogger {
 	@Test
 	public void testExecutionFailsInNetworkRegistrationForPartitions() throws Exception {
 		ResultPartitionDeploymentDescriptor dummyPartition = new ResultPartitionDeploymentDescriptor(
-			new IntermediateDataSetID(), new IntermediateResultPartitionID(),
-			ResultPartitionType.PIPELINED, 1, 1, true);
+			new PartitionShuffleDescriptor(
+				new IntermediateDataSetID(),
+				new IntermediateResultPartitionID(),
+				ResultPartitionType.PIPELINED,
+				1,
+				1,
+				1),
+			createSddWithLocalConnection(new ResultPartitionID(), ResourceID.generate(), 5000),
+			false);
 		testExecutionFailsInNetworkRegistration(Collections.singleton(dummyPartition), Collections.emptyList());
 	}
 
 	@Test
 	public void testExecutionFailsInNetworkRegistrationForGates() throws Exception {
-		InputChannelDeploymentDescriptor dummyChannel =
-			new InputChannelDeploymentDescriptor(new ResultPartitionID(), ResultPartitionLocation.createLocal());
+		ShuffleDeploymentDescriptor dummyChannel =
+			createSddWithLocalConnection(new ResultPartitionID(), ResourceID.generate(), 5000);
 		InputGateDeploymentDescriptor dummyGate = new InputGateDeploymentDescriptor(
 			new IntermediateDataSetID(), ResultPartitionType.PIPELINED, 0,
-			new InputChannelDeploymentDescriptor[] { dummyChannel });
+			new ShuffleDeploymentDescriptor[] { dummyChannel }, ResourceID.generate());
 		testExecutionFailsInNetworkRegistration(Collections.emptyList(), Collections.singleton(dummyGate));
 	}
 
