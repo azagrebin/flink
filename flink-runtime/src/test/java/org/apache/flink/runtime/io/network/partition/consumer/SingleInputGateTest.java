@@ -83,7 +83,7 @@ public class SingleInputGateTest extends InputGateTestBase {
 	@Test
 	public void testBasicGetNextLogic() throws Exception {
 		// Setup
-		final SingleInputGate inputGate = createInputGate();
+		final SingleInputGate inputGate = createInputGate(2);
 
 		final TestInputChannel[] inputChannels = new TestInputChannel[]{
 			new TestInputChannel(inputGate, 0),
@@ -132,7 +132,7 @@ public class SingleInputGateTest extends InputGateTestBase {
 	@Test
 	public void testIsMoreAvailableReadingFromSingleInputChannel() throws Exception {
 		// Setup
-		final SingleInputGate inputGate = createInputGate();
+		final SingleInputGate inputGate = createInputGate(2);
 
 		final TestInputChannel[] inputChannels = new TestInputChannel[]{
 			new TestInputChannel(inputGate, 0),
@@ -173,7 +173,7 @@ public class SingleInputGateTest extends InputGateTestBase {
 
 		// Setup reader with one local and one unknown input channel
 
-		final SingleInputGate inputGate = createInputGate();
+		final SingleInputGate inputGate = createInputGate(2);
 		final BufferPool bufferPool = mock(BufferPool.class);
 		when(bufferPool.getNumberOfRequiredMemorySegments()).thenReturn(2);
 

@@ -20,7 +20,6 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 
-import static org.apache.flink.runtime.io.network.partition.InputChannelTestUtils.createSingleInputGate;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
 /**
@@ -35,7 +34,9 @@ public class TestSingleInputGate {
 	public TestSingleInputGate(int numberOfInputChannels, boolean initialize) {
 		checkArgument(numberOfInputChannels >= 1);
 
-		inputGate = createSingleInputGate(numberOfInputChannels);
+		inputGate = new SingleInputGateBuilder()
+			.setNumberOfChannels(numberOfInputChannels)
+			.build();
 		inputChannels = new TestInputChannel[numberOfInputChannels];
 
 		if (initialize) {

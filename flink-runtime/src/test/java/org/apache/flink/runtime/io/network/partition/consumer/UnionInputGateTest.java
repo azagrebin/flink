@@ -42,8 +42,12 @@ public class UnionInputGateTest extends InputGateTestBase {
 	@Test(timeout = 120 * 1000)
 	public void testBasicGetNextLogic() throws Exception {
 		// Setup
-		final SingleInputGate ig1 = createInputGate(3);
-		final SingleInputGate ig2 = createInputGate(5);
+		final SingleInputGate ig1 = new SingleInputGateBuilder()
+			.setNumberOfChannels(3)
+			.build();
+		final SingleInputGate ig2 = new SingleInputGateBuilder()
+			.setNumberOfChannels(5)
+			.build();
 
 		final UnionInputGate union = new UnionInputGate(new SingleInputGate[]{ig1, ig2});
 
