@@ -18,10 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.api.common.JobID;
-import org.apache.flink.runtime.io.disk.iomanager.NoOpIOManager;
-import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
-
 /**
  * This class should consolidate all mocking logic for ResultPartitions.
  * While using Mockito internally (for now), the use of Mockito should not
@@ -58,17 +54,11 @@ public class PartitionTestUtils {
 			int numChannels,
 			boolean sendScheduleOrUpdateConsumersMessage) {
 
-		return new ResultPartition(
-				"TestTask",
-				new NoOpTaskActions(),
-				new JobID(),
-				new ResultPartitionID(),
-				type,
-				numChannels,
-				numChannels,
-				new ResultPartitionManager(),
-				notifier,
-				new NoOpIOManager(),
-				sendScheduleOrUpdateConsumersMessage);
+		return new ResultPartitionBuilder()
+			.setResultPartitionType(type)
+			.setResultPartitionConsumableNotifier(notifier)
+			.setNumberOfSubpartitions(numChannels)
+			.setSendScheduleOrUpdateConsumersMessage(sendScheduleOrUpdateConsumersMessage)
+			.build();
 	}
 }
