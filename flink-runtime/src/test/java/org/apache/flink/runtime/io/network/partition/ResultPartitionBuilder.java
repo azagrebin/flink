@@ -55,7 +55,7 @@ public class ResultPartitionBuilder {
 
 	private boolean sendScheduleOrUpdateConsumersMessage = false;
 
-	private NetworkBufferPool networkBufferPool = new NetworkBufferPool(1, 1,1);
+	private NetworkBufferPool networkBufferPool = new NetworkBufferPool(1, 1, 1);
 
 	private int networkBuffersPerChannel = 1;
 
