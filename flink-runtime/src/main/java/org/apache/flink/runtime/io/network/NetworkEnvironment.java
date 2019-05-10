@@ -125,8 +125,9 @@ public class NetworkEnvironment {
 		ConnectionManager connectionManager = nettyConfig != null ?
 			new NettyConnectionManager(nettyConfig, config.isCreditBased()) : new LocalConnectionManager();
 
-		NetworkBufferPool networkBufferPool =
-			new NetworkBufferPool(config.numNetworkBuffers(), config.networkBufferSize());
+		NetworkBufferPool networkBufferPool = new NetworkBufferPool(
+			config.numNetworkBuffers(), config.networkBufferSize(), config.networkBuffersPerChannel());
+
 		registerNetworkMetrics(metricGroup, networkBufferPool);
 
 		ResultPartitionManager resultPartitionManager = new ResultPartitionManager();
@@ -241,7 +242,7 @@ public class NetworkEnvironment {
 					config.floatingNetworkBuffersPerGate() : Integer.MAX_VALUE;
 
 				// assign exclusive buffers to input channels directly and use the rest for floating buffers
-				gate.assignExclusiveSegments(networkBufferPool, config.networkBuffersPerChannel());
+				gate.assignExclusiveSegments(networkBufferPool);
 				bufferPool = networkBufferPool.createBufferPool(0, maxNumberOfMemorySegments);
 			} else {
 				maxNumberOfMemorySegments = gate.getConsumedPartitionType().isBounded() ?
