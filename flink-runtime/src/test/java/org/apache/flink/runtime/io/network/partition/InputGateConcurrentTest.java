@@ -23,7 +23,6 @@ import org.apache.flink.runtime.io.network.ConnectionManager;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
 import org.apache.flink.runtime.io.network.buffer.BufferBuilderTestUtils;
 import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
-import org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.RemoteInputChannel;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateBuilder;
@@ -65,9 +64,7 @@ public class InputGateConcurrentTest {
 			.build();
 
 		for (int i = 0; i < numberOfChannels; i++) {
-			LocalInputChannel channel = createLocalInputChannel(gate, i, resultPartitionManager);
-			gate.setInputChannel(channel.getPartitionId().getPartitionId(), channel);
-
+			createLocalInputChannel(gate, i, resultPartitionManager);
 			partitions[i] = new PipelinedSubpartition(0, resultPartition);
 			sources[i] = new PipelinedSubpartitionSource(partitions[i]);
 		}
@@ -96,8 +93,6 @@ public class InputGateConcurrentTest {
 
 		for (int i = 0; i < numberOfChannels; i++) {
 			RemoteInputChannel channel = createRemoteInputChannel(gate, i, connManager);
-			gate.setInputChannel(channel.getPartitionId().getPartitionId(), channel);
-
 			sources[i] = new RemoteChannelSource(channel);
 		}
 
@@ -143,14 +138,11 @@ public class InputGateConcurrentTest {
 				localPartitions[local++] = psp;
 				sources[i] = new PipelinedSubpartitionSource(psp);
 
-				LocalInputChannel channel = createLocalInputChannel(gate, i, resultPartitionManager);
-				gate.setInputChannel(channel.getPartitionId().getPartitionId(), channel);
+				createLocalInputChannel(gate, i, resultPartitionManager);
 			}
 			else {
 				//remote channel
 				RemoteInputChannel channel = createRemoteInputChannel(gate, i, connManager);
-				gate.setInputChannel(channel.getPartitionId().getPartitionId(), channel);
-
 				sources[i] = new RemoteChannelSource(channel);
 			}
 		}
