@@ -92,31 +92,44 @@ public class NetworkEnvironment {
 
 	private boolean isShutdown;
 
-	public NetworkEnvironment(
-			NetworkEnvironmentConfiguration config,
-			TaskEventPublisher taskEventPublisher,
-			MetricGroup metricGroup,
-			IOManager ioManager) {
-		this.config = checkNotNull(config);
+	private NetworkEnvironment(
+		NetworkEnvironmentConfiguration config,
+		NetworkBufferPool networkBufferPool,
+		ConnectionManager connectionManager,
+		ResultPartitionManager resultPartitionManager,
+		TaskEventPublisher taskEventPublisher,
+		IOManager ioManager) {
 
-		this.networkBufferPool = new NetworkBufferPool(config.numNetworkBuffers(), config.networkBufferSize());
+		this.config = config;
+		this.networkBufferPool = networkBufferPool;
+		this.connectionManager = connectionManager;
+		this.resultPartitionManager = resultPartitionManager;
+		this.taskEventPublisher = taskEventPublisher;
+		this.ioManager = ioManager;
+		this.isShutdown = false;
+	}
 
-		NettyConfig nettyConfig = config.nettyConfig();
-		if (nettyConfig != null) {
-			this.connectionManager = new NettyConnectionManager(nettyConfig, config.isCreditBased());
-		} else {
-			this.connectionManager = new LocalConnectionManager();
-		}
+	public static NetworkEnvironment create(
+		NetworkEnvironmentConfiguration config,
+		TaskEventPublisher taskEventPublisher,
+		MetricGroup metricGroup,
+		IOManager ioManager) {
 
-		this.resultPartitionManager = new ResultPartitionManager();
+		NettyConfig nettyConfig = checkNotNull(config).nettyConfig();
+		ConnectionManager connectionManager = nettyConfig != null ?
+			new NettyConnectionManager(nettyConfig, config.isCreditBased()) : new LocalConnectionManager();
 
-		this.taskEventPublisher = checkNotNull(taskEventPublisher);
-
+		NetworkBufferPool networkBufferPool =
+			new NetworkBufferPool(config.numNetworkBuffers(), config.networkBufferSize());
 		registerNetworkMetrics(metricGroup, networkBufferPool);
 
-		this.ioManager = checkNotNull(ioManager);
-
-		isShutdown = false;
+		return new NetworkEnvironment(
+			config,
+			networkBufferPool,
+			connectionManager,
+			new ResultPartitionManager(),
+			checkNotNull(taskEventPublisher),
+			checkNotNull(ioManager));
 	}
 
 	private static void registerNetworkMetrics(MetricGroup metricGroup, NetworkBufferPool networkBufferPool) {
