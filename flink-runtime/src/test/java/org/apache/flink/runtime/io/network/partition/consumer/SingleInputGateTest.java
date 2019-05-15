@@ -360,7 +360,8 @@ public class SingleInputGateTest extends InputGateTestBase {
 			new TaskEventDispatcher(),
 			new NoOpTaskActions(),
 			InputChannelTestUtils.newUnregisteredInputChannelMetrics(),
-			new SimpleCounter());
+			new SimpleCounter(),
+			() -> {});
 
 		try {
 			assertEquals(gateDesc.getConsumedPartitionType(), gate.getConsumedPartitionType());

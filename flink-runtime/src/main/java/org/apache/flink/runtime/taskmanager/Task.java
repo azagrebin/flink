@@ -193,8 +193,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 	private final SingleInputGate[] inputGates;
 
-	private final Map<IntermediateDataSetID, SingleInputGate> inputGatesById;
-
 	/** Connection to the task manager. */
 	private final TaskManagerActions taskManagerActions;
 
@@ -394,11 +392,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 			buffersGroup,
 			metrics.getIOMetricGroup().getNumBytesInCounter());
 
-		this.inputGatesById = new HashMap<>();
-		for (SingleInputGate inputGate : inputGates) {
-			inputGatesById.put(inputGate.getConsumedResultId(), inputGate);
-		}
-
 		invokableHasBeenCanceled = new AtomicBoolean(false);
 
 		// finally, create the executing thread, but do not start it
@@ -443,10 +436,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 
 	public ResultPartition[] getProducedPartitions() {
 		return producedPartitions;
-	}
-
-	public SingleInputGate getInputGateById(IntermediateDataSetID id) {
-		return inputGatesById.get(id);
 	}
 
 	public AccumulatorRegistry getAccumulatorRegistry() {

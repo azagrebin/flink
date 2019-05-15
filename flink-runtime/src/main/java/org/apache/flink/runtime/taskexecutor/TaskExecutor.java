@@ -52,8 +52,6 @@ import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.netty.PartitionProducerStateChecker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
-import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
-import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.tasks.InputSplitProvider;
 import org.apache.flink.runtime.jobmaster.JMTMRegistrationSuccess;
 import org.apache.flink.runtime.jobmaster.JobMasterGateway;
@@ -614,34 +612,23 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 
 		if (task != null) {
 			for (final PartitionInfo partitionInfo: partitionInfos) {
-				IntermediateDataSetID intermediateResultPartitionID = partitionInfo.getIntermediateDataSetID();
+				// Run asynchronously because it might be blocking
+				getRpcService().execute(
+					() -> {
+						try {
+							networkEnvironment.updatePartitionInfo(partitionInfo);
+						} catch (IOException | PartitionException | InterruptedException e) {
+							log.error("Could not update input data location for task {}. Trying to fail task.", task.getTaskInfo().getTaskName(), e);
 
-				final SingleInputGate singleInputGate = task.getInputGateById(intermediateResultPartitionID);
-
-				if (singleInputGate != null) {
-					// Run asynchronously because it might be blocking
-					getRpcService().execute(
-						() -> {
 							try {
-								singleInputGate.updateInputChannel(partitionInfo.getInputChannelDeploymentDescriptor());
-							} catch (IOException | InterruptedException e) {
-								log.error("Could not update input data location for task {}. Trying to fail task.", task.getTaskInfo().getTaskName(), e);
-
-								try {
-									task.failExternally(e);
-								} catch (RuntimeException re) {
-									// TODO: Check whether we need this or make exception in failExtenally checked
-									log.error("Failed canceling task with execution ID {} after task update failure.", executionAttemptID, re);
-								}
+								task.failExternally(e);
+							} catch (RuntimeException re) {
+								// TODO: Check whether we need this or make exception in failExtenally checked
+								log.error("Failed canceling task with execution ID {} after task update failure.", executionAttemptID, re);
 							}
-						});
-				} else {
-					return FutureUtils.completedExceptionally(
-						new PartitionException("No reader with ID " + intermediateResultPartitionID +
-							" for task " + executionAttemptID + " was found."));
-				}
+						}
+					});
 			}
-
 			return CompletableFuture.completedFuture(Acknowledge.get());
 		} else {
 			log.debug("Discard update for input partitions of task {}. Task is no longer running.", executionAttemptID);

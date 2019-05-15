@@ -257,7 +257,8 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 				new TaskEventDispatcher(),
 				new NoOpTaskActions(),
 				InputChannelTestUtils.newUnregisteredInputChannelMetrics(),
-				new SimpleCounter());
+				new SimpleCounter(),
+				() -> {});
 
 			environment.setupInputGate(gate);
 			gates[channel] = gate;

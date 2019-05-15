@@ -460,7 +460,8 @@ public class LocalInputChannelTest {
 				numberOfInputChannels,
 				new NoOpTaskActions(),
 				new SimpleCounter(),
-				true);
+				true,
+				() -> {});
 
 			// Set buffer pool
 			inputGate.setBufferPool(bufferPool);

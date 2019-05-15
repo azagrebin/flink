@@ -181,6 +181,8 @@ public class SingleInputGate extends InputGate {
 
 	private final Counter numBytesIn;
 
+	private final Runnable closeListener;
+
 	public SingleInputGate(
 		String owningTaskName,
 		IntermediateDataSetID consumedResultId,
@@ -189,12 +191,14 @@ public class SingleInputGate extends InputGate {
 		int numberOfInputChannels,
 		TaskActions taskActions,
 		Counter numBytesIn,
-		boolean isCreditBased) {
+		boolean isCreditBased,
+		Runnable closeListener) {
 
 		this.owningTaskName = checkNotNull(owningTaskName);
 
 		this.consumedResultId = checkNotNull(consumedResultId);
 		this.consumedPartitionType = checkNotNull(consumedPartitionType);
+		this.closeListener = closeListener;
 
 		checkArgument(consumedSubpartitionIndex >= 0);
 		this.consumedSubpartitionIndex = consumedSubpartitionIndex;
@@ -451,6 +455,7 @@ public class SingleInputGate extends InputGate {
 				finally {
 					isReleased = true;
 					released = true;
+					closeListener.run();
 				}
 			}
 		}
@@ -698,7 +703,8 @@ public class SingleInputGate extends InputGate {
 		TaskEventPublisher taskEventPublisher,
 		TaskActions taskActions,
 		InputChannelMetrics metrics,
-		Counter numBytesInCounter) {
+		Counter numBytesInCounter,
+		Runnable closeListener) {
 
 		final IntermediateDataSetID consumedResultId = checkNotNull(igdd.getConsumedResultId());
 		final ResultPartitionType consumedPartitionType = checkNotNull(igdd.getConsumedPartitionType());
@@ -712,7 +718,7 @@ public class SingleInputGate extends InputGate {
 
 		final SingleInputGate inputGate = new SingleInputGate(
 			owningTaskName, consumedResultId, consumedPartitionType, consumedSubpartitionIndex,
-			icdd.length, taskActions, numBytesInCounter, networkConfig.isCreditBased());
+			icdd.length, taskActions, numBytesInCounter, networkConfig.isCreditBased(), closeListener);
 
 		// Create the input channels. There is one input channel for each consumed partition.
 		final InputChannel[] inputChannels = new InputChannel[icdd.length];

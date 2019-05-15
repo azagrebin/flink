@@ -90,7 +90,8 @@ public class InputChannelTestUtils {
 			numberOfChannels,
 			new NoOpTaskActions(),
 			new SimpleCounter(),
-			isCreditBased);
+			isCreditBased,
+			() -> {});
 	}
 
 	public static ConnectionManager createDummyConnectionManager() throws Exception {

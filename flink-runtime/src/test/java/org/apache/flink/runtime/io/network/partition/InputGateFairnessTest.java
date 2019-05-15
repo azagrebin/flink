@@ -330,7 +330,7 @@ public class InputGateFairnessTest {
 				boolean isCreditBased) {
 
 			super(owningTaskName, consumedResultId, ResultPartitionType.PIPELINED,
-				consumedSubpartitionIndex, numberOfInputChannels, taskActions, new SimpleCounter(), isCreditBased);
+				consumedSubpartitionIndex, numberOfInputChannels, taskActions, new SimpleCounter(), isCreditBased, () -> {});
 
 			try {
 				Field f = SingleInputGate.class.getDeclaredField("inputChannelsWithData");
