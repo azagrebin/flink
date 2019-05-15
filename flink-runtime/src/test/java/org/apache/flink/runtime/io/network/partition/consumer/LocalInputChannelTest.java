@@ -454,7 +454,6 @@ public class LocalInputChannelTest {
 
 			this.inputGate = new SingleInputGate(
 				"Test Name",
-				new JobID(),
 				new IntermediateDataSetID(),
 				ResultPartitionType.PIPELINED,
 				subpartitionIndex,

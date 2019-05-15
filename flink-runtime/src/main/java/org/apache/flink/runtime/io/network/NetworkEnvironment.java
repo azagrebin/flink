@@ -285,7 +285,6 @@ public class NetworkEnvironment {
 
 	public SingleInputGate[] createInputGates(
 			String taskName,
-			JobID jobId,
 			TaskActions taskActions,
 			Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
 			MetricGroup parentGroup,
@@ -301,7 +300,6 @@ public class NetworkEnvironment {
 			for (InputGateDeploymentDescriptor igdd : inputGateDeploymentDescriptors) {
 				inputGates[counter++] = SingleInputGate.create(
 					taskName,
-					jobId,
 					igdd,
 					this,
 					taskEventPublisher,

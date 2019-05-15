@@ -18,9 +18,9 @@
 
 package org.apache.flink.runtime.taskmanager;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
+import org.apache.flink.util.function.ThrowingRunnable;
 
 /**
  * A dummy implementation of the {@link TaskActions} which is mainly used for tests.
@@ -29,9 +29,9 @@ public class NoOpTaskActions implements TaskActions {
 
 	@Override
 	public void triggerPartitionProducerStateCheck(
-		JobID jobId,
 		IntermediateDataSetID intermediateDataSetId,
-		ResultPartitionID resultPartitionId) {}
+		ResultPartitionID resultPartitionId,
+		ThrowingRunnable<Exception> producerReadyCallback) {}
 
 	@Override
 	public void failExternally(Throwable cause) {}

@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
@@ -112,9 +111,6 @@ public class SingleInputGate extends InputGate {
 	/** The name of the owning task, for logging purposes. */
 	private final String owningTaskName;
 
-	/** The job ID of the owning task. */
-	private final JobID jobId;
-
 	/**
 	 * The ID of the consumed intermediate result. Each input gate consumes partitions of the
 	 * intermediate result specified by this ID. This ID also identifies the input gate at the
@@ -187,7 +183,6 @@ public class SingleInputGate extends InputGate {
 
 	public SingleInputGate(
 		String owningTaskName,
-		JobID jobId,
 		IntermediateDataSetID consumedResultId,
 		final ResultPartitionType consumedPartitionType,
 		int consumedSubpartitionIndex,
@@ -197,7 +192,6 @@ public class SingleInputGate extends InputGate {
 		boolean isCreditBased) {
 
 		this.owningTaskName = checkNotNull(owningTaskName);
-		this.jobId = checkNotNull(jobId);
 
 		this.consumedResultId = checkNotNull(consumedResultId);
 		this.consumedPartitionType = checkNotNull(consumedPartitionType);
@@ -634,7 +628,8 @@ public class SingleInputGate extends InputGate {
 	}
 
 	void triggerPartitionStateCheck(ResultPartitionID partitionId) {
-		taskActions.triggerPartitionProducerStateCheck(jobId, consumedResultId, partitionId);
+		taskActions.triggerPartitionProducerStateCheck(consumedResultId, partitionId,
+			() -> retriggerPartitionRequest(partitionId.getPartitionId()));
 	}
 
 	private void queueChannel(InputChannel channel) {
@@ -698,7 +693,6 @@ public class SingleInputGate extends InputGate {
 	 */
 	public static SingleInputGate create(
 		String owningTaskName,
-		JobID jobId,
 		InputGateDeploymentDescriptor igdd,
 		NetworkEnvironment networkEnvironment,
 		TaskEventPublisher taskEventPublisher,
@@ -717,7 +711,7 @@ public class SingleInputGate extends InputGate {
 		final NetworkEnvironmentConfiguration networkConfig = networkEnvironment.getConfiguration();
 
 		final SingleInputGate inputGate = new SingleInputGate(
-			owningTaskName, jobId, consumedResultId, consumedPartitionType, consumedSubpartitionIndex,
+			owningTaskName, consumedResultId, consumedPartitionType, consumedSubpartitionIndex,
 			icdd.length, taskActions, numBytesInCounter, networkConfig.isCreditBased());
 
 		// Create the input channels. There is one input channel for each consumed partition.

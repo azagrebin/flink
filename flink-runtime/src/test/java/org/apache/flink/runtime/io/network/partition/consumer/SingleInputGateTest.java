@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
@@ -356,7 +355,6 @@ public class SingleInputGateTest extends InputGateTestBase {
 
 		SingleInputGate gate = SingleInputGate.create(
 			"TestTask",
-			new JobID(),
 			gateDesc,
 			netEnv,
 			new TaskEventDispatcher(),

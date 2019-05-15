@@ -165,7 +165,6 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 			senderEnv.getConnectionManager().getDataPort());
 
 		InputGate receiverGate = createInputGate(
-			jobId,
 			dataSetID,
 			executionAttemptID,
 			senderLocation,
@@ -230,7 +229,6 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 	}
 
 	private InputGate createInputGate(
-			JobID jobId,
 			IntermediateDataSetID dataSetID,
 			ExecutionAttemptID executionAttemptID,
 			final TaskManagerLocation senderLocation,
@@ -254,7 +252,6 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 
 			SingleInputGate gate = SingleInputGate.create(
 				"receiving task[" + channel + "]",
-				jobId,
 				gateDescriptor,
 				environment,
 				new TaskEventDispatcher(),

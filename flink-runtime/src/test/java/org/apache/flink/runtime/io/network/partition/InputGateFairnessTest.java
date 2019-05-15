@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.io.network.ConnectionManager;
 import org.apache.flink.runtime.io.network.api.EndOfPartitionEvent;
@@ -269,7 +268,6 @@ public class InputGateFairnessTest {
 	private SingleInputGate createFairnessVerifyingInputGate(int numberOfChannels) {
 		return new FairnessVerifyingInputGate(
 			"Test Task Name",
-			new JobID(),
 			new IntermediateDataSetID(),
 			0,
 			numberOfChannels,
@@ -325,14 +323,13 @@ public class InputGateFairnessTest {
 		@SuppressWarnings("unchecked")
 		public FairnessVerifyingInputGate(
 				String owningTaskName,
-				JobID jobId,
 				IntermediateDataSetID consumedResultId,
 				int consumedSubpartitionIndex,
 				int numberOfInputChannels,
 				TaskActions taskActions,
 				boolean isCreditBased) {
 
-			super(owningTaskName, jobId, consumedResultId, ResultPartitionType.PIPELINED,
+			super(owningTaskName, consumedResultId, ResultPartitionType.PIPELINED,
 				consumedSubpartitionIndex, numberOfInputChannels, taskActions, new SimpleCounter(), isCreditBased);
 
 			try {

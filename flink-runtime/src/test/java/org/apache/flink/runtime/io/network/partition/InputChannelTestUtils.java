@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.ConnectionManager;
@@ -85,7 +84,6 @@ public class InputChannelTestUtils {
 
 		return new SingleInputGate(
 			"InputGate",
-			new JobID(),
 			new IntermediateDataSetID(),
 			partitionType,
 			0,

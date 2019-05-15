@@ -92,6 +92,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -102,8 +103,6 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -528,15 +527,9 @@ public class TaskTest extends TestLogger {
 		final IntermediateDataSetID resultId = new IntermediateDataSetID();
 		final ResultPartitionID partitionId = new ResultPartitionID();
 
-		final SingleInputGate inputGate = mock(SingleInputGate.class);
-		when(inputGate.getConsumedResultId()).thenReturn(resultId);
-
 		final Task task = createTaskBuilder()
 			.setInvokable(InvokableBlockingInInvoke.class)
 			.build();
-
-		// Set the mock input gate
-		setInputGate(task, inputGate);
 
 		// Expected task state for each producer state
 		final Map<ExecutionState, ExecutionState> expected = new HashMap<>(ExecutionState.values().length);
@@ -555,17 +548,19 @@ public class TaskTest extends TestLogger {
 		expected.put(ExecutionState.CANCELING, ExecutionState.CANCELING);
 		expected.put(ExecutionState.FAILED, ExecutionState.CANCELING);
 
+		AtomicInteger callCount = new AtomicInteger(0);
+
 		for (ExecutionState state : ExecutionState.values()) {
 			setState(task, ExecutionState.RUNNING);
 
-			task.onPartitionStateUpdate(resultId, partitionId, state);
+			task.onPartitionStateUpdate(partitionId, state, callCount::incrementAndGet);
 
 			ExecutionState newTaskState = task.getExecutionState();
 
 			assertEquals(expected.get(state), newTaskState);
 		}
 
-		verify(inputGate, times(4)).retriggerPartitionRequest(eq(partitionId.getPartitionId()));
+		assertEquals(4, callCount.get());
 	}
 
 	/**
@@ -579,6 +574,8 @@ public class TaskTest extends TestLogger {
 		final PartitionProducerStateChecker partitionChecker = mock(PartitionProducerStateChecker.class);
 
 		final ResultPartitionConsumableNotifier consumableNotifier = new NoOpResultPartitionConsumableNotifier();
+
+		AtomicInteger callCount = new AtomicInteger(0);
 
 		// Test all branches of trigger partition state check
 		{
@@ -596,7 +593,7 @@ public class TaskTest extends TestLogger {
 			final CompletableFuture<ExecutionState> promise = new CompletableFuture<>();
 			when(partitionChecker.requestPartitionProducerState(eq(task.getJobID()), eq(resultId), eq(partitionId))).thenReturn(promise);
 
-			task.triggerPartitionProducerStateCheck(task.getJobID(), resultId, partitionId);
+			task.triggerPartitionProducerStateCheck(resultId, partitionId, () -> {});
 
 			promise.completeExceptionally(new PartitionProducerDisposedException(partitionId));
 			assertEquals(ExecutionState.CANCELING, task.getExecutionState());
@@ -617,7 +614,7 @@ public class TaskTest extends TestLogger {
 			final CompletableFuture<ExecutionState> promise = new CompletableFuture<>();
 			when(partitionChecker.requestPartitionProducerState(eq(task.getJobID()), eq(resultId), eq(partitionId))).thenReturn(promise);
 
-			task.triggerPartitionProducerStateCheck(task.getJobID(), resultId, partitionId);
+			task.triggerPartitionProducerStateCheck(resultId, partitionId, () -> {});
 
 			promise.completeExceptionally(new RuntimeException("Any other exception"));
 
@@ -625,6 +622,8 @@ public class TaskTest extends TestLogger {
 		}
 
 		{
+			callCount.set(0);
+
 			// Reset latches
 			setup();
 
@@ -637,25 +636,20 @@ public class TaskTest extends TestLogger {
 				.setExecutor(Executors.directExecutor())
 				.build();
 
-			final SingleInputGate inputGate = mock(SingleInputGate.class);
-			when(inputGate.getConsumedResultId()).thenReturn(resultId);
-
 			try {
 				task.startTaskThread();
 				awaitLatch.await();
 
-				setInputGate(task, inputGate);
-
 				CompletableFuture<ExecutionState> promise = new CompletableFuture<>();
 				when(partitionChecker.requestPartitionProducerState(eq(task.getJobID()), eq(resultId), eq(partitionId))).thenReturn(promise);
 
-				task.triggerPartitionProducerStateCheck(task.getJobID(), resultId, partitionId);
+				task.triggerPartitionProducerStateCheck(resultId, partitionId, callCount::incrementAndGet);
 
 				promise.completeExceptionally(new TimeoutException());
 
 				assertEquals(ExecutionState.RUNNING, task.getExecutionState());
 
-				verify(inputGate, times(1)).retriggerPartitionRequest(eq(partitionId.getPartitionId()));
+				assertEquals(1, callCount.get());
 			} finally {
 				task.getExecutingThread().interrupt();
 				task.getExecutingThread().join();
@@ -663,6 +657,8 @@ public class TaskTest extends TestLogger {
 		}
 
 		{
+			callCount.set(0);
+
 			// Reset latches
 			setup();
 
@@ -674,25 +670,20 @@ public class TaskTest extends TestLogger {
 				.setExecutor(Executors.directExecutor())
 				.build();
 
-			final SingleInputGate inputGate = mock(SingleInputGate.class);
-			when(inputGate.getConsumedResultId()).thenReturn(resultId);
-
 			try {
 				task.startTaskThread();
 				awaitLatch.await();
 
-				setInputGate(task, inputGate);
-
 				CompletableFuture<ExecutionState> promise = new CompletableFuture<>();
 				when(partitionChecker.requestPartitionProducerState(eq(task.getJobID()), eq(resultId), eq(partitionId))).thenReturn(promise);
 
-				task.triggerPartitionProducerStateCheck(task.getJobID(), resultId, partitionId);
+				task.triggerPartitionProducerStateCheck(resultId, partitionId, callCount::incrementAndGet);
 
 				promise.complete(ExecutionState.RUNNING);
 
 				assertEquals(ExecutionState.RUNNING, task.getExecutionState());
 
-				verify(inputGate, times(1)).retriggerPartitionRequest(eq(partitionId.getPartitionId()));
+				assertEquals(1, callCount.get());
 			} finally {
 				task.getExecutingThread().interrupt();
 				task.getExecutingThread().join();
