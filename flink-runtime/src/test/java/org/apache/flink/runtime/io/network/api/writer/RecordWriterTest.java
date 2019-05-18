@@ -55,6 +55,8 @@ import org.junit.rules.TemporaryFolder;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -511,6 +513,14 @@ public class RecordWriterTest {
 		}
 
 		@Override
+		public void fail(@Nullable Throwable throwable) {
+		}
+
+		@Override
+		public void finish() {
+		}
+
+		@Override
 		public void close() {
 		}
 	}
@@ -573,6 +583,14 @@ public class RecordWriterTest {
 
 		@Override
 		public void flush(int subpartitionIndex) {
+		}
+
+		@Override
+		public void fail(@Nullable Throwable throwable) {
+		}
+
+		@Override
+		public void finish() {
 		}
 
 		@Override

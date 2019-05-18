@@ -22,6 +22,8 @@ import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 
 /**
@@ -65,4 +67,22 @@ public interface ResultPartitionWriter extends AutoCloseable {
 	 * Manually trigger consumption from enqueued {@link BufferConsumer BufferConsumers} in one specified subpartition.
 	 */
 	void flush(int subpartitionIndex);
+
+	/**
+	 * Fails partition producing.
+	 *
+	 * <p>The method propagates failure cause to consumer if possible.
+	 * It may also release some resources.
+	 * Closing of partition is still needed afterwards.
+	 *
+	 * @param throwable failure cause
+	 */
+	void fail(@Nullable Throwable throwable);
+
+	/**
+	 * Indicates successful end of partition producing.
+	 *
+	 * <p>It can be used to notify and release consumer.
+	 */
+	void finish() throws IOException;
 }

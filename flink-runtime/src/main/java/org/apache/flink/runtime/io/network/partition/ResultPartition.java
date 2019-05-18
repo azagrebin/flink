@@ -258,6 +258,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 	 *
 	 * <p>For BLOCKING results, this will trigger the deployment of consuming tasks.
 	 */
+	@Override
 	public void finish() throws IOException {
 		boolean success = false;
 
@@ -315,6 +316,7 @@ public class ResultPartition implements ResultPartitionWriter, BufferPoolOwner {
 		}
 	}
 
+	@Override
 	public void fail(@Nullable Throwable throwable) {
 		partitionManager.releasePartition(partitionId, throwable);
 	}

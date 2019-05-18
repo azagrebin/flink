@@ -23,6 +23,7 @@ import org.apache.flink.runtime.io.network.buffer.BufferConsumer;
 import org.apache.flink.runtime.io.network.buffer.BufferProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 import java.io.IOException;
@@ -107,6 +108,14 @@ public abstract class AbstractCollectingResultPartitionWriter implements ResultP
 
 	@Override
 	public void close() {
+	}
+
+	@Override
+	public void fail(@Nullable Throwable throwable) {
+	}
+
+	@Override
+	public void finish() {
 	}
 
 	protected abstract void deserializeBuffer(Buffer buffer) throws IOException;
