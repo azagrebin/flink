@@ -82,7 +82,8 @@ public class SingleInputGateBuilder {
 			config.isCreditBased(),
 			config.networkBuffersPerChannel(),
 			config.floatingNetworkBuffersPerGate(),
-			numberOfChannels, partitionType);
+			numberOfChannels,
+			partitionType);
 		return this;
 	}
 

@@ -435,14 +435,6 @@ public class Task implements Runnable, TaskActions, CheckpointListener {
 		return this.taskConfiguration;
 	}
 
-	public SingleInputGate[] getAllInputGates() {
-		return inputGates;
-	}
-
-	public ResultPartition[] getProducedPartitions() {
-		return producedPartitions;
-	}
-
 	public SingleInputGate getInputGateById(IntermediateDataSetID id) {
 		return inputGatesById.get(id);
 	}

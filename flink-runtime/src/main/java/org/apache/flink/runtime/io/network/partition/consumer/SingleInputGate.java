@@ -214,6 +214,7 @@ public class SingleInputGate extends InputGate {
 
 	@Override
 	public void setup() throws IOException {
+		checkState(this.bufferPool == null, "Bug in input gate setup logic: Already registered buffer pool.");
 		if (isCreditBased) {
 			// assign exclusive buffers to input channels directly and use the rest for floating buffers
 			assignExclusiveSegments();

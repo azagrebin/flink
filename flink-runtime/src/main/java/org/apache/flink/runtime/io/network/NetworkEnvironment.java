@@ -115,7 +115,11 @@ public class NetworkEnvironment {
 			TaskEventPublisher taskEventPublisher,
 			MetricGroup metricGroup,
 			IOManager ioManager) {
-		NettyConfig nettyConfig = checkNotNull(config).nettyConfig();
+		checkNotNull(ioManager);
+		checkNotNull(taskEventPublisher);
+		checkNotNull(config);
+
+		NettyConfig nettyConfig = config.nettyConfig();
 		ConnectionManager connectionManager = nettyConfig != null ?
 			new NettyConnectionManager(nettyConfig, config.isCreditBased()) : new LocalConnectionManager();
 
@@ -146,7 +150,7 @@ public class NetworkEnvironment {
 			networkBufferPool,
 			connectionManager,
 			resultPartitionManager,
-			checkNotNull(taskEventPublisher),
+			taskEventPublisher,
 			resultPartitionFactory,
 			singleInputGateFactory);
 	}

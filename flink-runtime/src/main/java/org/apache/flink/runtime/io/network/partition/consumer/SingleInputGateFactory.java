@@ -77,21 +77,20 @@ public class SingleInputGateFactory {
 	private final int floatingNetworkBuffersPerGate;
 
 	public SingleInputGateFactory(
-		@Nonnull NetworkEnvironmentConfiguration networkConfig,
-		@Nonnull ConnectionManager connectionManager,
-		@Nonnull ResultPartitionManager partitionManager,
-		@Nonnull TaskEventPublisher taskEventPublisher,
-		@Nonnull NetworkBufferPool networkBufferPool) {
-
+			@Nonnull NetworkEnvironmentConfiguration networkConfig,
+			@Nonnull ConnectionManager connectionManager,
+			@Nonnull ResultPartitionManager partitionManager,
+			@Nonnull TaskEventPublisher taskEventPublisher,
+			@Nonnull NetworkBufferPool networkBufferPool) {
 		this.isCreditBased = networkConfig.isCreditBased();
 		this.partitionRequestInitialBackoff = networkConfig.partitionRequestInitialBackoff();
 		this.partitionRequestMaxBackoff = networkConfig.partitionRequestMaxBackoff();
+		this.networkBuffersPerChannel = networkConfig.networkBuffersPerChannel();
+		this.floatingNetworkBuffersPerGate = networkConfig.floatingNetworkBuffersPerGate();
 		this.connectionManager = connectionManager;
 		this.partitionManager = partitionManager;
 		this.taskEventPublisher = taskEventPublisher;
 		this.networkBufferPool = networkBufferPool;
-		this.networkBuffersPerChannel = networkConfig.networkBuffersPerChannel();
-		this.floatingNetworkBuffersPerGate = networkConfig.floatingNetworkBuffersPerGate();
 	}
 
 	/**
