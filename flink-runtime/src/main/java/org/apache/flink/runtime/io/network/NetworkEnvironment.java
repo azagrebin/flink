@@ -32,6 +32,7 @@ import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.metrics.InputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.InputBuffersGauge;
 import org.apache.flink.runtime.io.network.metrics.InputChannelMetrics;
+import org.apache.flink.runtime.io.network.metrics.InputChannelMetrics.InputChannelMetricsWithLegacy;
 import org.apache.flink.runtime.io.network.metrics.InputGateMetrics;
 import org.apache.flink.runtime.io.network.metrics.OutputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.OutputBuffersGauge;
@@ -256,8 +257,7 @@ public class NetworkEnvironment {
 			TaskActions taskActions,
 			ResultPartitionConsumableNotifier partitionConsumableNotifier,
 			Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
-			MetricGroup outputGroup,
-			MetricGroup buffersGroup) {
+			MetricGroup parentGroup) {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");
 
@@ -278,7 +278,8 @@ public class NetworkEnvironment {
 					rpdd.sendScheduleOrUpdateConsumersMessage());
 			}
 
-			registerOutputMetrics(outputGroup, buffersGroup, resultPartitions);
+			parentGroup = parentGroup.addGroup("Network");
+			registerOutputMetrics(parentGroup.addGroup("Output"), parentGroup.addGroup("buffers"), resultPartitions);
 			return resultPartitions;
 		}
 	}
@@ -289,13 +290,14 @@ public class NetworkEnvironment {
 			TaskActions taskActions,
 			Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
 			MetricGroup parentGroup,
-			MetricGroup inputGroup,
-			MetricGroup buffersGroup,
 			Counter numBytesInCounter) {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");
 
-			InputChannelMetrics inputChannelMetrics = new InputChannelMetrics(parentGroup);
+			MetricGroup networkGroup = parentGroup.addGroup("Network");
+			@SuppressWarnings("deprecation")
+			InputChannelMetrics inputChannelMetrics = new InputChannelMetricsWithLegacy(networkGroup, parentGroup);
+
 			SingleInputGate[] inputGates = new SingleInputGate[inputGateDeploymentDescriptors.size()];
 			int counter = 0;
 			for (InputGateDeploymentDescriptor igdd : inputGateDeploymentDescriptors) {
@@ -310,12 +312,12 @@ public class NetworkEnvironment {
 					numBytesInCounter);
 			}
 
-			registerInputMetrics(inputGroup, buffersGroup, inputGates);
+			registerInputMetrics(networkGroup.addGroup("Input"), networkGroup.addGroup("buffers"), inputGates);
 			return inputGates;
 		}
 	}
 
-	private void registerOutputMetrics(MetricGroup outputGroup, MetricGroup buffersGroup, ResultPartition[] resultPartitions) {
+	public void registerOutputMetrics(MetricGroup outputGroup, MetricGroup buffersGroup, ResultPartition[] resultPartitions) {
 		if (config.isNetworkDetailedMetrics()) {
 			ResultPartitionMetrics.registerQueueLengthMetrics(outputGroup, resultPartitions);
 		}
@@ -323,7 +325,7 @@ public class NetworkEnvironment {
 		buffersGroup.gauge(METRIC_OUTPUT_POOL_USAGE, new OutputBufferPoolUsageGauge(resultPartitions));
 	}
 
-	private void registerInputMetrics(MetricGroup inputGroup, MetricGroup buffersGroup, SingleInputGate[] inputGates) {
+	public void registerInputMetrics(MetricGroup inputGroup, MetricGroup buffersGroup, SingleInputGate[] inputGates) {
 		if (config.isNetworkDetailedMetrics()) {
 			InputGateMetrics.registerQueueLengthMetrics(inputGroup, inputGates);
 		}

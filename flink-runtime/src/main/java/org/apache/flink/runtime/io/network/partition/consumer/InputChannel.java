@@ -18,7 +18,6 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import org.apache.flink.metrics.Counter;
 import org.apache.flink.runtime.event.TaskEvent;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.io.network.buffer.Buffer;
@@ -28,6 +27,7 @@ import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -62,9 +62,9 @@ public abstract class InputChannel {
 	/** The maximum backoff (in ms). */
 	private final int maxBackoff;
 
-	protected final Counter numBytesIn;
+	final Consumer<Long> numBytesIn;
 
-	protected final Counter numBuffersIn;
+	final Consumer<Long> numBuffersIn;
 
 	/** The current backoff (in ms). */
 	private int currentBackoff;
@@ -75,8 +75,8 @@ public abstract class InputChannel {
 			ResultPartitionID partitionId,
 			int initialBackoff,
 			int maxBackoff,
-			Counter numBytesIn,
-			Counter numBuffersIn) {
+			Consumer<Long> numBytesIn,
+			Consumer<Long> numBuffersIn) {
 
 		checkArgument(channelIndex >= 0);
 

@@ -123,7 +123,14 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 		int maxBackoff,
 		InputChannelMetrics metrics) {
 
-		super(inputGate, channelIndex, partitionId, initialBackOff, maxBackoff, metrics.getNumBytesInRemoteCounter(), metrics.getNumBuffersInRemoteCounter());
+		super(
+			inputGate,
+			channelIndex,
+			partitionId,
+			initialBackOff,
+			maxBackoff,
+			metrics::incNumBytesInRemoteCounter,
+			metrics::incNumBuffersInRemoteCounter);
 
 		this.connectionId = checkNotNull(connectionId);
 		this.connectionManager = checkNotNull(connectionManager);
@@ -198,8 +205,8 @@ public class RemoteInputChannel extends InputChannel implements BufferRecycler, 
 			moreAvailable = !receivedBuffers.isEmpty();
 		}
 
-		numBytesIn.inc(next.getSizeUnsafe());
-		numBuffersIn.inc();
+		numBytesIn.accept((long) next.getSizeUnsafe());
+		numBuffersIn.accept(1L);
 		return Optional.of(new BufferAndAvailability(next, moreAvailable, getSenderBacklog()));
 	}
 

@@ -32,13 +32,8 @@ public class InputChannelMetrics {
 
 	private static final String IO_NUM_BYTES_IN_LOCAL = MetricNames.IO_NUM_BYTES_IN + "Local";
 	private static final String IO_NUM_BYTES_IN_REMOTE = MetricNames.IO_NUM_BYTES_IN + "Remote";
-	private static final String IO_NUM_BYTES_IN_LOCAL_RATE = IO_NUM_BYTES_IN_LOCAL + MetricNames.SUFFIX_RATE;
-	private static final String IO_NUM_BYTES_IN_REMOTE_RATE = IO_NUM_BYTES_IN_REMOTE + MetricNames.SUFFIX_RATE;
-
 	private static final String IO_NUM_BUFFERS_IN_LOCAL = MetricNames.IO_NUM_BUFFERS_IN + "Local";
 	private static final String IO_NUM_BUFFERS_IN_REMOTE = MetricNames.IO_NUM_BUFFERS_IN + "Remote";
-	private static final String IO_NUM_BUFFERS_IN_LOCAL_RATE = IO_NUM_BUFFERS_IN_LOCAL + MetricNames.SUFFIX_RATE;
-	private static final String IO_NUM_BUFFERS_IN_REMOTE_RATE = IO_NUM_BUFFERS_IN_REMOTE + MetricNames.SUFFIX_RATE;
 
 	private final Counter numBytesInLocal;
 	private final Counter numBytesInRemote;
@@ -46,30 +41,70 @@ public class InputChannelMetrics {
 	private final Counter numBuffersInRemote;
 
 	public InputChannelMetrics(MetricGroup parent) {
-		this.numBytesInLocal = parent.counter(IO_NUM_BYTES_IN_LOCAL);
-		this.numBytesInRemote = parent.counter(IO_NUM_BYTES_IN_REMOTE);
-		parent.meter(IO_NUM_BYTES_IN_LOCAL_RATE, new MeterView(numBytesInLocal, 60));
-		parent.meter(IO_NUM_BYTES_IN_REMOTE_RATE, new MeterView(numBytesInRemote, 60));
-
-		this.numBuffersInLocal = parent.counter(IO_NUM_BUFFERS_IN_LOCAL);
-		this.numBuffersInRemote = parent.counter(IO_NUM_BUFFERS_IN_REMOTE);
-		parent.meter(IO_NUM_BUFFERS_IN_LOCAL_RATE, new MeterView(numBuffersInLocal, 60));
-		parent.meter(IO_NUM_BUFFERS_IN_REMOTE_RATE, new MeterView(numBuffersInRemote, 60));
+		this.numBytesInLocal = createCounter(parent, IO_NUM_BYTES_IN_LOCAL);
+		this.numBytesInRemote = createCounter(parent, IO_NUM_BYTES_IN_REMOTE);
+		this.numBuffersInLocal = createCounter(parent, IO_NUM_BUFFERS_IN_LOCAL);
+		this.numBuffersInRemote = createCounter(parent, IO_NUM_BUFFERS_IN_REMOTE);
 	}
 
-	public Counter getNumBytesInLocalCounter() {
-		return numBytesInLocal;
+	private static Counter createCounter(MetricGroup parent, String name) {
+		Counter counter = parent.counter(name);
+		parent.meter(name + MetricNames.SUFFIX_RATE, new MeterView(counter, 60));
+		return counter;
 	}
 
-	public Counter getNumBytesInRemoteCounter() {
-		return numBytesInRemote;
+	public void incNumBytesInLocalCounter(long inc) {
+		numBytesInLocal.inc(inc);
 	}
 
-	public Counter getNumBuffersInLocalCounter() {
-		return numBuffersInLocal;
+	public void incNumBytesInRemoteCounter(long inc) {
+		numBytesInRemote.inc(inc);
 	}
 
-	public Counter getNumBuffersInRemoteCounter() {
-		return numBuffersInRemote;
+	public void incNumBuffersInLocalCounter(long inc) {
+		numBuffersInLocal.inc(inc);
+	}
+
+	public void incNumBuffersInRemoteCounter(long inc) {
+		numBuffersInRemote.inc(inc);
+	}
+
+	/**
+	 * Wraps {@link InputChannelMetrics} with legacy metrics.
+	 * @deprecated eventually should be removed in favour of normal {@link InputChannelMetrics}.
+	 */
+	@SuppressWarnings("DeprecatedIsStillUsed")
+	@Deprecated
+	public static class InputChannelMetricsWithLegacy extends InputChannelMetrics {
+		private final InputChannelMetrics legacyMetrics;
+
+		public InputChannelMetricsWithLegacy(MetricGroup parent, MetricGroup legacyParent) {
+			super(parent);
+			legacyMetrics = new InputChannelMetrics(legacyParent);
+		}
+
+		@Override
+		public void incNumBytesInLocalCounter(long inc) {
+			super.incNumBytesInLocalCounter(inc);
+			legacyMetrics.incNumBytesInLocalCounter(inc);
+		}
+
+		@Override
+		public void incNumBytesInRemoteCounter(long inc) {
+			super.incNumBytesInRemoteCounter(inc);
+			legacyMetrics.incNumBytesInRemoteCounter(inc);
+		}
+
+		@Override
+		public void incNumBuffersInLocalCounter(long inc) {
+			super.incNumBuffersInLocalCounter(inc);
+			legacyMetrics.incNumBuffersInLocalCounter(inc);
+		}
+
+		@Override
+		public void incNumBuffersInRemoteCounter(long inc) {
+			super.incNumBuffersInRemoteCounter(inc);
+			legacyMetrics.incNumBuffersInRemoteCounter(inc);
+		}
 	}
 }
