@@ -22,54 +22,45 @@ import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 
-import javax.annotation.Nonnull;
-
 import java.net.InetSocketAddress;
 
 /**
- * Partition producer descriptor for {@link ShuffleMaster} to obtain {@link ShuffleDeploymentDescriptor}.
+ * Partition producer descriptor for {@link ShuffleMaster} to obtain {@link ShuffleDescriptor}.
  */
-public class ProducerShuffleDescriptor {
+public class ProducerDescriptor {
 	/** The resource ID to identify the container where the producer execution is deployed. */
-	@Nonnull
 	private final ResourceID producerResourceId;
 
-	/** The address to use to request the remote partition. */
-	@Nonnull
+	/** The address to connect to the producer. */
 	private final InetSocketAddress address;
 
 	/** The ID of the producer execution attempt. */
-	@Nonnull
 	private final ExecutionAttemptID producerExecutionId;
 
-	public ProducerShuffleDescriptor(
-		@Nonnull ResourceID producerResourceId,
-		@Nonnull InetSocketAddress address,
-		@Nonnull ExecutionAttemptID producerExecutionId) {
-
+	public ProducerDescriptor(
+			ResourceID producerResourceId,
+			InetSocketAddress address,
+			ExecutionAttemptID producerExecutionId) {
 		this.producerResourceId = producerResourceId;
 		this.address = address;
 		this.producerExecutionId = producerExecutionId;
 	}
 
-	@Nonnull
-	public ResourceID getProducerResourceId() {
+	ResourceID getProducerResourceId() {
 		return producerResourceId;
 	}
 
-	@Nonnull
 	public InetSocketAddress getAddress() {
 		return address;
 	}
 
-	@Nonnull
-	public ExecutionAttemptID getProducerExecutionId() {
+	ExecutionAttemptID getProducerExecutionId() {
 		return producerExecutionId;
 	}
 
-	public static ProducerShuffleDescriptor create(TaskManagerLocation connectionInfo, ExecutionAttemptID attemptId) {
-		int port = connectionInfo.dataPort() > 0 ? connectionInfo.dataPort() : 0;
-		InetSocketAddress address = new InetSocketAddress(connectionInfo.address(), port);
-		return new ProducerShuffleDescriptor(connectionInfo.getResourceID(), address, attemptId);
+	public static ProducerDescriptor create(TaskManagerLocation producerLocation, ExecutionAttemptID attemptId) {
+		int port = producerLocation.dataPort() > 0 ? producerLocation.dataPort() : 0;
+		InetSocketAddress address = new InetSocketAddress(producerLocation.address(), port);
+		return new ProducerDescriptor(producerLocation.getResourceID(), address, attemptId);
 	}
 }

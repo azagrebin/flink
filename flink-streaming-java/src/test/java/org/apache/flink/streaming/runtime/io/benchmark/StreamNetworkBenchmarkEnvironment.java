@@ -27,6 +27,7 @@ import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
+import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.NetworkEnvironmentBuilder;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
@@ -44,8 +45,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateFactory;
 import org.apache.flink.runtime.io.network.partition.consumer.UnionInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.NettyShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
 import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -239,16 +240,17 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 		ResourceID localLocation = new ResourceID("local");
 		for (int channel = 0; channel < channels; ++channel) {
 			int finalChannel = channel;
-			ShuffleDeploymentDescriptor[] channelDescriptors = Arrays.stream(partitionIds)
+			ShuffleDescriptor[] channelDescriptors = Arrays.stream(partitionIds)
 				.map(partitionId -> localMode ?
 					createLocalSdd(partitionId, localLocation) : createRemoteSdd(partitionId, senderLocation, finalChannel))
-				.toArray(ShuffleDeploymentDescriptor[]::new);
+				.toArray(ShuffleDescriptor[]::new);
 
 			final InputGateDeploymentDescriptor gateDescriptor = new InputGateDeploymentDescriptor(
 				dataSetID,
 				ResultPartitionType.PIPELINED_BOUNDED,
 				channel,
-				channelDescriptors, localLocation);
+				channelDescriptors,
+				localLocation);
 
 			SingleInputGate gate = new SingleInputGateFactory(
 				environment.getConfiguration(),
@@ -275,17 +277,20 @@ public class StreamNetworkBenchmarkEnvironment<T extends IOReadableWritable> {
 		}
 	}
 
-	private static ShuffleDeploymentDescriptor createLocalSdd(ResultPartitionID resultPartitionID, ResourceID location) {
-		return new DefaultShuffleDeploymentDescriptor(
-			location, new InetSocketAddress("localhost", 10000), resultPartitionID, 0);
+	private static ShuffleDescriptor createLocalSdd(ResultPartitionID resultPartitionID, ResourceID location) {
+		return new NettyShuffleDescriptor(
+			location,
+			new ConnectionID(new InetSocketAddress("localhost", 10000), 0),
+			resultPartitionID);
 	}
 
-	private static ShuffleDeploymentDescriptor createRemoteSdd(
-		ResultPartitionID resultPartitionID, TaskManagerLocation senderLocation, int channel) {
-
-		return new DefaultShuffleDeploymentDescriptor(
+	private static ShuffleDescriptor createRemoteSdd(
+			ResultPartitionID resultPartitionID,
+			TaskManagerLocation senderLocation,
+			int channel) {
+		return new NettyShuffleDescriptor(
 			senderLocation.getResourceID(),
-			new InetSocketAddress(senderLocation.address(),
-				senderLocation.dataPort()), resultPartitionID, channel);
+			new ConnectionID(new InetSocketAddress(senderLocation.address(), senderLocation.dataPort()), channel),
+			resultPartitionID);
 	}
 }

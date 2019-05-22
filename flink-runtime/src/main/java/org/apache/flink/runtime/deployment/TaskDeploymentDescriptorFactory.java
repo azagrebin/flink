@@ -24,6 +24,7 @@ import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor.MaybeOffloaded;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.executiongraph.Execution;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
@@ -40,12 +41,10 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.UnknownShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.UnknownShuffleDescriptor;
 import org.apache.flink.types.Either;
-import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.SerializedValue;
-import org.apache.flink.util.function.CheckedSupplier;
 
 import javax.annotation.Nullable;
 
@@ -54,77 +53,47 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.util.Preconditions.checkState;
+
 /**
- * Factory of {@link TaskDeploymentDescriptor} to deploy {@link Execution}.
+ * Factory of {@link TaskDeploymentDescriptor} to deploy {@link org.apache.flink.runtime.taskmanager.Task} from {@link Execution}.
  */
 public class TaskDeploymentDescriptorFactory {
 	private final ExecutionAttemptID executionId;
 	private final int attemptNumber;
-
-	private final TaskDeploymentDescriptor.MaybeOffloaded<JobInformation> serializedJobInformation;
-	private final CheckedSupplier<Either<SerializedValue<TaskInformation>, PermanentBlobKey>> taskInfoSupplier;
+	private final MaybeOffloaded<JobInformation> serializedJobInformation;
+	private final MaybeOffloaded<TaskInformation> taskInfo;
 	private final JobID jobID;
 	private final boolean lazyScheduling;
 	private final int subtaskIndex;
 	private final ExecutionEdge[][] inputEdges;
 
 	private TaskDeploymentDescriptorFactory(
-		ExecutionAttemptID executionId,
-		int attemptNumber,
-		TaskDeploymentDescriptor.MaybeOffloaded<JobInformation> serializedJobInformation,
-		CheckedSupplier<Either<SerializedValue<TaskInformation>, PermanentBlobKey>> taskInfoSupplier,
-		JobID jobID,
-		boolean lazyScheduling,
-		int subtaskIndex,
-		ExecutionEdge[][] inputEdges) {
-
+			ExecutionAttemptID executionId,
+			int attemptNumber,
+			MaybeOffloaded<JobInformation> serializedJobInformation,
+			MaybeOffloaded<TaskInformation> taskInfo,
+			JobID jobID,
+			boolean lazyScheduling,
+			int subtaskIndex,
+			ExecutionEdge[][] inputEdges) {
 		this.executionId = executionId;
 		this.attemptNumber = attemptNumber;
 		this.serializedJobInformation = serializedJobInformation;
-		this.taskInfoSupplier = taskInfoSupplier;
+		this.taskInfo = taskInfo;
 		this.jobID = jobID;
 		this.lazyScheduling = lazyScheduling;
 		this.subtaskIndex = subtaskIndex;
 		this.inputEdges = inputEdges;
 	}
 
-	public static TaskDeploymentDescriptorFactory fromExecutionVertex(
-		ExecutionVertex executionVertex, ExecutionAttemptID executionId, int attemptNumber) {
-
-		ExecutionGraph executionGraph = executionVertex.getExecutionGraph();
-
-		return new TaskDeploymentDescriptorFactory(
-			executionId,
-			attemptNumber,
-			getSerializedJobInformation(executionGraph),
-			() -> executionVertex.getJobVertex().getTaskInformationOrBlobKey(),
-			executionGraph.getJobID(),
-			executionGraph.getScheduleMode().allowLazyDeployment(),
-			executionVertex.getParallelSubtaskIndex(),
-			executionVertex.getAllInputEdges());
-	}
-
-	private static TaskDeploymentDescriptor.MaybeOffloaded<JobInformation> getSerializedJobInformation(
-		ExecutionGraph executionGraph) {
-
-		Either<SerializedValue<JobInformation>, PermanentBlobKey> jobInformationOrBlobKey =
-			executionGraph.getJobInformationOrBlobKey();
-
-		if (jobInformationOrBlobKey.isLeft()) {
-			return new TaskDeploymentDescriptor.NonOffloaded<>(jobInformationOrBlobKey.left());
-		} else {
-			return new TaskDeploymentDescriptor.Offloaded<>(jobInformationOrBlobKey.right());
-		}
-	}
-
 	/**
 	 * Creates a task deployment descriptor to deploy a subtask to the given target slot.
 	 */
 	public TaskDeploymentDescriptor createDeploymentDescriptor(
-		LogicalSlot targetSlot,
-		@Nullable JobManagerTaskRestore taskRestore,
-		Collection<ResultPartitionDeploymentDescriptor> producedPartitions) throws Exception {
-
+			LogicalSlot targetSlot,
+			@Nullable JobManagerTaskRestore taskRestore,
+			Collection<ResultPartitionDeploymentDescriptor> producedPartitions) throws Exception {
 		return createDeploymentDescriptor(
 			targetSlot.getTaskManagerLocation().getResourceID(),
 			targetSlot.getAllocationId(),
@@ -138,16 +107,15 @@ public class TaskDeploymentDescriptorFactory {
 	 */
 	@VisibleForTesting
 	public TaskDeploymentDescriptor createDeploymentDescriptor(
-		ResourceID consumerResourceId,
-		AllocationID allocationID,
-		int targetSlotNumber,
-		@Nullable JobManagerTaskRestore taskRestore,
-		Collection<ResultPartitionDeploymentDescriptor> producedPartitions) throws Exception {
-
+			ResourceID consumerResourceId,
+			AllocationID allocationID,
+			int targetSlotNumber,
+			@Nullable JobManagerTaskRestore taskRestore,
+			Collection<ResultPartitionDeploymentDescriptor> producedPartitions) throws Exception {
 		return new TaskDeploymentDescriptor(
 			jobID,
 			serializedJobInformation,
-			getSerializedTaskInformation(),
+			taskInfo,
 			executionId,
 			allocationID,
 			subtaskIndex,
@@ -155,30 +123,53 @@ public class TaskDeploymentDescriptorFactory {
 			targetSlotNumber,
 			taskRestore,
 			new ArrayList<>(producedPartitions),
-			createConsumedGates(consumerResourceId, inputEdges, subtaskIndex, lazyScheduling));
+			createInputGateDeploymentDescriptors(consumerResourceId, inputEdges, subtaskIndex, lazyScheduling));
 	}
 
-	private TaskDeploymentDescriptor.MaybeOffloaded<TaskInformation> getSerializedTaskInformation() throws Exception {
-		Either<SerializedValue<TaskInformation>, PermanentBlobKey> taskInformationOrBlobKey = taskInfoSupplier.get();
+	public static TaskDeploymentDescriptorFactory fromExecutionVertex(
+		ExecutionVertex executionVertex,
+		ExecutionAttemptID executionId,
+		int attemptNumber) throws ExecutionGraphException {
+		ExecutionGraph executionGraph = executionVertex.getExecutionGraph();
+		return new TaskDeploymentDescriptorFactory(
+			executionId,
+			attemptNumber,
+			getSerializedJobInformation(executionGraph),
+			getSerializedTaskInformation(executionVertex.getJobVertex().getTaskInformationOrBlobKey()),
+			executionGraph.getJobID(),
+			executionGraph.getScheduleMode().allowLazyDeployment(),
+			executionVertex.getParallelSubtaskIndex(),
+			executionVertex.getAllInputEdges());
+	}
 
-		if (taskInformationOrBlobKey.isLeft()) {
-			return new TaskDeploymentDescriptor.NonOffloaded<>(taskInformationOrBlobKey.left());
+	private static MaybeOffloaded<JobInformation> getSerializedJobInformation(
+		ExecutionGraph executionGraph) {
+		Either<SerializedValue<JobInformation>, PermanentBlobKey> jobInformationOrBlobKey =
+			executionGraph.getJobInformationOrBlobKey();
+		if (jobInformationOrBlobKey.isLeft()) {
+			return new TaskDeploymentDescriptor.NonOffloaded<>(jobInformationOrBlobKey.left());
 		} else {
-			return new TaskDeploymentDescriptor.Offloaded<>(taskInformationOrBlobKey.right());
+			return new TaskDeploymentDescriptor.Offloaded<>(jobInformationOrBlobKey.right());
 		}
 	}
 
-	private static List<InputGateDeploymentDescriptor> createConsumedGates(
-		ResourceID consumerResourceId,
-		ExecutionEdge[][] inputEdges,
-		int subtaskIndex,
-		boolean allowLazyDeployment) throws ExecutionGraphException {
+	private static MaybeOffloaded<TaskInformation> getSerializedTaskInformation(
+		Either<SerializedValue<TaskInformation>, PermanentBlobKey> taskInfo) {
+		return taskInfo.isLeft() ?
+			new TaskDeploymentDescriptor.NonOffloaded<>(taskInfo.left()) :
+			new TaskDeploymentDescriptor.Offloaded<>(taskInfo.right());
+	}
 
-		// Consumed intermediate results
+	private static List<InputGateDeploymentDescriptor> createInputGateDeploymentDescriptors(
+			ResourceID consumerResourceId,
+			ExecutionEdge[][] inputEdges,
+			int subtaskIndex,
+			boolean allowLazyDeployment) throws ExecutionGraphException {
 		List<InputGateDeploymentDescriptor> consumedPartitions = new ArrayList<>(inputEdges.length);
 
 		for (ExecutionEdge[] edges : inputEdges) {
-			ShuffleDeploymentDescriptor[] sdd = getConsumedPartitionSdds(edges, allowLazyDeployment);
+			ShuffleDescriptor[] consumedPartitionShuffleDescriptors =
+				getConsumedPartitionShuffleDeploymentDescriptors(edges, allowLazyDeployment);
 			// If the produced partition has multiple consumers registered, we
 			// need to request the one matching our sub task index.
 			// TODO Refactor after removing the consumers from the intermediate result partitions
@@ -187,78 +178,89 @@ public class TaskDeploymentDescriptorFactory {
 			int queueToRequest = subtaskIndex % numConsumerEdges;
 
 			IntermediateResult consumedIntermediateResult = edges[0].getSource().getIntermediateResult();
-			final IntermediateDataSetID resultId = consumedIntermediateResult.getId();
-			final ResultPartitionType partitionType = consumedIntermediateResult.getResultType();
+			IntermediateDataSetID resultId = consumedIntermediateResult.getId();
+			ResultPartitionType partitionType = consumedIntermediateResult.getResultType();
 
 			consumedPartitions.add(new InputGateDeploymentDescriptor(
-				resultId, partitionType, queueToRequest, sdd, consumerResourceId));
+				resultId,
+				partitionType,
+				queueToRequest,
+				consumedPartitionShuffleDescriptors,
+				consumerResourceId));
 		}
 
 		return consumedPartitions;
 	}
 
-	private static ShuffleDeploymentDescriptor[] getConsumedPartitionSdds(
-		ExecutionEdge[] edges, boolean allowLazyDeployment) throws ExecutionGraphException {
-
-		final ShuffleDeploymentDescriptor[] sdd = new ShuffleDeploymentDescriptor[edges.length];
+	private static ShuffleDescriptor[] getConsumedPartitionShuffleDeploymentDescriptors(
+			ExecutionEdge[] edges, boolean allowLazyDeployment) throws ExecutionGraphException {
+		ShuffleDescriptor[] shuffleDescriptors = new ShuffleDescriptor[edges.length];
 		// Each edge is connected to a different result partition
 		for (int i = 0; i < edges.length; i++) {
-			sdd[i] = getConsumedPartitionSdd(edges[i], allowLazyDeployment);
+			shuffleDescriptors[i] =
+				getConsumedPartitionShuffleDeploymentDescriptor(edges[i], allowLazyDeployment);
 		}
-		return sdd;
+		return shuffleDescriptors;
 	}
 
-	private static ShuffleDeploymentDescriptor getConsumedPartitionSdd(
-		ExecutionEdge edge,
-		boolean allowLazyDeployment) throws ExecutionGraphException {
+	private static ShuffleDescriptor getConsumedPartitionShuffleDeploymentDescriptor(
+			ExecutionEdge edge,
+			boolean allowLazyDeployment) throws ExecutionGraphException {
+		IntermediateResultPartition consumedPartition = edge.getSource();
+		Execution producer = consumedPartition.getProducer().getCurrentExecutionAttempt();
 
-		final IntermediateResultPartition consumedPartition = edge.getSource();
-		final Execution producer = consumedPartition.getProducer().getCurrentExecutionAttempt();
-
-		final ExecutionState producerState = producer.getState();
-		final Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions =
+		ExecutionState producerState = producer.getState();
+		Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions =
 			producer.getProducedPartitions();
 
-		final ResultPartitionID consumedPartitionId = new ResultPartitionID(
-			consumedPartition.getPartitionId(), producer.getAttemptId());
+		ResultPartitionID consumedPartitionId = new ResultPartitionID(
+			consumedPartition.getPartitionId(),
+			producer.getAttemptId());
 
-		return getConsumedPartitionSdd(consumedPartitionId, consumedPartition.getResultType(),
-			consumedPartition.isConsumable(), producerState, allowLazyDeployment, producedPartitions);
+		return getConsumedPartitionShuffleDeploymentDescriptor(
+			consumedPartitionId,
+			consumedPartition.getResultType(),
+			consumedPartition.isConsumable(),
+			producerState,
+			allowLazyDeployment,
+			producedPartitions);
 	}
 
 	@VisibleForTesting
-	static ShuffleDeploymentDescriptor getConsumedPartitionSdd(
-		ResultPartitionID consumedPartitionId,
-		ResultPartitionType resultPartitionType,
-		boolean isConsumable,
-		ExecutionState producerState,
-		boolean allowLazyDeployment,
-		Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions)
-		throws ExecutionGraphException {
-
+	static ShuffleDescriptor getConsumedPartitionShuffleDeploymentDescriptor(
+			ResultPartitionID consumedPartitionId,
+			ResultPartitionType resultPartitionType,
+			boolean isConsumable,
+			ExecutionState producerState,
+			boolean allowLazyDeployment,
+			Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions) throws ExecutionGraphException {
 		// The producing task needs to be RUNNING or already FINISHED
 		if ((resultPartitionType.isPipelined() || isConsumable) &&
 			checkInputReady(consumedPartitionId.getPartitionId(), producedPartitions) &&
 			isProducerAvailable(producerState)) {
 			// partition is already registered
-			return producedPartitions.get(consumedPartitionId.getPartitionId()).getShuffleDeploymentDescriptor();
+			return producedPartitions.get(consumedPartitionId.getPartitionId()).getShuffleDescriptor();
 		}
 		else if (allowLazyDeployment) {
 			// The producing task might not have registered the partition yet
-			return new UnknownShuffleDeploymentDescriptor(consumedPartitionId);
+			return new UnknownShuffleDescriptor(consumedPartitionId);
 		}
 		else {
-			return handleConsumedPartitionSddErrors(
-				consumedPartitionId, resultPartitionType, isConsumable, producerState);
+			// throw respective exceptions
+			handleConsumedPartitionShuffleDeploymentDescriptorErrors(
+				consumedPartitionId,
+				resultPartitionType,
+				isConsumable,
+				producerState);
+			return null;
 		}
 	}
 
-	private static ShuffleDeploymentDescriptor handleConsumedPartitionSddErrors(
-		ResultPartitionID consumedPartitionId,
-		ResultPartitionType resultPartitionType,
-		boolean isConsumable,
-		ExecutionState producerState) throws ExecutionGraphException {
-
+	private static void handleConsumedPartitionShuffleDeploymentDescriptorErrors(
+			ResultPartitionID consumedPartitionId,
+			ResultPartitionType resultPartitionType,
+			boolean isConsumable,
+			ExecutionState producerState) throws ExecutionGraphException {
 		if (isProducerFailedOrCanceled(producerState)) {
 			String msg = "Trying to schedule a task whose inputs were canceled or failed. " +
 				"The producer is in state " + producerState + ".";
@@ -275,20 +277,19 @@ public class TaskDeploymentDescriptorFactory {
 		}
 	}
 
-	public static ShuffleDeploymentDescriptor getKnownConsumedPartitionSdd(ExecutionEdge edge) {
+	public static ShuffleDescriptor getKnownConsumedPartitionShuffleDeploymentDescriptor(ExecutionEdge edge) {
 		IntermediateResultPartition consumedPartition = edge.getSource();
 		Execution producer = consumedPartition.getProducer().getCurrentExecutionAttempt();
 		Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions =
 			producer.getProducedPartitions();
-		Preconditions.checkArgument(checkInputReady(consumedPartition.getPartitionId(), producedPartitions),
+		checkState(checkInputReady(consumedPartition.getPartitionId(), producedPartitions),
 			"Known partitions are expected to be already cached during producer deployment");
-		return producedPartitions.get(consumedPartition.getPartitionId()).getShuffleDeploymentDescriptor();
+		return producedPartitions.get(consumedPartition.getPartitionId()).getShuffleDescriptor();
 	}
 
 	private static boolean checkInputReady(
-		IntermediateResultPartitionID id,
-		Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions) {
-
+			IntermediateResultPartitionID id,
+			Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions) {
 		return producedPartitions != null && producedPartitions.containsKey(id);
 	}
 
@@ -300,8 +301,8 @@ public class TaskDeploymentDescriptorFactory {
 	}
 
 	private static boolean isProducerFailedOrCanceled(ExecutionState producerState) {
-		return producerState == ExecutionState.CANCELING
-			|| producerState == ExecutionState.CANCELED
-			|| producerState == ExecutionState.FAILED;
+		return producerState == ExecutionState.CANCELING ||
+			producerState == ExecutionState.CANCELED ||
+			producerState == ExecutionState.FAILED;
 	}
 }

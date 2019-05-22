@@ -397,8 +397,8 @@ public class ExecutionJobVertex implements AccessExecutionJobVertex, Archiveable
 						blobWriter);
 				} catch (IOException e) {
 					throw new ExecutionGraphException(
-						"Could not create a serialized JobVertexInformation for " +
-							getJobVertexId(), e);
+						"Could not create a serialized JobVertexInformation for " + getJobVertexId(),
+						e);
 				}
 			}
 

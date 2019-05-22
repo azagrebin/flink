@@ -52,8 +52,8 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
-import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
-import org.apache.flink.runtime.shuffle.ProducerShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ProducerDescriptor;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
@@ -152,8 +152,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	private final Collection<PartitionInfo> partitionInfos;
 
-	private Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions;
-
 	/** A future that completes once the Execution reaches a terminal ExecutionState. */
 	private final CompletableFuture<ExecutionState> terminalStateFuture;
 
@@ -185,6 +183,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	private volatile Map<String, Accumulator<?, ?>> userAccumulators;
 
 	private volatile IOMetrics ioMetrics;
+
+	private Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions;
 
 	// --------------------------------------------------------------------------------------------
 
@@ -496,12 +496,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @throws IllegalExecutionStateException if this method has been called while not being in the CREATED state
 	 */
 	CompletableFuture<Execution> allocateResourcesForExecution(
-		SlotProvider slotProvider,
-		boolean queued,
-		LocationPreferenceConstraint locationPreferenceConstraint,
-		@Nonnull Set<AllocationID> allPreviousExecutionGraphAllocationIds,
-		Time allocationTimeout) throws IllegalExecutionStateException {
-
+			SlotProvider slotProvider,
+			boolean queued,
+			LocationPreferenceConstraint locationPreferenceConstraint,
+			@Nonnull Set<AllocationID> allPreviousExecutionGraphAllocationIds,
+			Time allocationTimeout) throws IllegalExecutionStateException {
 		return allocateAndAssignSlotForExecution(
 			slotProvider,
 			queued,
@@ -520,7 +519,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	 * @param allPreviousExecutionGraphAllocationIds set with all previous allocation ids in the job graph.
 	 *                                                 Can be empty if the allocation ids are not required for scheduling.
 	 * @param allocationTimeout rpcTimeout for allocating a new slot
-	 * @return Future which is completed with this execution once the slot has been assigned
+	 * @return Future which is completed with the allocated slot once it has been assigned
 	 * 			or with an exception if an error occurred.
 	 * @throws IllegalExecutionStateException if this method has been called while not being in the CREATED state
 	 */
@@ -627,13 +626,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	@VisibleForTesting
-	static CompletableFuture<Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor>>
-	registerProducedPartitions(
-		ExecutionVertex vertex,
-		TaskManagerLocation location,
-		ExecutionAttemptID attemptId) {
-
-		ProducerShuffleDescriptor producerShuffleDescriptor = ProducerShuffleDescriptor.create(
+	static CompletableFuture<Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor>> registerProducedPartitions(
+			ExecutionVertex vertex,
+			TaskManagerLocation location,
+			ExecutionAttemptID attemptId) {
+		ProducerDescriptor producerDescriptor = ProducerDescriptor.create(
 			location, attemptId);
 
 		boolean lazyScheduling = vertex.getExecutionGraph().getScheduleMode().allowLazyDeployment();
@@ -643,12 +640,18 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 			new ArrayList<>(partitions.size());
 
 		for (IntermediateResultPartition partition : partitions) {
-			PartitionShuffleDescriptor partitionShuffleDescriptor = PartitionShuffleDescriptor.from(
-				partition, getPartitionMaxParallelism(partition));
-			partitionRegistrations.add(vertex.getExecutionGraph().getShuffleMaster()
-				.registerPartitionWithProducer(partitionShuffleDescriptor, producerShuffleDescriptor)
-				.thenApply(shuffleDescriptor -> new ResultPartitionDeploymentDescriptor(
-					partitionShuffleDescriptor, shuffleDescriptor, lazyScheduling)));
+			PartitionDescriptor partitionDescriptor = PartitionDescriptor.from(partition);
+			int maxParallelism = getPartitionMaxParallelism(partition);
+			partitionRegistrations.add(
+				vertex
+					.getExecutionGraph()
+					.getShuffleMaster()
+					.registerPartitionWithProducer(partitionDescriptor, producerDescriptor)
+					.thenApply(shuffleDescriptor -> new ResultPartitionDeploymentDescriptor(
+						partitionDescriptor,
+						shuffleDescriptor,
+						maxParallelism,
+						lazyScheduling)));
 		}
 
 		return FutureUtils.combineAll(partitionRegistrations).thenApply(rpdds -> {
@@ -661,7 +664,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	private static int getPartitionMaxParallelism(IntermediateResultPartition partition) {
 		// TODO consumers.isEmpty() only exists for test, currently there has to be exactly one consumer in real jobs!
-		List<List<ExecutionEdge>> consumers = partition.getConsumers();
+		final List<List<ExecutionEdge>> consumers = partition.getConsumers();
 		int maxParallelism = KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM;
 		if (!consumers.isEmpty()) {
 			List<ExecutionEdge> consumer = consumers.get(0);

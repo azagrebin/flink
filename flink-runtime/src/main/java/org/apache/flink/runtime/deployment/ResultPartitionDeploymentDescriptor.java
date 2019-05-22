@@ -22,10 +22,9 @@ import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
-
-import javax.annotation.Nonnull;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 
 import java.io.Serializable;
 
@@ -38,51 +37,49 @@ public class ResultPartitionDeploymentDescriptor implements Serializable {
 
 	private static final long serialVersionUID = 6343547936086963705L;
 
-	@Nonnull
-	private final PartitionShuffleDescriptor partitionShuffleDescriptor;
+	private final PartitionDescriptor partitionDescriptor;
 
-	@Nonnull
-	private final ShuffleDeploymentDescriptor shuffleDeploymentDescriptor;
+	private final ShuffleDescriptor shuffleDescriptor;
+
+	private final int maxParallelism;
 
 	/** Flag whether the result partition should send scheduleOrUpdateConsumer messages. */
 	private final boolean sendScheduleOrUpdateConsumersMessage;
 
 	public ResultPartitionDeploymentDescriptor(
-		@Nonnull PartitionShuffleDescriptor partitionShuffleDescriptor,
-		@Nonnull ShuffleDeploymentDescriptor shuffleDeploymentDescriptor,
+		PartitionDescriptor partitionDescriptor,
+		ShuffleDescriptor shuffleDescriptor,
+		int maxParallelism,
 		boolean sendScheduleOrUpdateConsumersMessage) {
-
-		this.partitionShuffleDescriptor = partitionShuffleDescriptor;
-		this.shuffleDeploymentDescriptor = shuffleDeploymentDescriptor;
+		this.partitionDescriptor = partitionDescriptor;
+		this.shuffleDescriptor = shuffleDescriptor;
+		KeyGroupRangeAssignment.checkParallelismPreconditions(maxParallelism);
+		this.maxParallelism = maxParallelism;
 		this.sendScheduleOrUpdateConsumersMessage = sendScheduleOrUpdateConsumersMessage;
 	}
 
-	@Nonnull
 	public IntermediateDataSetID getResultId() {
-		return partitionShuffleDescriptor.getResultId();
+		return partitionDescriptor.getResultId();
 	}
 
-	@Nonnull
 	public IntermediateResultPartitionID getPartitionId() {
-		return partitionShuffleDescriptor.getPartitionId();
+		return partitionDescriptor.getPartitionId();
 	}
 
-	@Nonnull
 	public ResultPartitionType getPartitionType() {
-		return partitionShuffleDescriptor.getPartitionType();
+		return partitionDescriptor.getPartitionType();
 	}
 
 	public int getNumberOfSubpartitions() {
-		return partitionShuffleDescriptor.getNumberOfSubpartitions();
+		return partitionDescriptor.getNumberOfSubpartitions();
 	}
 
 	public int getMaxParallelism() {
-		return partitionShuffleDescriptor.getMaxParallelism();
+		return maxParallelism;
 	}
 
-	@Nonnull
-	ShuffleDeploymentDescriptor getShuffleDeploymentDescriptor() {
-		return shuffleDeploymentDescriptor;
+	ShuffleDescriptor getShuffleDescriptor() {
+		return shuffleDescriptor;
 	}
 
 	public boolean sendScheduleOrUpdateConsumersMessage() {
@@ -91,8 +88,8 @@ public class ResultPartitionDeploymentDescriptor implements Serializable {
 
 	@Override
 	public String toString() {
-		return String.format("ResultPartitionDeploymentDescriptor [PartitionShuffleDescriptor: %s, "
-						+ "ShuffleDeploymentDescriptor: %s]",
-			partitionShuffleDescriptor, shuffleDeploymentDescriptor);
+		return String.format("ResultPartitionDeploymentDescriptor [PartitionDescriptor: %s, "
+						+ "ShuffleDescriptor: %s]",
+			partitionDescriptor, shuffleDescriptor);
 	}
 }

@@ -45,7 +45,7 @@ import org.apache.flink.runtime.jobmaster.utils.TestingJobMasterGateway;
 import org.apache.flink.runtime.jobmaster.utils.TestingJobMasterGatewayBuilder;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
-import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.NettyShuffleDescriptor;
 import org.apache.flink.runtime.taskexecutor.exceptions.PartitionException;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.testtasks.BlockingNoOpInvokable;
@@ -237,7 +237,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	@Test(timeout = 10000L)
 	public void testRunJobWithForwardChannel() throws Exception {
 		ResourceID producerLocation = new ResourceID("local");
-		DefaultShuffleDeploymentDescriptor sdd =
+		NettyShuffleDescriptor sdd =
 			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 
 		TaskDeploymentDescriptor tdd1 = createSender(sdd);
@@ -296,7 +296,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	@Test(timeout = 10000L)
 	public void testCancellingDependentAndStateUpdateFails() throws Exception {
 		ResourceID producerLocation = new ResourceID("local");
-		DefaultShuffleDeploymentDescriptor sdd =
+		NettyShuffleDescriptor sdd =
 			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 
 		TaskDeploymentDescriptor tdd1 = createSender(sdd);
@@ -367,7 +367,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 		config.setInteger(TaskManagerOptions.NETWORK_REQUEST_BACKOFF_MAX, 200);
 
 		// Remote location (on the same TM though) for the partition
-		DefaultShuffleDeploymentDescriptor sdd =
+		NettyShuffleDescriptor sdd =
 			createSddWithLocalConnection(new IntermediateResultPartitionID(), new ResourceID("remote"), dataPort);
 		TaskDeploymentDescriptor tdd = createReceiver(sdd, new ResourceID("local"));
 		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
@@ -420,7 +420,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 			taskRunningFuture.get();
 
 			ResourceID producerLocation = new ResourceID("local");
-			DefaultShuffleDeploymentDescriptor sdd =
+			NettyShuffleDescriptor sdd =
 				createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 
 			CompletableFuture<Acknowledge> updateFuture = tmGateway.updatePartitions(
@@ -442,7 +442,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	@Test(timeout = 10000L)
 	public void testLocalPartitionNotFound() throws Exception {
 		ResourceID producerLocation = new ResourceID("local");
-		DefaultShuffleDeploymentDescriptor sdd =
+		NettyShuffleDescriptor sdd =
 			createSddWithLocalConnection(new IntermediateResultPartitionID(), producerLocation, 10000);
 		TaskDeploymentDescriptor tdd = createReceiver(sdd, producerLocation);
 		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
@@ -496,7 +496,7 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 		// operators
 		configuration.setString(TaskManagerOptions.MEMORY_SEGMENT_SIZE, "4096");
 
-		DefaultShuffleDeploymentDescriptor sdd =
+		NettyShuffleDescriptor sdd =
 			createSddWithLocalConnection(new IntermediateResultPartitionID(), new ResourceID("local"), 10000);
 		TaskDeploymentDescriptor tdd = createSender(sdd, TestingAbstractInvokables.TestInvokableRecordCancel.class);
 		ExecutionAttemptID eid = tdd.getExecutionAttemptId();
@@ -673,15 +673,15 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 		}
 	}
 
-	private TaskDeploymentDescriptor createSender(DefaultShuffleDeploymentDescriptor sdd) throws IOException {
+	private TaskDeploymentDescriptor createSender(NettyShuffleDescriptor sdd) throws IOException {
 		return createSender(sdd, TestingAbstractInvokables.Sender.class);
 	}
 
 	private TaskDeploymentDescriptor createSender(
-		DefaultShuffleDeploymentDescriptor sdd,
-		Class<? extends AbstractInvokable> abstractInvokable) throws IOException {
-
-		return createTestTaskDeploymentDescriptor("Sender",
+			NettyShuffleDescriptor sdd,
+			Class<? extends AbstractInvokable> abstractInvokable) throws IOException {
+		return createTestTaskDeploymentDescriptor(
+			"Sender",
 			sdd.getResultPartitionID().getProducerId(),
 			abstractInvokable,
 			1,
@@ -690,9 +690,10 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	}
 
 	private TaskDeploymentDescriptor createReceiver(
-		DefaultShuffleDeploymentDescriptor sdd, ResourceID location) throws IOException {
-
-		return createTestTaskDeploymentDescriptor("Receiver",
+			NettyShuffleDescriptor sdd,
+			ResourceID location) throws IOException {
+		return createTestTaskDeploymentDescriptor(
+			"Receiver",
 			new ExecutionAttemptID(),
 			TestingAbstractInvokables.Receiver.class,
 			1,

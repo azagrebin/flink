@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
  * Intermediate result partition registry to use in {@link org.apache.flink.runtime.jobmaster.JobMaster}.
  */
 public interface ShuffleMaster {
-	CompletableFuture<ShuffleDeploymentDescriptor> registerPartitionWithProducer(
-		PartitionShuffleDescriptor partitionShuffleDescriptor,
-		ProducerShuffleDescriptor producerShuffleDescriptor);
+	CompletableFuture<ShuffleDescriptor> registerPartitionWithProducer(
+		PartitionDescriptor partitionDescriptor,
+		ProducerDescriptor producerDescriptor);
 }

@@ -21,13 +21,14 @@ package org.apache.flink.runtime.deployment;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.NettyShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 
 import org.junit.Test;
 
@@ -56,27 +57,32 @@ public class ResultPartitionDeploymentDescriptorTest {
 		int numberOfSubpartitions = 24;
 		int connectionIndex = 10;
 
-		PartitionShuffleDescriptor psd = new PartitionShuffleDescriptor(
+		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
 			resultId,
 			partitionId,
 			partitionType,
-			numberOfSubpartitions,
 			numberOfSubpartitions,
 			connectionIndex);
 
 		ResourceID producerLocation = new ResourceID("producerLocation");
 		InetSocketAddress address = new InetSocketAddress("localhost", 10000);
 		ResultPartitionID resultPartitionID = new ResultPartitionID(partitionId, producerExecutionId);
-		ShuffleDeploymentDescriptor sdd = new DefaultShuffleDeploymentDescriptor(
-			producerLocation, address, resultPartitionID, connectionIndex);
+		ConnectionID connectionID = new ConnectionID(address, connectionIndex);
+		ShuffleDescriptor shuffleDescriptor = new NettyShuffleDescriptor(
+			producerLocation,
+			connectionID,
+			resultPartitionID);
 
-		ResultPartitionDeploymentDescriptor orig =
-				new ResultPartitionDeploymentDescriptor(psd, sdd, true);
+		ResultPartitionDeploymentDescriptor orig = new ResultPartitionDeploymentDescriptor(
+			partitionDescriptor,
+			shuffleDescriptor,
+			numberOfSubpartitions,
+			true);
 
 		ResultPartitionDeploymentDescriptor copy = CommonTestUtils.createCopySerializable(orig);
 
-		assertTrue(copy.getShuffleDeploymentDescriptor() instanceof DefaultShuffleDeploymentDescriptor);
-		DefaultShuffleDeploymentDescriptor copySdd = (DefaultShuffleDeploymentDescriptor) copy.getShuffleDeploymentDescriptor();
+		assertTrue(copy.getShuffleDescriptor() instanceof NettyShuffleDescriptor);
+		NettyShuffleDescriptor copySdd = (NettyShuffleDescriptor) copy.getShuffleDescriptor();
 		assertTrue(copySdd.isLocalTo(producerLocation));
 		assertEquals(address, copySdd.getConnectionId().getAddress());
 		assertEquals(connectionIndex, copySdd.getConnectionId().getConnectionIndex());

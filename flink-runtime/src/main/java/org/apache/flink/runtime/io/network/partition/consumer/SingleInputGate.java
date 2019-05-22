@@ -35,8 +35,8 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputChannel.Buffe
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.NettyShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 import org.apache.flink.runtime.taskmanager.TaskActions;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.function.SupplierWithException;
@@ -55,7 +55,6 @@ import java.util.Optional;
 import java.util.Timer;
 import java.util.concurrent.CompletableFuture;
 
-import static org.apache.flink.runtime.io.network.partition.consumer.LocalInputChannel.isChannelLocal;
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 import static org.apache.flink.util.Preconditions.checkState;
@@ -335,23 +334,30 @@ public class SingleInputGate extends InputGate {
 				return;
 			}
 
-			ShuffleDeploymentDescriptor sdd = partitionInfo.getShuffleDeploymentDescriptor();
-			Preconditions.checkArgument(sdd instanceof DefaultShuffleDeploymentDescriptor,
-				"Tried to update unknown channel with unknown ShuffleDeploymentDescriptor %s.",
-				sdd.getClass().getName());
-			DefaultShuffleDeploymentDescriptor defaultSdd = (DefaultShuffleDeploymentDescriptor) sdd;
+			ShuffleDescriptor shuffleDescriptor = partitionInfo.getShuffleDescriptor();
+			Preconditions.checkArgument(shuffleDescriptor instanceof NettyShuffleDescriptor,
+				"Tried to update unknown channel with unknown ShuffleDescriptor %s.",
+				shuffleDescriptor.getClass().getName());
+			NettyShuffleDescriptor nettyShuffleDeploymentDescriptor =
+				(NettyShuffleDescriptor) shuffleDescriptor;
 
-			final IntermediateResultPartitionID partitionId = defaultSdd.getResultPartitionID().getPartitionId();
+			IntermediateResultPartitionID partitionId = nettyShuffleDeploymentDescriptor.getResultPartitionID().getPartitionId();
 
 			InputChannel current = inputChannels.get(partitionId);
 
 			if (current instanceof UnknownInputChannel) {
 				UnknownInputChannel unknownChannel = (UnknownInputChannel) current;
-				boolean isLocal = isChannelLocal(defaultSdd, partitionInfo.getConsumerResourceID());
-				InputChannel newChannel = isLocal ? unknownChannel.toLocalInputChannel() :
-					unknownChannel.toRemoteInputChannel(defaultSdd.getConnectionId());
-				if (!isLocal && this.isCreditBased) {
-					((RemoteInputChannel) newChannel).assignExclusiveSegments();
+				boolean isLocal = nettyShuffleDeploymentDescriptor.isLocalTo(partitionInfo.getConsumerResourceID());
+				InputChannel newChannel;
+				if (isLocal) {
+					newChannel = unknownChannel.toLocalInputChannel();
+				} else {
+					RemoteInputChannel remoteInputChannel =
+						unknownChannel.toRemoteInputChannel(nettyShuffleDeploymentDescriptor.getConnectionId());
+					if (isCreditBased) {
+						remoteInputChannel.assignExclusiveSegments();
+					}
+					newChannel = remoteInputChannel;
 				}
 				LOG.debug("{}: Updated unknown input channel to {}.", owningTaskName, newChannel);
 

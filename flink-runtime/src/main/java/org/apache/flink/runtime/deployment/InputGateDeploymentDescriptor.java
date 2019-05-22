@@ -23,10 +23,10 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ProducerDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 
 import javax.annotation.Nonnegative;
-import javax.annotation.Nonnull;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -47,39 +47,35 @@ public class InputGateDeploymentDescriptor implements Serializable {
 	 * intermediate result specified by this ID. This ID also identifies the input gate at the
 	 * consuming task.
 	 */
-	@Nonnull
 	private final IntermediateDataSetID consumedResultId;
 
 	/** The type of the partition the input gate is going to consume. */
-	@Nonnull
 	private final ResultPartitionType consumedPartitionType;
 
 	/**
 	 * The index of the consumed subpartition of each consumed partition. This index depends on the
 	 * {@link DistributionPattern} and the subtask indices of the producing and consuming task.
 	 */
+	@Nonnegative
 	private final int consumedSubpartitionIndex;
 
 	/** An input channel for each consumed subpartition. */
-	@Nonnull
-	private final ShuffleDeploymentDescriptor[] inputChannels;
+	private final ShuffleDescriptor[] inputChannels;
 
 	/**
 	 * {@link ResourceID} of partition consumer.
 	 *
 	 * <p>It can be used e.g. to compare with partition producer {@link ResourceID} in
-	 * {@link org.apache.flink.runtime.shuffle.ProducerShuffleDescriptor} to determine producer/consumer co-location.
+	 * {@link ProducerDescriptor} to determine producer/consumer co-location.
 	 */
-	@Nonnull
 	private final ResourceID consumerResourceId;
 
 	public InputGateDeploymentDescriptor(
-		@Nonnull IntermediateDataSetID consumedResultId,
-		@Nonnull ResultPartitionType consumedPartitionType,
-		@Nonnegative int consumedSubpartitionIndex,
-		@Nonnull ShuffleDeploymentDescriptor[] inputChannels,
-		@Nonnull ResourceID consumerResourceId) {
-
+			IntermediateDataSetID consumedResultId,
+			ResultPartitionType consumedPartitionType,
+			@Nonnegative int consumedSubpartitionIndex,
+			ShuffleDescriptor[] inputChannels,
+			ResourceID consumerResourceId) {
 		this.consumedResultId = consumedResultId;
 		this.consumedPartitionType = consumedPartitionType;
 		this.consumerResourceId = consumerResourceId;
@@ -87,7 +83,6 @@ public class InputGateDeploymentDescriptor implements Serializable {
 		this.inputChannels = inputChannels;
 	}
 
-	@Nonnull
 	public IntermediateDataSetID getConsumedResultId() {
 		return consumedResultId;
 	}
@@ -97,7 +92,6 @@ public class InputGateDeploymentDescriptor implements Serializable {
 	 *
 	 * @return consumed result partition type
 	 */
-	@Nonnull
 	public ResultPartitionType getConsumedPartitionType() {
 		return consumedPartitionType;
 	}
@@ -107,12 +101,10 @@ public class InputGateDeploymentDescriptor implements Serializable {
 		return consumedSubpartitionIndex;
 	}
 
-	@Nonnull
-	public ShuffleDeploymentDescriptor[] getShuffleDeploymentDescriptors() {
+	public ShuffleDescriptor[] getShuffleDeploymentDescriptors() {
 		return inputChannels;
 	}
 
-	@Nonnull
 	public ResourceID getConsumerResourceId() {
 		return consumerResourceId;
 	}

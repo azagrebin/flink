@@ -64,7 +64,7 @@ import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableExceptio
 import org.apache.flink.runtime.jobmaster.slotpool.Scheduler;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.query.KvStateLocationRegistry;
-import org.apache.flink.runtime.shuffle.DefaultShuffleMaster;
+import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
@@ -303,7 +303,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	private String jsonPlan;
 
 	/** Shuffle master to register partitions for task deployment. */
-	private final ShuffleMaster shuffleMaster = DefaultShuffleMaster.getInstance();
+	private final ShuffleMaster shuffleMaster = NettyShuffleMaster.INSTANCE;
 
 	// --------------------------------------------------------------------------------------------
 	//   Constructors

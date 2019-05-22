@@ -18,10 +18,20 @@
 
 package org.apache.flink.runtime.shuffle;
 
-import java.io.Serializable;
+import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
 /**
- * Interface for shuffle deployment descriptor of result partition resource.
+ * Unknown {@link ShuffleDescriptor}.
  */
-public interface ShuffleDeploymentDescriptor extends Serializable {
+public final class UnknownShuffleDescriptor implements ShuffleDescriptor {
+
+	private final ResultPartitionID resultPartitionID;
+
+	public UnknownShuffleDescriptor(ResultPartitionID resultPartitionID) {
+		this.resultPartitionID = resultPartitionID;
+	}
+
+	public ResultPartitionID getResultPartitionID() {
+		return resultPartitionID;
+	}
 }

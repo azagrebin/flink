@@ -22,40 +22,29 @@ import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
-import javax.annotation.Nonnull;
-
-import java.net.InetSocketAddress;
-
 /**
- * Default implementation of {@link ShuffleDeploymentDescriptor} for {@link DefaultShuffleMaster}.
+ * Default implementation of {@link ShuffleDescriptor} for {@link NettyShuffleMaster}.
  */
-public class DefaultShuffleDeploymentDescriptor implements ShuffleDeploymentDescriptor {
-	@Nonnull
+public class NettyShuffleDescriptor implements ShuffleDescriptor {
 	private final ResourceID producerResourceID;
 
-	@Nonnull
 	private final ConnectionID producerConnection;
 
-	@Nonnull
 	private final ResultPartitionID resultPartitionID;
 
-	public DefaultShuffleDeploymentDescriptor(
-		@Nonnull ResourceID producerResourceID,
-		@Nonnull InetSocketAddress producerAddress,
-		@Nonnull ResultPartitionID resultPartitionID,
-		int connectionIndex) {
-
+	public NettyShuffleDescriptor(
+			ResourceID producerResourceID,
+			ConnectionID producerConnection,
+			ResultPartitionID resultPartitionID) {
 		this.producerResourceID = producerResourceID;
-		this.producerConnection = new ConnectionID(producerAddress, connectionIndex);
+		this.producerConnection = producerConnection;
 		this.resultPartitionID = resultPartitionID;
 	}
 
-	@Nonnull
 	public ConnectionID getConnectionId() {
 		return producerConnection;
 	}
 
-	@Nonnull
 	public ResultPartitionID getResultPartitionID() {
 		return resultPartitionID;
 	}

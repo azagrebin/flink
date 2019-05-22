@@ -43,8 +43,8 @@ import org.apache.flink.runtime.io.network.partition.ResultSubpartitionView;
 import org.apache.flink.runtime.io.network.util.TestTaskEvent;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.UnknownShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.UnknownShuffleDescriptor;
 import org.apache.flink.runtime.taskmanager.NoOpTaskActions;
 
 import org.junit.Test;
@@ -309,17 +309,20 @@ public class SingleInputGateTest extends InputGateTestBase {
 		};
 
 		ResourceID localLocation = new ResourceID("local");
-		ShuffleDeploymentDescriptor[] channelDescs = new ShuffleDeploymentDescriptor[]{
+		ShuffleDescriptor[] channelDescs = new ShuffleDescriptor[]{
 			// Local
 			createSddWithLocalConnection(partitionIds[0], localLocation, 10000),
 			// Remote
 			createSddWithLocalConnection(partitionIds[1], new ResourceID("remote"), 5000),
 			// Unknown
-			new UnknownShuffleDeploymentDescriptor(new ResultPartitionID(partitionIds[2], new ExecutionAttemptID()))};
+			new UnknownShuffleDescriptor(new ResultPartitionID(partitionIds[2], new ExecutionAttemptID()))};
 
-		InputGateDeploymentDescriptor gateDesc =
-			new InputGateDeploymentDescriptor(new IntermediateDataSetID(),
-				ResultPartitionType.PIPELINED, 0, channelDescs, localLocation);
+		InputGateDeploymentDescriptor gateDesc = new InputGateDeploymentDescriptor(
+			new IntermediateDataSetID(),
+			ResultPartitionType.PIPELINED,
+			0,
+			channelDescs,
+			localLocation);
 
 		int initialBackoff = 137;
 		int maxBackoff = 1001;
@@ -447,8 +450,10 @@ public class SingleInputGateTest extends InputGateTestBase {
 			}
 
 			// Trigger updates to remote input channel from unknown input channel
-			ShuffleDeploymentDescriptor sdd = createSddWithLocalConnection(
-				resultPartitionId.getPartitionId(), new ResourceID("remote"), 5000);
+			ShuffleDescriptor sdd = createSddWithLocalConnection(
+				resultPartitionId.getPartitionId(),
+				new ResourceID("remote"),
+				5000);
 			inputGate.updateInputChannel(new PartitionInfo(new IntermediateDataSetID(), new ResourceID("local"), sdd));
 
 			if (enableCreditBasedFlowControl) {
@@ -496,8 +501,10 @@ public class SingleInputGateTest extends InputGateTestBase {
 			ResourceID localLocation = new ResourceID("local");
 
 			// Trigger updates to remote input channel from unknown input channel
-			ShuffleDeploymentDescriptor remoteSdd = createSddWithLocalConnection(
-				remoteResultPartitionId.getPartitionId(), new ResourceID("remote"), 5000);
+			ShuffleDescriptor remoteSdd = createSddWithLocalConnection(
+				remoteResultPartitionId.getPartitionId(),
+				new ResourceID("remote"),
+				5000);
 			inputGate.updateInputChannel(new PartitionInfo(new IntermediateDataSetID(), localLocation, remoteSdd));
 
 			assertThat(inputGate.getInputChannels().get(remoteResultPartitionId.getPartitionId()),
@@ -506,7 +513,7 @@ public class SingleInputGateTest extends InputGateTestBase {
 				is(instanceOf((UnknownInputChannel.class))));
 
 			// Trigger updates to local input channel from unknown input channel
-			ShuffleDeploymentDescriptor localSdd = createSddWithLocalConnection(
+			ShuffleDescriptor localSdd = createSddWithLocalConnection(
 				localResultPartitionId.getPartitionId(), localLocation, 10000);
 			inputGate.updateInputChannel(new PartitionInfo(new IntermediateDataSetID(), localLocation, localSdd));
 

@@ -21,61 +21,51 @@ package org.apache.flink.runtime.executiongraph;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptorFactory;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 
-import javax.annotation.Nonnull;
 import java.io.Serializable;
 
 /**
  * Contains information where to find a partition. The partition is defined by the
  * {@link IntermediateDataSetID} and the partition is specified by
- * {@link org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor}.
+ * {@link ShuffleDescriptor}.
  */
 public class PartitionInfo implements Serializable {
 
 	private static final long serialVersionUID = 1724490660830968430L;
 
-	@Nonnull
 	private final IntermediateDataSetID intermediateDataSetID;
 
-	@Nonnull
 	private final ResourceID consumerResourceID;
 
-	@Nonnull
-	private final ShuffleDeploymentDescriptor shuffleDeploymentDescriptor;
+	private final ShuffleDescriptor shuffleDescriptor;
 
 	public PartitionInfo(
-		@Nonnull IntermediateDataSetID intermediateResultPartitionID,
-		@Nonnull ResourceID consumerResourceID,
-		@Nonnull ShuffleDeploymentDescriptor shuffleDeploymentDescriptor) {
-
+			IntermediateDataSetID intermediateResultPartitionID,
+			ResourceID consumerResourceID,
+			ShuffleDescriptor shuffleDescriptor) {
 		this.intermediateDataSetID = intermediateResultPartitionID;
 		this.consumerResourceID = consumerResourceID;
-		this.shuffleDeploymentDescriptor = shuffleDeploymentDescriptor;
+		this.shuffleDescriptor = shuffleDescriptor;
 	}
 
-	@Nonnull
 	public IntermediateDataSetID getIntermediateDataSetID() {
 		return intermediateDataSetID;
 	}
 
-	@Nonnull
 	public ResourceID getConsumerResourceID() {
 		return consumerResourceID;
 	}
 
-	@Nonnull
-	public ShuffleDeploymentDescriptor getShuffleDeploymentDescriptor() {
-		return shuffleDeploymentDescriptor;
+	public ShuffleDescriptor getShuffleDescriptor() {
+		return shuffleDescriptor;
 	}
-
-	// ------------------------------------------------------------------------
 
 	static PartitionInfo fromEdge(ExecutionEdge executionEdge) {
 		IntermediateDataSetID intermediateDataSetID = executionEdge.getSource().getIntermediateResult().getId();
 		ResourceID consumerResourceID = executionEdge.getTarget().getCurrentExecutionAttempt()
 			.getAssignedResource().getTaskManagerLocation().getResourceID();
-		ShuffleDeploymentDescriptor sdd = TaskDeploymentDescriptorFactory.getKnownConsumedPartitionSdd(executionEdge);
+		ShuffleDescriptor sdd = TaskDeploymentDescriptorFactory.getKnownConsumedPartitionShuffleDeploymentDescriptor(executionEdge);
 		return new PartitionInfo(intermediateDataSetID, consumerResourceID, sdd);
 	}
 }

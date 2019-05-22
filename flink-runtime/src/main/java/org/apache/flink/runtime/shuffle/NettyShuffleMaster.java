@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.shuffle;
 
+import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 
 import java.util.concurrent.CompletableFuture;
@@ -25,28 +26,23 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Default {@link ShuffleMaster} for netty and local file based shuffle implementation.
  */
-public class DefaultShuffleMaster implements ShuffleMaster {
-	private static final ShuffleMaster INSTANCE = new DefaultShuffleMaster();
-
-	public static ShuffleMaster getInstance() {
-		return INSTANCE;
-	}
-
-	private DefaultShuffleMaster() {
-	}
+public enum NettyShuffleMaster implements ShuffleMaster {
+	INSTANCE;
 
 	@Override
-	public CompletableFuture<ShuffleDeploymentDescriptor> registerPartitionWithProducer(
-		PartitionShuffleDescriptor partitionShuffleDescriptor,
-		ProducerShuffleDescriptor producerShuffleDescriptor) {
-
+	public CompletableFuture<ShuffleDescriptor> registerPartitionWithProducer(
+			PartitionDescriptor partitionDescriptor,
+			ProducerDescriptor producerDescriptor) {
 		ResultPartitionID resultPartitionID = new ResultPartitionID(
-			partitionShuffleDescriptor.getPartitionId(), producerShuffleDescriptor.getProducerExecutionId());
-
-		return CompletableFuture.completedFuture(new DefaultShuffleDeploymentDescriptor(
-			producerShuffleDescriptor.getProducerResourceId(),
-			producerShuffleDescriptor.getAddress(),
-			resultPartitionID,
-			partitionShuffleDescriptor.getConnectionIndex()));
+			partitionDescriptor.getPartitionId(),
+			producerDescriptor.getProducerExecutionId());
+		ConnectionID connectionID = new ConnectionID(
+			producerDescriptor.getAddress(),
+			partitionDescriptor.getConnectionIndex());
+		NettyShuffleDescriptor shuffleDeploymentDescriptor = new NettyShuffleDescriptor(
+			producerDescriptor.getProducerResourceId(),
+			connectionID,
+			resultPartitionID);
+		return CompletableFuture.completedFuture(shuffleDeploymentDescriptor);
 	}
 }

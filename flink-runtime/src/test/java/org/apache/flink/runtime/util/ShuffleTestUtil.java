@@ -23,13 +23,14 @@ import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
+import org.apache.flink.runtime.io.network.ConnectionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
-import org.apache.flink.runtime.shuffle.DefaultShuffleDeploymentDescriptor;
-import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.NettyShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 
 import java.net.InetSocketAddress;
 
@@ -40,45 +41,60 @@ public class ShuffleTestUtil {
 	private ShuffleTestUtil() {
 	}
 
-	public static DefaultShuffleDeploymentDescriptor createSddWithLocalConnection(
-		IntermediateResultPartitionID partitionId, ResourceID producerLocation, int dataPort) {
-
+	public static NettyShuffleDescriptor createSddWithLocalConnection(
+			IntermediateResultPartitionID partitionId,
+			ResourceID producerLocation,
+			int dataPort) {
 		ExecutionAttemptID producerExecutionId = new ExecutionAttemptID();
 		ResultPartitionID resultPartitionID = new ResultPartitionID(partitionId, producerExecutionId);
 		return createSddWithLocalConnection(resultPartitionID, producerLocation, dataPort);
 	}
 
-	public static DefaultShuffleDeploymentDescriptor createSddWithLocalConnection(
-		ResultPartitionID resultPartitionID, ResourceID producerLocation, int dataPort) {
-
+	public static NettyShuffleDescriptor createSddWithLocalConnection(
+			ResultPartitionID resultPartitionID,
+			ResourceID producerLocation,
+			int dataPort) {
 		InetSocketAddress producerAddress = new InetSocketAddress("localhost", dataPort);
-		return new DefaultShuffleDeploymentDescriptor(producerLocation, producerAddress, resultPartitionID, 0);
+		ConnectionID connectionID = new ConnectionID(producerAddress, 0);
+		return new NettyShuffleDescriptor(producerLocation, connectionID, resultPartitionID);
 	}
 
 	public static ResultPartitionDeploymentDescriptor createResultPartitionDeploymentDescriptor(
-		DefaultShuffleDeploymentDescriptor sdd) {
-
-		PartitionShuffleDescriptor psd = new PartitionShuffleDescriptor(
-			new IntermediateDataSetID(), sdd.getResultPartitionID().getPartitionId(),
-			ResultPartitionType.PIPELINED, 1, 1, 0);
-		return new ResultPartitionDeploymentDescriptor(psd, sdd,  true);
+			NettyShuffleDescriptor shuffleDeploymentDescriptor) {
+		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
+			new IntermediateDataSetID(),
+			shuffleDeploymentDescriptor.getResultPartitionID().getPartitionId(),
+			ResultPartitionType.PIPELINED,
+			1,
+			0);
+		return new ResultPartitionDeploymentDescriptor(
+			partitionDescriptor,
+			shuffleDeploymentDescriptor,
+			1,
+			true);
 	}
 
 	public static InputGateDeploymentDescriptor createInputGateDeploymentDescriptor(
-		ShuffleDeploymentDescriptor sdd, ResourceID consumerLocation) {
-
-		return new InputGateDeploymentDescriptor(new IntermediateDataSetID(), ResultPartitionType.PIPELINED, 0,
-			new ShuffleDeploymentDescriptor[] { sdd }, consumerLocation);
+			ShuffleDescriptor shuffleDescriptor,
+			ResourceID consumerLocation) {
+		return new InputGateDeploymentDescriptor(
+			new IntermediateDataSetID(),
+			ResultPartitionType.PIPELINED,
+			0,
+			new ShuffleDescriptor[] {shuffleDescriptor},
+			consumerLocation);
 	}
 
 	public static PartitionInfo createLocalPartitionInfo(ResultPartitionID resultPartitionID) {
 		ResourceID location = new ResourceID("local");
-		ShuffleDeploymentDescriptor sdd =
+		ShuffleDescriptor shuffleDescriptor =
 			createSddWithLocalConnection(resultPartitionID, location, 10000);
-		return createPartitionInfo(sdd, location);
+		return createPartitionInfo(shuffleDescriptor, location);
 	}
 
-	public static PartitionInfo createPartitionInfo(ShuffleDeploymentDescriptor sdd, ResourceID consumerLocation) {
-		return new PartitionInfo(new IntermediateDataSetID(), consumerLocation, sdd);
+	public static PartitionInfo createPartitionInfo(
+			ShuffleDescriptor shuffleDescriptor,
+			ResourceID consumerLocation) {
+		return new PartitionInfo(new IntermediateDataSetID(), consumerLocation, shuffleDescriptor);
 	}
 }

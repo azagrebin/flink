@@ -309,7 +309,10 @@ public class ExecutionVertexDeploymentTest extends TestLogger {
 			vertex.getExecutionGraph().setScheduleMode(mode);
 
 			TaskDeploymentDescriptor tdd = tddFactory.createDeploymentDescriptor(
-				ResourceID.generate(), new AllocationID(), 0,null,
+				ResourceID.generate(),
+				new AllocationID(),
+				0,
+				null,
 				Execution.registerProducedPartitions(vertex, location, attemptID).get().values());
 
 			Collection<ResultPartitionDeploymentDescriptor> producedPartitions = tdd.getProducedPartitions();

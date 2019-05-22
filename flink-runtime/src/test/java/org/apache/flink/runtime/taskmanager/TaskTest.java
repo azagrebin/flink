@@ -66,8 +66,8 @@ import org.apache.flink.runtime.metrics.groups.TaskMetricGroup;
 import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.runtime.query.KvStateRegistry;
-import org.apache.flink.runtime.shuffle.PartitionShuffleDescriptor;
-import org.apache.flink.runtime.shuffle.ShuffleDeploymentDescriptor;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 import org.apache.flink.runtime.state.TestTaskStateManager;
 import org.apache.flink.runtime.taskexecutor.KvStateService;
 import org.apache.flink.runtime.taskexecutor.TestGlobalAggregateManager;
@@ -271,40 +271,49 @@ public class TaskTest extends TestLogger {
 
 	@Test
 	public void testExecutionFailsInNetworkRegistrationForPartitions() throws Exception {
+		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
+			new IntermediateDataSetID(),
+			new IntermediateResultPartitionID(),
+			ResultPartitionType.PIPELINED,
+			1,
+			1);
+		ShuffleDescriptor shuffleDescriptor = createSddWithLocalConnection(
+			new ResultPartitionID(),
+			ResourceID.generate(),
+			5000);
 		ResultPartitionDeploymentDescriptor dummyPartition = new ResultPartitionDeploymentDescriptor(
-			new PartitionShuffleDescriptor(
-				new IntermediateDataSetID(),
-				new IntermediateResultPartitionID(),
-				ResultPartitionType.PIPELINED,
-				1,
-				1,
-				1),
-			createSddWithLocalConnection(new ResultPartitionID(), ResourceID.generate(), 5000),
+			partitionDescriptor,
+			shuffleDescriptor,
+			1,
 			false);
 		testExecutionFailsInNetworkRegistration(Collections.singleton(dummyPartition), Collections.emptyList());
 	}
 
 	@Test
 	public void testExecutionFailsInNetworkRegistrationForGates() throws Exception {
-		ShuffleDeploymentDescriptor dummyChannel =
-			createSddWithLocalConnection(new ResultPartitionID(), ResourceID.generate(), 5000);
+		ShuffleDescriptor dummyChannel = createSddWithLocalConnection(
+			new ResultPartitionID(),
+			ResourceID.generate(),
+			5000);
 		InputGateDeploymentDescriptor dummyGate = new InputGateDeploymentDescriptor(
-			new IntermediateDataSetID(), ResultPartitionType.PIPELINED, 0,
-			new ShuffleDeploymentDescriptor[] { dummyChannel }, ResourceID.generate());
+			new IntermediateDataSetID(),
+			ResultPartitionType.PIPELINED,
+			0,
+			new ShuffleDescriptor[] { dummyChannel },
+			ResourceID.generate());
 		testExecutionFailsInNetworkRegistration(Collections.emptyList(), Collections.singleton(dummyGate));
 	}
 
 	private void testExecutionFailsInNetworkRegistration(
-		Collection<ResultPartitionDeploymentDescriptor> resultPartitions,
-		Collection<InputGateDeploymentDescriptor> inputGates) throws Exception {
+			Collection<ResultPartitionDeploymentDescriptor> resultPartitions,
+			Collection<InputGateDeploymentDescriptor> inputGates) throws Exception {
+		String errorMessage = "Network buffer pool has already been destroyed.";
 
-		final String errorMessage = "Network buffer pool has already been destroyed.";
+		ResultPartitionConsumableNotifier consumableNotifier = new NoOpResultPartitionConsumableNotifier();
+		PartitionProducerStateChecker partitionProducerStateChecker = mock(PartitionProducerStateChecker.class);
 
-		final ResultPartitionConsumableNotifier consumableNotifier = new NoOpResultPartitionConsumableNotifier();
-		final PartitionProducerStateChecker partitionProducerStateChecker = mock(PartitionProducerStateChecker.class);
-
-		final QueuedNoOpTaskManagerActions taskManagerActions = new QueuedNoOpTaskManagerActions();
-		final Task task = new TaskBuilder(networkEnvironment)
+		QueuedNoOpTaskManagerActions taskManagerActions = new QueuedNoOpTaskManagerActions();
+		Task task = new TaskBuilder(networkEnvironment)
 			.setTaskManagerActions(taskManagerActions)
 			.setConsumableNotifier(consumableNotifier)
 			.setPartitionProducerStateChecker(partitionProducerStateChecker)
@@ -323,8 +332,7 @@ public class TaskTest extends TestLogger {
 		assertTrue(task.isCanceledOrFailed());
 		assertTrue(task.getFailureCause().getMessage().contains(errorMessage));
 
-		taskManagerActions.validateListenerMessage(
-			ExecutionState.FAILED, task, new IllegalStateException(errorMessage));
+		taskManagerActions.validateListenerMessage(ExecutionState.FAILED, task, new IllegalStateException(errorMessage));
 	}
 
 	@Test
