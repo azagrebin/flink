@@ -107,7 +107,7 @@ public class TaskDeploymentDescriptorFactory {
 	 */
 	@VisibleForTesting
 	public TaskDeploymentDescriptor createDeploymentDescriptor(
-			ResourceID consumerResourceId,
+			ResourceID location,
 			AllocationID allocationID,
 			int targetSlotNumber,
 			@Nullable JobManagerTaskRestore taskRestore,
@@ -123,7 +123,7 @@ public class TaskDeploymentDescriptorFactory {
 			targetSlotNumber,
 			taskRestore,
 			new ArrayList<>(producedPartitions),
-			createInputGateDeploymentDescriptors(consumerResourceId, inputEdges, subtaskIndex, lazyScheduling));
+			createInputGateDeploymentDescriptors(location, inputEdges, subtaskIndex, lazyScheduling));
 	}
 
 	public static TaskDeploymentDescriptorFactory fromExecutionVertex(
@@ -161,7 +161,7 @@ public class TaskDeploymentDescriptorFactory {
 	}
 
 	private static List<InputGateDeploymentDescriptor> createInputGateDeploymentDescriptors(
-			ResourceID consumerResourceId,
+			ResourceID location,
 			ExecutionEdge[][] inputEdges,
 			int subtaskIndex,
 			boolean allowLazyDeployment) throws ExecutionGraphException {
@@ -186,7 +186,7 @@ public class TaskDeploymentDescriptorFactory {
 				partitionType,
 				queueToRequest,
 				consumedPartitionShuffleDescriptors,
-				consumerResourceId));
+				location));
 		}
 
 		return consumedPartitions;

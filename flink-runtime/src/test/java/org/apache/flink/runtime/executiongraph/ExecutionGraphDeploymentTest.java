@@ -240,7 +240,7 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 
 			assertEquals(10, iteratorProducedPartitions.next().getNumberOfSubpartitions());
 			assertEquals(10, iteratorProducedPartitions.next().getNumberOfSubpartitions());
-			assertEquals(10, iteratorConsumedPartitions.next().getShuffleDeploymentDescriptors().length);
+			assertEquals(10, iteratorConsumedPartitions.next().getInputChannelDescriptors().length);
 		}
 		catch (Exception e) {
 			e.printStackTrace();

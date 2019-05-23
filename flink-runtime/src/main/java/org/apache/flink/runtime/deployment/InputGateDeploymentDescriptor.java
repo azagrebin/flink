@@ -63,22 +63,22 @@ public class InputGateDeploymentDescriptor implements Serializable {
 	private final ShuffleDescriptor[] inputChannels;
 
 	/**
-	 * {@link ResourceID} of partition consumer.
+	 * {@link ResourceID} of partition consume to identify its location.
 	 *
 	 * <p>It can be used e.g. to compare with partition producer {@link ResourceID} in
 	 * {@link ProducerDescriptor} to determine producer/consumer co-location.
 	 */
-	private final ResourceID consumerResourceId;
+	private final ResourceID consumerLocation;
 
 	public InputGateDeploymentDescriptor(
 			IntermediateDataSetID consumedResultId,
 			ResultPartitionType consumedPartitionType,
 			@Nonnegative int consumedSubpartitionIndex,
 			ShuffleDescriptor[] inputChannels,
-			ResourceID consumerResourceId) {
+			ResourceID consumerLocation) {
 		this.consumedResultId = consumedResultId;
 		this.consumedPartitionType = consumedPartitionType;
-		this.consumerResourceId = consumerResourceId;
+		this.consumerLocation = consumerLocation;
 		this.consumedSubpartitionIndex = consumedSubpartitionIndex;
 		this.inputChannels = inputChannels;
 	}
@@ -101,12 +101,12 @@ public class InputGateDeploymentDescriptor implements Serializable {
 		return consumedSubpartitionIndex;
 	}
 
-	public ShuffleDescriptor[] getShuffleDeploymentDescriptors() {
+	public ShuffleDescriptor[] getInputChannelDescriptors() {
 		return inputChannels;
 	}
 
-	public ResourceID getConsumerResourceId() {
-		return consumerResourceId;
+	public ResourceID getConsumerLocation() {
+		return consumerLocation;
 	}
 
 	@Override
