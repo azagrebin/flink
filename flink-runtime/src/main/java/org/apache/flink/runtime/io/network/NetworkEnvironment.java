@@ -28,6 +28,7 @@ import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.metrics.InputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.InputBuffersGauge;
@@ -178,6 +179,7 @@ public class NetworkEnvironment {
 	//  Properties
 	// --------------------------------------------------------------------------------------------
 
+	@VisibleForTesting
 	public ResultPartitionManager getResultPartitionManager() {
 		return resultPartitionManager;
 	}
@@ -211,6 +213,18 @@ public class NetworkEnvironment {
 		for (ResultPartitionID partitionId : partitionIds) {
 			resultPartitionManager.releasePartition(partitionId, null);
 		}
+	}
+
+	/**
+	 * Query unreleased partitions.
+	 *
+	 * @return collection of partitions which still occupy some resources locally on this task executor
+	 * and have not been released yet. The partition can be released either with {@link ResultPartitionWriter#fail(Throwable)}
+	 * or {@link ResultPartitionWriter#finish()} and then with {@link ResultPartitionWriter#close()} after fail or finish.
+	 * Another way is to release them externally by calling {@code releasePartitions(Collection<ResultPartitionID>)}.
+	 */
+	public Collection<ResultPartitionID> getUnreleasedPartitions() {
+		return resultPartitionManager.getUnreleasedPartitions();
 	}
 
 	// --------------------------------------------------------------------------------------------
