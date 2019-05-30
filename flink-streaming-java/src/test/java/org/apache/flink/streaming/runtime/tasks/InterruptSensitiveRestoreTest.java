@@ -43,8 +43,8 @@ import org.apache.flink.runtime.executiongraph.JobInformation;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.NetworkEnvironmentBuilder;
+import org.apache.flink.runtime.io.network.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.partition.NoOpResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -181,7 +181,7 @@ public class InterruptSensitiveRestoreTest {
 			StreamStateHandle state,
 			int mode) throws IOException {
 
-		NetworkEnvironment networkEnvironment = new NetworkEnvironmentBuilder().build();
+		ShuffleEnvironment shuffleEnvironment = new NetworkEnvironmentBuilder().build();
 
 		Collection<KeyedStateHandle> keyedStateFromBackend = Collections.emptyList();
 		Collection<KeyedStateHandle> keyedStateFromStream = Collections.emptyList();
@@ -270,7 +270,7 @@ public class InterruptSensitiveRestoreTest {
 			0,
 			mock(MemoryManager.class),
 			mock(IOManager.class),
-			networkEnvironment,
+			shuffleEnvironment,
 			new KvStateService(new KvStateRegistry(), null, null),
 			mock(BroadcastVariableManager.class),
 			new TaskEventDispatcher(),

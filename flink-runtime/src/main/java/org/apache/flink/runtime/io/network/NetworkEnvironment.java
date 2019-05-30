@@ -29,7 +29,6 @@ import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
-import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.metrics.InputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.InputBuffersGauge;
@@ -51,7 +50,6 @@ import org.apache.flink.runtime.io.network.partition.consumer.InputGateID;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGateFactory;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.taskexecutor.TaskExecutor;
 import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
 import org.apache.flink.runtime.taskmanager.TaskActions;
 import org.apache.flink.util.Preconditions;
@@ -69,10 +67,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
- * Network I/O components of each {@link TaskExecutor} instance. The network environment contains
- * the data structures that keep track of all intermediate results and all data exchanges.
+ * The implementation of {@link ShuffleEnvironment} based on netty network communication, local memory and disk files.
+ * The network environment contains the data structures that keep track of all intermediate results
+ * and shuffle data exchanges.
  */
-public class NetworkEnvironment {
+public class NetworkEnvironment implements ShuffleEnvironment {
 
 	private static final Logger LOG = LoggerFactory.getLogger(NetworkEnvironment.class);
 
@@ -133,11 +132,11 @@ public class NetworkEnvironment {
 			maxJvmHeapMemory,
 			localTaskManagerCommunication,
 			taskManagerAddress);
-		return NetworkEnvironment.create(networkConfig, taskEventPublisher, metricGroup, ioManager);
+		return create(networkConfig, taskEventPublisher, metricGroup, ioManager);
 	}
 
 	public static NetworkEnvironment create(
-			NetworkEnvironmentConfiguration config,
+		NetworkEnvironmentConfiguration config,
 			TaskEventPublisher taskEventPublisher,
 			MetricGroup metricGroup,
 			IOManager ioManager) {
@@ -222,35 +221,14 @@ public class NetworkEnvironment {
 		return Optional.ofNullable(inputGatesById.get(id));
 	}
 
-	/**
-	 * Batch release intermediate result partitions.
-	 *
-	 * @param partitionIds partition ids to release
-	 */
+	@Override
 	public void releasePartitions(Collection<ResultPartitionID> partitionIds) {
 		for (ResultPartitionID partitionId : partitionIds) {
 			resultPartitionManager.releasePartition(partitionId, null);
 		}
 	}
 
-	/**
-	 * Report unreleased partitions.
-	 *
-	 * <p>Partitions are released in the following cases:
-	 * <ol>
-	 *     <li>{@link ResultPartitionWriter#fail(Throwable)} and {@link ResultPartitionWriter#close()} are called
-	 *     if the production has failed.</li>
-	 *     <li>{@link ResultPartitionWriter#finish()} and {@link ResultPartitionWriter#close()} are called
-	 *     if the production is done. The actual release can take some time
-	 *     if 'the end of consumption' confirmation is being awaited implicitly
-	 *     or the partition is later released by {@code releasePartitions(Collection<ResultPartitionID>)}.</li>
-	 *     <li>{@code releasePartitions(Collection<ResultPartitionID>)} is called,
-	 *     e.g. when the production is done but the final release happens externally.</li>
-	 * </ol>
-	 *
-	 * @return collection of partitions which still occupy some resources locally on this task executor
-	 * and have been not released yet.
-	 */
+	@Override
 	public Collection<ResultPartitionID> getUnreleasedPartitions() {
 		return resultPartitionManager.getUnreleasedPartitions();
 	}
@@ -259,15 +237,16 @@ public class NetworkEnvironment {
 	//  Create Output Writers and Input Readers
 	// --------------------------------------------------------------------------------------------
 
+	@Override
 	public ResultPartition[] createResultPartitionWriters(
-			String taskName,
-			JobID jobId,
-			ExecutionAttemptID executionId,
-			TaskActions taskActions,
-			ResultPartitionConsumableNotifier partitionConsumableNotifier,
-			Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
-			MetricGroup outputGroup,
-			MetricGroup buffersGroup) {
+		String taskName,
+		JobID jobId,
+		ExecutionAttemptID executionAttemptID,
+		TaskActions taskActions,
+		ResultPartitionConsumableNotifier partitionConsumableNotifier,
+		Collection<ResultPartitionDeploymentDescriptor> resultPartitionDeploymentDescriptors,
+		MetricGroup outputGroup,
+		MetricGroup buffersGroup) {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");
 
@@ -275,7 +254,7 @@ public class NetworkEnvironment {
 			int counter = 0;
 			for (ResultPartitionDeploymentDescriptor rpdd : resultPartitionDeploymentDescriptors) {
 				resultPartitions[counter++] = resultPartitionFactory.create(
-					taskName, taskActions, jobId, executionId, rpdd, partitionConsumableNotifier);
+					taskName, taskActions, jobId, executionAttemptID, rpdd, partitionConsumableNotifier);
 			}
 
 			registerOutputMetrics(outputGroup, buffersGroup, resultPartitions);
@@ -283,15 +262,16 @@ public class NetworkEnvironment {
 		}
 	}
 
+	@Override
 	public SingleInputGate[] createInputGates(
-			String taskName,
-			ExecutionAttemptID executionId,
-			PartitionProducerStateProvider partitionProducerStateProvider,
-			Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
-			MetricGroup parentGroup,
-			MetricGroup inputGroup,
-			MetricGroup buffersGroup,
-			Counter numBytesInCounter) {
+		String taskName,
+		ExecutionAttemptID executionAttemptID,
+		PartitionProducerStateProvider partitionProducerStateProvider,
+		Collection<InputGateDeploymentDescriptor> inputGateDeploymentDescriptors,
+		MetricGroup parentGroup,
+		MetricGroup inputGroup,
+		MetricGroup buffersGroup,
+		Counter numBytesInCounter) {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");
 
@@ -305,7 +285,7 @@ public class NetworkEnvironment {
 					partitionProducerStateProvider,
 					inputChannelMetrics,
 					numBytesInCounter);
-				InputGateID id = new InputGateID(igdd.getConsumedResultId(), executionId);
+				InputGateID id = new InputGateID(igdd.getConsumedResultId(), executionAttemptID);
 				inputGatesById.put(id, inputGate);
 				inputGate.getCloseFuture().thenRun(() -> inputGatesById.remove(id));
 				inputGates[counter++] = inputGate;
@@ -332,19 +312,10 @@ public class NetworkEnvironment {
 		buffersGroup.gauge(METRIC_INPUT_POOL_USAGE, new InputBufferPoolUsageGauge(inputGates));
 	}
 
-	/**
-	 * Update consuming gate with newly available partition.
-	 *
-	 * @param consumerID execution id of consumer to identify belonging to it gate.
-	 * @param partitionInfo telling where the partition can be retrieved from
-	 * @return {@code true} if the partition has been updated or {@code false} if the partition is not available anymore.
-	 * @throws IOException IO problem by the update
-	 * @throws InterruptedException potentially blocking operation was interrupted
-	 * @throws IllegalStateException the input gate with the id from the partitionInfo is not found
-	 */
+	@Override
 	public boolean updatePartitionInfo(
-			ExecutionAttemptID consumerID,
-			PartitionInfo partitionInfo) throws IOException, InterruptedException {
+		ExecutionAttemptID consumerID,
+		PartitionInfo partitionInfo) throws IOException, InterruptedException {
 		IntermediateDataSetID intermediateResultPartitionID = partitionInfo.getIntermediateDataSetID();
 		InputGateID id = new InputGateID(intermediateResultPartitionID, consumerID);
 		SingleInputGate inputGate = inputGatesById.get(id);
@@ -360,6 +331,7 @@ public class NetworkEnvironment {
 	 *
 	 * @return a port to connect to the task executor for shuffle data exchange, -1 if only local connection is possible.
 	 */
+	@Override
 	public int start() throws IOException {
 		synchronized (lock) {
 			Preconditions.checkState(!isShutdown, "The NetworkEnvironment has already been shut down.");
@@ -378,6 +350,7 @@ public class NetworkEnvironment {
 	/**
 	 * Tries to shut down all network I/O components.
 	 */
+	@Override
 	public void shutdown() {
 		synchronized (lock) {
 			if (isShutdown) {
@@ -419,6 +392,7 @@ public class NetworkEnvironment {
 		}
 	}
 
+	@Override
 	public boolean isShutdown() {
 		synchronized (lock) {
 			return isShutdown;

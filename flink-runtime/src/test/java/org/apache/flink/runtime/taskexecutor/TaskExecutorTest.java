@@ -57,8 +57,8 @@ import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
 import org.apache.flink.runtime.io.network.NetworkEnvironmentBuilder;
+import org.apache.flink.runtime.io.network.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.partition.NoOpResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
@@ -197,7 +197,7 @@ public class TaskExecutorTest extends TestLogger {
 
 	private SettableLeaderRetrievalService jobManagerLeaderRetriever;
 
-	private NetworkEnvironment networkEnvironment;
+	private ShuffleEnvironment shuffleEnvironment;
 
 	@Before
 	public void setup() throws IOException {
@@ -223,7 +223,7 @@ public class TaskExecutorTest extends TestLogger {
 		haServices.setResourceManagerLeaderRetriever(resourceManagerLeaderRetriever);
 		haServices.setJobMasterLeaderRetriever(jobId, jobManagerLeaderRetriever);
 
-		networkEnvironment = new NetworkEnvironmentBuilder().build();
+		shuffleEnvironment = new NetworkEnvironmentBuilder().build();
 	}
 
 	@After
@@ -243,8 +243,8 @@ public class TaskExecutorTest extends TestLogger {
 			dummyBlobCacheService = null;
 		}
 
-		if (networkEnvironment != null) {
-			networkEnvironment.shutdown();
+		if (shuffleEnvironment != null) {
+			shuffleEnvironment.shutdown();
 		}
 
 		testingFatalErrorHandler.rethrowError();
@@ -270,7 +270,7 @@ public class TaskExecutorTest extends TestLogger {
 			MemoryType.HEAP,
 			false);
 
-		networkEnvironment.start();
+		shuffleEnvironment.start();
 
 		final KvStateService kvStateService = new KvStateService(new KvStateRegistry(), null, null);
 		kvStateService.start();
@@ -279,7 +279,7 @@ public class TaskExecutorTest extends TestLogger {
 			.setTaskManagerLocation(taskManagerLocation)
 			.setMemoryManager(memoryManager)
 			.setIoManager(ioManager)
-			.setNetworkEnvironment(networkEnvironment)
+			.setShuffleEnvironment(shuffleEnvironment)
 			.setKvStateService(kvStateService)
 			.setTaskSlotTable(taskSlotTable)
 			.setJobLeaderService(jobLeaderService)
@@ -295,7 +295,7 @@ public class TaskExecutorTest extends TestLogger {
 		}
 
 		assertThat(memoryManager.isShutdown(), is(true));
-		assertThat(networkEnvironment.isShutdown(), is(true));
+		assertThat(shuffleEnvironment.isShutdown(), is(true));
 		assertThat(ioManager.isProperlyShutDown(), is(true));
 		assertThat(kvStateService.isShutdown(), is(true));
 	}
@@ -709,7 +709,7 @@ public class TaskExecutorTest extends TestLogger {
 		final TaskExecutorLocalStateStoresManager localStateStoresManager = createTaskExecutorLocalStateStoresManager();
 
 		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
-			.setNetworkEnvironment(networkEnvironment)
+			.setShuffleEnvironment(shuffleEnvironment)
 			.setTaskSlotTable(taskSlotTable)
 			.setJobManagerTable(jobManagerTable)
 			.setTaskStateManager(localStateStoresManager)
@@ -967,7 +967,7 @@ public class TaskExecutorTest extends TestLogger {
 
 		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
 			.setTaskManagerLocation(taskManagerLocation)
-			.setNetworkEnvironment(networkEnvironment)
+			.setShuffleEnvironment(shuffleEnvironment)
 			.setTaskSlotTable(taskSlotTable)
 			.setJobLeaderService(jobLeaderService)
 			.setJobManagerTable(jobManagerTable)

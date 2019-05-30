@@ -49,14 +49,13 @@ import org.apache.flink.runtime.executiongraph.JobInformation;
 import org.apache.flink.runtime.executiongraph.TaskInformation;
 import org.apache.flink.runtime.filecache.FileCache;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
+import org.apache.flink.runtime.io.network.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.io.network.api.writer.ResultPartitionWriter;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
-import org.apache.flink.runtime.io.network.partition.consumer.SingleInputGate;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
@@ -192,7 +191,7 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 
 	private final ResultPartitionWriter[] producedPartitions;
 
-	private final SingleInputGate[] inputGates;
+	private final InputGate[] inputGates;
 
 	/** Connection to the task manager. */
 	private final TaskManagerActions taskManagerActions;
@@ -284,7 +283,7 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 		int targetSlotNumber,
 		MemoryManager memManager,
 		IOManager ioManager,
-		NetworkEnvironment networkEnvironment,
+		ShuffleEnvironment shuffleEnvironment,
 		KvStateService kvStateService,
 		BroadcastVariableManager bcVarManager,
 		TaskEventDispatcher taskEventDispatcher,
@@ -369,7 +368,7 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 		final MetricGroup inputGroup = networkGroup.addGroup("Input");
 
 		// produced intermediate result partitions
-		this.producedPartitions = networkEnvironment.createResultPartitionWriters(
+		this.producedPartitions = shuffleEnvironment.createResultPartitionWriters(
 			taskNameWithSubtaskAndId,
 			jobId,
 			executionId,
@@ -380,7 +379,7 @@ public class Task implements Runnable, TaskActions, PartitionProducerStateProvid
 			buffersGroup);
 
 		// consumed intermediate result partitions
-		this.inputGates = networkEnvironment.createInputGates(
+		this.inputGates = shuffleEnvironment.createInputGates(
 			taskNameWithSubtaskAndId,
 			executionId,
 			this,

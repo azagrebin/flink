@@ -32,6 +32,7 @@ import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.NetworkEnvironment;
+import org.apache.flink.runtime.io.network.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
@@ -58,7 +59,7 @@ import static org.apache.flink.configuration.MemorySize.MemoryUnit.MEGA_BYTES;
 
 /**
  * Container for {@link TaskExecutor} services such as the {@link MemoryManager}, {@link IOManager},
- * {@link NetworkEnvironment}. All services are exclusive to a single {@link TaskExecutor}.
+ * {@link ShuffleEnvironment}. All services are exclusive to a single {@link TaskExecutor}.
  * Consequently, the respective {@link TaskExecutor} is responsible for closing them.
  */
 public class TaskManagerServices {
@@ -71,7 +72,7 @@ public class TaskManagerServices {
 	private final TaskManagerLocation taskManagerLocation;
 	private final MemoryManager memoryManager;
 	private final IOManager ioManager;
-	private final NetworkEnvironment networkEnvironment;
+	private final ShuffleEnvironment shuffleEnvironment;
 	private final KvStateService kvStateService;
 	private final BroadcastVariableManager broadcastVariableManager;
 	private final TaskSlotTable taskSlotTable;
@@ -84,7 +85,7 @@ public class TaskManagerServices {
 		TaskManagerLocation taskManagerLocation,
 		MemoryManager memoryManager,
 		IOManager ioManager,
-		NetworkEnvironment networkEnvironment,
+		ShuffleEnvironment shuffleEnvironment,
 		KvStateService kvStateService,
 		BroadcastVariableManager broadcastVariableManager,
 		TaskSlotTable taskSlotTable,
@@ -96,7 +97,7 @@ public class TaskManagerServices {
 		this.taskManagerLocation = Preconditions.checkNotNull(taskManagerLocation);
 		this.memoryManager = Preconditions.checkNotNull(memoryManager);
 		this.ioManager = Preconditions.checkNotNull(ioManager);
-		this.networkEnvironment = Preconditions.checkNotNull(networkEnvironment);
+		this.shuffleEnvironment = Preconditions.checkNotNull(shuffleEnvironment);
 		this.kvStateService = Preconditions.checkNotNull(kvStateService);
 		this.broadcastVariableManager = Preconditions.checkNotNull(broadcastVariableManager);
 		this.taskSlotTable = Preconditions.checkNotNull(taskSlotTable);
@@ -118,8 +119,8 @@ public class TaskManagerServices {
 		return ioManager;
 	}
 
-	public NetworkEnvironment getNetworkEnvironment() {
-		return networkEnvironment;
+	public ShuffleEnvironment getShuffleEnvironment() {
+		return shuffleEnvironment;
 	}
 
 	public KvStateService getKvStateService() {
@@ -184,7 +185,7 @@ public class TaskManagerServices {
 		}
 
 		try {
-			networkEnvironment.shutdown();
+			shuffleEnvironment.shutdown();
 		} catch (Exception e) {
 			exception = ExceptionUtils.firstOrSuppressed(e, exception);
 		}
@@ -251,7 +252,7 @@ public class TaskManagerServices {
 		// start the I/O manager, it will create some temp directories.
 		final IOManager ioManager = new IOManagerAsync(taskManagerServicesConfiguration.getTmpDirPaths());
 
-		final NetworkEnvironment network = NetworkEnvironment.fromConfiguration(
+		final ShuffleEnvironment shuffleEnvironment = NetworkEnvironment.fromConfiguration(
 			configuration,
 			taskEventDispatcher,
 			taskManagerMetricGroup,
@@ -259,7 +260,7 @@ public class TaskManagerServices {
 			maxJvmHeapMemory,
 			localCommunicationOnly,
 			taskManagerServicesConfiguration.getTaskManagerAddress());
-		int dataPort = network.start();
+		int dataPort = shuffleEnvironment.start();
 
 		final KvStateService kvStateService = KvStateService.fromConfiguration(taskManagerServicesConfiguration);
 		kvStateService.start();
@@ -307,7 +308,7 @@ public class TaskManagerServices {
 			taskManagerLocation,
 			memoryManager,
 			ioManager,
-			network,
+			shuffleEnvironment,
 			kvStateService,
 			broadcastVariableManager,
 			taskSlotTable,
