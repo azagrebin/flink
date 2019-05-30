@@ -19,8 +19,8 @@
 package org.apache.flink.runtime.taskexecutor;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.NetworkEnvironmentOptions;
-import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
+import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
+import org.apache.flink.runtime.taskmanager.NettyShuffleEnvironmentConfiguration;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
@@ -39,22 +39,22 @@ public class TaskManagerServicesConfigurationTest extends TestLogger {
 	/**
 	 * Verifies that {@link TaskManagerServicesConfiguration#fromConfiguration(Configuration, InetAddress)}
 	 * returns the correct result for new configurations via
-	 * {@link NetworkEnvironmentOptions#NETWORK_REQUEST_BACKOFF_INITIAL},
-	 * {@link NetworkEnvironmentOptions#NETWORK_REQUEST_BACKOFF_MAX},
-	 * {@link NetworkEnvironmentOptions#NETWORK_BUFFERS_PER_CHANNEL} and
-	 * {@link NetworkEnvironmentOptions#NETWORK_EXTRA_BUFFERS_PER_GATE}
+	 * {@link NettyShuffleEnvironmentOptions#NETWORK_REQUEST_BACKOFF_INITIAL},
+	 * {@link NettyShuffleEnvironmentOptions#NETWORK_REQUEST_BACKOFF_MAX},
+	 * {@link NettyShuffleEnvironmentOptions#NETWORK_BUFFERS_PER_CHANNEL} and
+	 * {@link NettyShuffleEnvironmentOptions#NETWORK_EXTRA_BUFFERS_PER_GATE}
 	 */
 	@Test
 	public void testNetworkRequestBackoffAndBuffers() throws Exception {
 
 		// set some non-default values
 		final Configuration config = new Configuration();
-		config.setInteger(NetworkEnvironmentOptions.NETWORK_REQUEST_BACKOFF_INITIAL, 100);
-		config.setInteger(NetworkEnvironmentOptions.NETWORK_REQUEST_BACKOFF_MAX, 200);
-		config.setInteger(NetworkEnvironmentOptions.NETWORK_BUFFERS_PER_CHANNEL, 10);
-		config.setInteger(NetworkEnvironmentOptions.NETWORK_EXTRA_BUFFERS_PER_GATE, 100);
+		config.setInteger(NettyShuffleEnvironmentOptions.NETWORK_REQUEST_BACKOFF_INITIAL, 100);
+		config.setInteger(NettyShuffleEnvironmentOptions.NETWORK_REQUEST_BACKOFF_MAX, 200);
+		config.setInteger(NettyShuffleEnvironmentOptions.NETWORK_BUFFERS_PER_CHANNEL, 10);
+		config.setInteger(NettyShuffleEnvironmentOptions.NETWORK_EXTRA_BUFFERS_PER_GATE, 100);
 
-		final NetworkEnvironmentConfiguration networkConfig = NetworkEnvironmentConfiguration.fromConfiguration(
+		final NettyShuffleEnvironmentConfiguration networkConfig = NettyShuffleEnvironmentConfiguration.fromConfiguration(
 			config,
 			MEM_SIZE_PARAM,
 			true,

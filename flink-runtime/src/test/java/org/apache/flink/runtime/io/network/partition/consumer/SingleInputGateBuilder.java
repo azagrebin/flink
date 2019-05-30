@@ -20,13 +20,13 @@ package org.apache.flink.runtime.io.network.partition.consumer;
 
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.SimpleCounter;
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
+import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider.ResponseHandle;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
+import org.apache.flink.runtime.taskmanager.NettyShuffleEnvironmentConfiguration;
 import org.apache.flink.util.function.SupplierWithException;
 
 import java.io.IOException;
@@ -79,8 +79,8 @@ public class SingleInputGateBuilder {
 		return this;
 	}
 
-	public SingleInputGateBuilder setupBufferPoolFactory(NetworkEnvironment environment) {
-		NetworkEnvironmentConfiguration config = environment.getConfiguration();
+	public SingleInputGateBuilder setupBufferPoolFactory(NettyShuffleEnvironment environment) {
+		NettyShuffleEnvironmentConfiguration config = environment.getConfiguration();
 		this.bufferPoolFactory = SingleInputGateFactory.createBufferPoolFactory(
 			environment.getNetworkBufferPool(),
 			config.isCreditBased(),

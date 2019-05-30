@@ -24,6 +24,7 @@ import org.apache.flink.runtime.deployment.InputChannelDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionLocation;
 import org.apache.flink.runtime.io.network.ConnectionManager;
+import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventPublisher;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferPoolFactory;
@@ -34,7 +35,7 @@ import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionManager;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
+import org.apache.flink.runtime.taskmanager.NettyShuffleEnvironmentConfiguration;
 import org.apache.flink.util.function.SupplierWithException;
 
 import org.slf4j.Logger;
@@ -48,7 +49,7 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
- * Factory for {@link SingleInputGate} to use in {@link org.apache.flink.runtime.io.network.NetworkEnvironment}.
+ * Factory for {@link SingleInputGate} to use in {@link NettyShuffleEnvironment}.
  */
 public class SingleInputGateFactory {
 	private static final Logger LOG = LoggerFactory.getLogger(SingleInputGate.class);
@@ -76,7 +77,7 @@ public class SingleInputGateFactory {
 	private final int floatingNetworkBuffersPerGate;
 
 	public SingleInputGateFactory(
-			@Nonnull NetworkEnvironmentConfiguration networkConfig,
+			@Nonnull NettyShuffleEnvironmentConfiguration networkConfig,
 			@Nonnull ConnectionManager connectionManager,
 			@Nonnull ResultPartitionManager partitionManager,
 			@Nonnull TaskEventPublisher taskEventPublisher,

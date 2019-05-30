@@ -18,7 +18,7 @@
 
 package org.apache.flink.runtime.io.network.partition.consumer;
 
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
+import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 
 import org.junit.runner.RunWith;
@@ -79,7 +79,7 @@ public abstract class InputGateTestBase {
 	}
 
 	protected SingleInputGate createInputGate(
-		NetworkEnvironment environment, int numberOfInputChannels, ResultPartitionType partitionType) {
+		NettyShuffleEnvironment environment, int numberOfInputChannels, ResultPartitionType partitionType) {
 
 		SingleInputGateBuilder builder = new SingleInputGateBuilder()
 			.setNumberOfChannels(numberOfInputChannels)

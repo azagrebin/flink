@@ -31,14 +31,14 @@ import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
-import org.apache.flink.runtime.io.network.NetworkEnvironment;
+import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.ShuffleEnvironment;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
-import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
+import org.apache.flink.runtime.taskmanager.NettyShuffleEnvironmentConfiguration;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.ConfigurationParserUtils;
 import org.apache.flink.util.ExceptionUtils;
@@ -252,7 +252,7 @@ public class TaskManagerServices {
 		// start the I/O manager, it will create some temp directories.
 		final IOManager ioManager = new IOManagerAsync(taskManagerServicesConfiguration.getTmpDirPaths());
 
-		final ShuffleEnvironment shuffleEnvironment = NetworkEnvironment.fromConfiguration(
+		final ShuffleEnvironment shuffleEnvironment = NettyShuffleEnvironment.fromConfiguration(
 			configuration,
 			taskEventDispatcher,
 			taskManagerMetricGroup,
@@ -423,7 +423,7 @@ public class TaskManagerServices {
 		Preconditions.checkArgument(totalJavaMemorySizeMB > 0);
 
 		// subtract the Java memory used for network buffers (always off-heap)
-		final long networkBufMB = NetworkEnvironmentConfiguration.calculateNetworkBufferMemory(
+		final long networkBufMB = NettyShuffleEnvironmentConfiguration.calculateNetworkBufferMemory(
 			totalJavaMemorySizeMB << 20, // megabytes to bytes
 			config) >> 20; // bytes to megabytes
 		final long remainingJavaMemorySizeMB = totalJavaMemorySizeMB - networkBufMB;

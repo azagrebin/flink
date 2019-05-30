@@ -23,6 +23,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
+import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.buffer.BufferPool;
 import org.apache.flink.runtime.io.network.buffer.BufferPoolFactory;
 import org.apache.flink.runtime.io.network.buffer.BufferPoolOwner;
@@ -40,7 +41,7 @@ import java.io.IOException;
 import java.util.Optional;
 
 /**
- * Factory for {@link ResultPartition} to use in {@link org.apache.flink.runtime.io.network.NetworkEnvironment}.
+ * Factory for {@link ResultPartition} to use in {@link NettyShuffleEnvironment}.
  */
 public class ResultPartitionFactory {
 	private static final Logger LOG = LoggerFactory.getLogger(ResultPartition.class);
