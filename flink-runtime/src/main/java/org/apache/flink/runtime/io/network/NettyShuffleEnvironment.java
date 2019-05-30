@@ -20,15 +20,12 @@ package org.apache.flink.runtime.io.network;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
-import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.executiongraph.PartitionInfo;
-import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.buffer.NetworkBufferPool;
 import org.apache.flink.runtime.io.network.metrics.InputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.InputBuffersGauge;
@@ -37,8 +34,6 @@ import org.apache.flink.runtime.io.network.metrics.InputGateMetrics;
 import org.apache.flink.runtime.io.network.metrics.OutputBufferPoolUsageGauge;
 import org.apache.flink.runtime.io.network.metrics.OutputBuffersGauge;
 import org.apache.flink.runtime.io.network.metrics.ResultPartitionMetrics;
-import org.apache.flink.runtime.io.network.netty.NettyConfig;
-import org.apache.flink.runtime.io.network.netty.NettyConnectionManager;
 import org.apache.flink.runtime.io.network.partition.PartitionProducerStateProvider;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionConsumableNotifier;
@@ -58,13 +53,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * The implementation of {@link ShuffleEnvironment} based on netty network communication, local memory and disk files.
@@ -74,10 +66,6 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class NettyShuffleEnvironment implements ShuffleEnvironment {
 
 	private static final Logger LOG = LoggerFactory.getLogger(NettyShuffleEnvironment.class);
-
-	private static final String METRIC_GROUP_NETWORK = "Network";
-	private static final String METRIC_TOTAL_MEMORY_SEGMENT = "TotalMemorySegments";
-	private static final String METRIC_AVAILABLE_MEMORY_SEGMENT = "AvailableMemorySegments";
 
 	private static final String METRIC_OUTPUT_QUEUE_LENGTH = "outputQueueLength";
 	private static final String METRIC_OUTPUT_POOL_USAGE = "outPoolUsage";
@@ -102,7 +90,7 @@ public class NettyShuffleEnvironment implements ShuffleEnvironment {
 
 	private boolean isShutdown;
 
-	private NettyShuffleEnvironment(
+	NettyShuffleEnvironment(
 			NettyShuffleEnvironmentConfiguration config,
 			NetworkBufferPool networkBufferPool,
 			ConnectionManager connectionManager,
@@ -117,79 +105,6 @@ public class NettyShuffleEnvironment implements ShuffleEnvironment {
 		this.resultPartitionFactory = resultPartitionFactory;
 		this.singleInputGateFactory = singleInputGateFactory;
 		this.isShutdown = false;
-	}
-
-	public static NettyShuffleEnvironment fromConfiguration(
-			Configuration configuration,
-			TaskEventPublisher taskEventPublisher,
-			MetricGroup metricGroup,
-			IOManager ioManager,
-			long maxJvmHeapMemory,
-			boolean localTaskManagerCommunication,
-			InetAddress taskManagerAddress) {
-		final NettyShuffleEnvironmentConfiguration networkConfig = NettyShuffleEnvironmentConfiguration.fromConfiguration(
-			configuration,
-			maxJvmHeapMemory,
-			localTaskManagerCommunication,
-			taskManagerAddress);
-		return create(networkConfig, taskEventPublisher, metricGroup, ioManager);
-	}
-
-	public static NettyShuffleEnvironment create(
-		NettyShuffleEnvironmentConfiguration config,
-			TaskEventPublisher taskEventPublisher,
-			MetricGroup metricGroup,
-			IOManager ioManager) {
-		checkNotNull(ioManager);
-		checkNotNull(taskEventPublisher);
-		checkNotNull(config);
-
-		NettyConfig nettyConfig = config.nettyConfig();
-
-		ResultPartitionManager resultPartitionManager = new ResultPartitionManager();
-
-		ConnectionManager connectionManager = nettyConfig != null ?
-			new NettyConnectionManager(resultPartitionManager, taskEventPublisher, nettyConfig, config.isCreditBased()) :
-			new LocalConnectionManager();
-
-		NetworkBufferPool networkBufferPool = new NetworkBufferPool(
-			config.numNetworkBuffers(),
-			config.networkBufferSize(),
-			config.networkBuffersPerChannel());
-
-		registerNetworkMetrics(metricGroup, networkBufferPool);
-
-		ResultPartitionFactory resultPartitionFactory = new ResultPartitionFactory(
-			resultPartitionManager,
-			ioManager,
-			networkBufferPool,
-			config.networkBuffersPerChannel(),
-			config.floatingNetworkBuffersPerGate());
-
-		SingleInputGateFactory singleInputGateFactory = new SingleInputGateFactory(
-			config,
-			connectionManager,
-			resultPartitionManager,
-			taskEventPublisher,
-			networkBufferPool);
-
-		return new NettyShuffleEnvironment(
-			config,
-			networkBufferPool,
-			connectionManager,
-			resultPartitionManager,
-			resultPartitionFactory,
-			singleInputGateFactory);
-	}
-
-	private static void registerNetworkMetrics(MetricGroup metricGroup, NetworkBufferPool networkBufferPool) {
-		checkNotNull(metricGroup);
-
-		MetricGroup networkGroup = metricGroup.addGroup(METRIC_GROUP_NETWORK);
-		networkGroup.<Integer, Gauge<Integer>>gauge(METRIC_TOTAL_MEMORY_SEGMENT,
-			networkBufferPool::getTotalNumberOfMemorySegments);
-		networkGroup.<Integer, Gauge<Integer>>gauge(METRIC_AVAILABLE_MEMORY_SEGMENT,
-			networkBufferPool::getNumberOfAvailableMemorySegments);
 	}
 
 	// --------------------------------------------------------------------------------------------

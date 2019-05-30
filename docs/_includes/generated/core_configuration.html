@@ -32,5 +32,10 @@
             <td style="word-wrap: break-word;">1</td>
             <td>Default parallelism for jobs.</td>
         </tr>
+        <tr>
+            <td><h5>shuffle.service.class.name</h5></td>
+            <td style="word-wrap: break-word;">"org.apache.flink.runtime.io.network.NettyShuffleService"</td>
+            <td>The full name of shuffle service implementation class. The default implentation uses netty network communication, local memory and file system on task executor</td>
+        </tr>
     </tbody>
 </table>

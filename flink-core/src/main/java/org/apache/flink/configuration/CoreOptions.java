@@ -306,4 +306,17 @@ public class CoreOptions {
 	public static ConfigOption<Long> fileSystemConnectionLimitStreamInactivityTimeout(String scheme) {
 		return ConfigOptions.key("fs." + scheme + ".limit.stream-timeout").defaultValue(0L);
 	}
+
+	// ------------------------------------------------------------------------
+	//  shuffle service
+	// ------------------------------------------------------------------------
+
+	/**
+	 * The shuffle service implementation class full name.
+	 */
+	public static final ConfigOption<String> SHUFFLE_SERVICE = ConfigOptions
+		.key("shuffle.service.class.name")
+		.defaultValue("org.apache.flink.runtime.io.network.NettyShuffleService")
+		.withDescription("The full name of shuffle service implementation class. " +
+			"The default implentation uses netty network communication, local memory and file system on task executor");
 }

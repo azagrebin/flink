@@ -31,9 +31,11 @@ import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
-import org.apache.flink.runtime.io.network.NettyShuffleEnvironment;
 import org.apache.flink.runtime.io.network.ShuffleEnvironment;
+import org.apache.flink.runtime.io.network.ShuffleEnvironment.ShuffleLocalContext;
+import org.apache.flink.runtime.io.network.ShuffleService;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
+import org.apache.flink.runtime.io.network.TaskEventPublisher;
 import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
@@ -43,6 +45,7 @@ import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.util.ConfigurationParserUtils;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.InstantiationUtil;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
@@ -55,6 +58,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
+import static org.apache.flink.configuration.CoreOptions.SHUFFLE_SERVICE;
 import static org.apache.flink.configuration.MemorySize.MemoryUnit.MEGA_BYTES;
 
 /**
@@ -252,14 +256,14 @@ public class TaskManagerServices {
 		// start the I/O manager, it will create some temp directories.
 		final IOManager ioManager = new IOManagerAsync(taskManagerServicesConfiguration.getTmpDirPaths());
 
-		final ShuffleEnvironment shuffleEnvironment = NettyShuffleEnvironment.fromConfiguration(
+		final ShuffleEnvironment shuffleEnvironment = loadShuffleEnvironmentImplementation(
 			configuration,
-			taskEventDispatcher,
+			taskManagerServicesConfiguration,
 			taskManagerMetricGroup,
-			ioManager,
 			maxJvmHeapMemory,
 			localCommunicationOnly,
-			taskManagerServicesConfiguration.getTaskManagerAddress());
+			taskEventDispatcher,
+			ioManager);
 		int dataPort = shuffleEnvironment.start();
 
 		final KvStateService kvStateService = KvStateService.fromConfiguration(taskManagerServicesConfiguration);
@@ -316,6 +320,53 @@ public class TaskManagerServices {
 			jobLeaderService,
 			taskStateManager,
 			taskEventDispatcher);
+	}
+
+	private static ShuffleEnvironment loadShuffleEnvironmentImplementation(
+			Configuration configuration,
+			TaskManagerServicesConfiguration taskManagerServicesConfiguration,
+			MetricGroup taskManagerMetricGroup,
+			long maxJvmHeapMemory,
+			boolean localCommunicationOnly,
+			TaskEventPublisher taskEventPublisher,
+			IOManager ioManager) throws FlinkException {
+		final ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+		final String shuffleServiceClassName = configuration.getString(SHUFFLE_SERVICE);
+
+		final ShuffleService shuffleService;
+
+		try {
+			shuffleService = InstantiationUtil.instantiate(
+				shuffleServiceClassName,
+				ShuffleService.class,
+				classLoader);
+		} catch (Exception e) {
+			throw new FlinkException(
+				String.format(
+					"Could not instantiate the ShuffleService '%s'. Please make sure that this class is on your class path.",
+					shuffleServiceClassName),
+				e);
+		}
+
+		final ShuffleLocalContext context = new ShuffleLocalContext(
+			taskManagerMetricGroup,
+			maxJvmHeapMemory,
+			localCommunicationOnly,
+			taskManagerServicesConfiguration.getTaskManagerAddress());
+
+		try {
+			return shuffleService.createShuffleEnvironment(
+				configuration,
+				context,
+				taskEventPublisher,
+				ioManager);
+		} catch (Exception e) {
+			throw new FlinkException(
+				String.format(
+					"Could not create the ShuffleEnvironment from the instantiated ShuffleService %s.",
+					shuffleServiceClassName),
+				e);
+		}
 	}
 
 	/**

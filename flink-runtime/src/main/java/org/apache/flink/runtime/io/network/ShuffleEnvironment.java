@@ -34,7 +34,10 @@ import org.apache.flink.runtime.taskexecutor.TaskExecutor;
 import org.apache.flink.runtime.taskmanager.TaskActions;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Collection;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
  * Interface for the implementation of shuffle service locally on task executor.
@@ -172,4 +175,41 @@ public interface ShuffleEnvironment {
 	boolean updatePartitionInfo(
 		ExecutionAttemptID consumerID,
 		PartitionInfo partitionInfo) throws IOException, InterruptedException;
+
+	/**
+	 * Task executor local context of shuffle service used to create {@link ShuffleEnvironment}.
+	 */
+	class ShuffleLocalContext {
+		private final MetricGroup metricGroup;
+		private final long maxJvmHeapMemory;
+		private final boolean localTaskManagerCommunication;
+		private final InetAddress taskManagerAddress;
+
+		public ShuffleLocalContext(
+				MetricGroup metricGroup,
+				long maxJvmHeapMemory,
+				boolean localTaskManagerCommunication,
+				InetAddress taskManagerAddress) {
+			this.metricGroup = checkNotNull(metricGroup);
+			this.maxJvmHeapMemory = maxJvmHeapMemory;
+			this.localTaskManagerCommunication = localTaskManagerCommunication;
+			this.taskManagerAddress = checkNotNull(taskManagerAddress);
+		}
+
+		public MetricGroup getMetricGroup() {
+			return metricGroup;
+		}
+
+		long getMaxJvmHeapMemory() {
+			return maxJvmHeapMemory;
+		}
+
+		boolean isLocalTaskManagerCommunication() {
+			return localTaskManagerCommunication;
+		}
+
+		InetAddress getTaskManagerAddress() {
+			return taskManagerAddress;
+		}
+	}
 }
