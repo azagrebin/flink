@@ -20,6 +20,7 @@ package org.apache.flink.runtime.taskexecutor;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.NetworkEnvironmentOptions;
+import org.apache.flink.runtime.taskmanager.NetworkEnvironmentConfiguration;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Test;
@@ -36,7 +37,7 @@ public class TaskManagerServicesConfigurationTest extends TestLogger {
 	private static final long MEM_SIZE_PARAM = 128L * 1024 * 1024;
 
 	/**
-	 * Verifies that {@link TaskManagerServicesConfiguration#fromConfiguration(Configuration, long, InetAddress, boolean)}
+	 * Verifies that {@link TaskManagerServicesConfiguration#fromConfiguration(Configuration, InetAddress)}
 	 * returns the correct result for new configurations via
 	 * {@link NetworkEnvironmentOptions#NETWORK_REQUEST_BACKOFF_INITIAL},
 	 * {@link NetworkEnvironmentOptions#NETWORK_REQUEST_BACKOFF_MAX},
@@ -53,12 +54,15 @@ public class TaskManagerServicesConfigurationTest extends TestLogger {
 		config.setInteger(NetworkEnvironmentOptions.NETWORK_BUFFERS_PER_CHANNEL, 10);
 		config.setInteger(NetworkEnvironmentOptions.NETWORK_EXTRA_BUFFERS_PER_GATE, 100);
 
-		TaskManagerServicesConfiguration tmConfig =
-			TaskManagerServicesConfiguration.fromConfiguration(config, MEM_SIZE_PARAM, InetAddress.getLoopbackAddress(), true);
+		final NetworkEnvironmentConfiguration networkConfig = NetworkEnvironmentConfiguration.fromConfiguration(
+			config,
+			MEM_SIZE_PARAM,
+			true,
+			InetAddress.getLoopbackAddress());
 
-		assertEquals(tmConfig.getNetworkConfig().partitionRequestInitialBackoff(), 100);
-		assertEquals(tmConfig.getNetworkConfig().partitionRequestMaxBackoff(), 200);
-		assertEquals(tmConfig.getNetworkConfig().networkBuffersPerChannel(), 10);
-		assertEquals(tmConfig.getNetworkConfig().floatingNetworkBuffersPerGate(), 100);
+		assertEquals(networkConfig.partitionRequestInitialBackoff(), 100);
+		assertEquals(networkConfig.partitionRequestMaxBackoff(), 200);
+		assertEquals(networkConfig.networkBuffersPerChannel(), 10);
+		assertEquals(networkConfig.floatingNetworkBuffersPerGate(), 100);
 	}
 }
