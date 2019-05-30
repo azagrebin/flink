@@ -216,12 +216,22 @@ public class NetworkEnvironment {
 	}
 
 	/**
-	 * Query unreleased partitions.
+	 * Report unreleased partitions.
+	 *
+	 * <p>Partitions are released in the following cases:
+	 * <ol>
+	 *     <li>{@link ResultPartitionWriter#fail(Throwable)} and {@link ResultPartitionWriter#close()} are called
+	 *     if the production has failed.</li>
+	 *     <li>{@link ResultPartitionWriter#finish()} and {@link ResultPartitionWriter#close()} are called
+	 *     if the production is done. The actual release can take some time
+	 *     if 'the end of consumption' confirmation is being awaited implicitly
+	 *     or the partition is later released by {@code releasePartitions(Collection<ResultPartitionID>)}.</li>
+	 *     <li>{@code releasePartitions(Collection<ResultPartitionID>)} is called,
+	 *     e.g. when the production is done but the final release happens externally.</li>
+	 * </ol>
 	 *
 	 * @return collection of partitions which still occupy some resources locally on this task executor
-	 * and have not been released yet. The partition can be released either with {@link ResultPartitionWriter#fail(Throwable)}
-	 * or {@link ResultPartitionWriter#finish()} and then with {@link ResultPartitionWriter#close()} after fail or finish.
-	 * Another way is to release them externally by calling {@code releasePartitions(Collection<ResultPartitionID>)}.
+	 * and have been not released yet.
 	 */
 	public Collection<ResultPartitionID> getUnreleasedPartitions() {
 		return resultPartitionManager.getUnreleasedPartitions();
