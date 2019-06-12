@@ -32,6 +32,7 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotPoolFactory;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 
 /**
  * Default implementation of the {@link JobMasterServiceFactory}.
@@ -106,6 +107,7 @@ public class DefaultJobMasterServiceFactory implements JobMasterServiceFactory {
 			fatalErrorHandler,
 			userCodeClassloader,
 			schedulerNGFactory,
-			shuffleMaster);
+			shuffleMaster,
+			new PartitionTable<>());
 	}
 }

@@ -79,6 +79,7 @@ import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.KeyGroupRange;
 import org.apache.flink.runtime.taskexecutor.AccumulatorReport;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -195,6 +196,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 	private Map<String, Object> accumulators;
 
+	private final PartitionTable<ResourceID> partitionTable;
+
 	// ------------------------------------------------------------------------
 
 	public JobMaster(
@@ -212,7 +215,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			FatalErrorHandler fatalErrorHandler,
 			ClassLoader userCodeLoader,
 			SchedulerNGFactory schedulerNGFactory,
-			ShuffleMaster<?> shuffleMaster) throws Exception {
+			ShuffleMaster<?> shuffleMaster,
+			PartitionTable<ResourceID> partitionTable) throws Exception {
 
 		super(rpcService, AkkaRpcServiceUtils.createRandomName(JOB_MANAGER_NAME));
 
@@ -229,6 +233,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 		this.schedulerNGFactory = checkNotNull(schedulerNGFactory);
 		this.heartbeatServices = checkNotNull(heartbeatServices);
 		this.jobMetricGroupFactory = checkNotNull(jobMetricGroupFactory);
+		this.partitionTable = checkNotNull(partitionTable);
 
 		final String jobName = jobGraph.getName();
 		final JobID jid = jobGraph.getJobID();
@@ -272,7 +277,8 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 			blobWriter,
 			jobManagerJobMetricGroup,
 			jobMasterConfiguration.getSlotRequestTimeout(),
-			shuffleMaster);
+			shuffleMaster,
+			partitionTable);
 	}
 
 	//----------------------------------------------------------------------------------------------

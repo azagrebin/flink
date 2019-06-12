@@ -41,6 +41,7 @@ import org.apache.flink.runtime.jobmaster.SlotContext;
 import org.apache.flink.runtime.jobmaster.SlotOwner;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
@@ -226,7 +227,8 @@ public class ExecutionVertexLocalityTest extends TestLogger {
 			VoidBlobWriter.getInstance(),
 			timeout,
 			log,
-			NettyShuffleMaster.INSTANCE);
+			NettyShuffleMaster.INSTANCE,
+			new PartitionTable<>());
 	}
 
 	private void initializeLocation(ExecutionVertex vertex, TaskManagerLocation location) throws Exception {

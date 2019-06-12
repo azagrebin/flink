@@ -36,6 +36,7 @@ import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.checkpoint.hooks.MasterHooks;
 import org.apache.flink.runtime.client.JobExecutionException;
 import org.apache.flink.runtime.client.JobSubmissionException;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategyLoader;
 import org.apache.flink.runtime.executiongraph.metrics.DownTimeGauge;
@@ -53,6 +54,7 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.util.DynamicCodeLoadingException;
 import org.apache.flink.util.SerializedValue;
 
@@ -94,7 +96,9 @@ public class ExecutionGraphBuilder {
 			BlobWriter blobWriter,
 			Time allocationTimeout,
 			Logger log,
-			ShuffleMaster<?> shuffleMaster) throws JobExecutionException, JobException {
+			ShuffleMaster<?> shuffleMaster,
+			PartitionTable<ResourceID> partitionTable)
+		throws JobExecutionException, JobException {
 
 		checkNotNull(jobGraph, "job graph cannot be null");
 
@@ -135,7 +139,8 @@ public class ExecutionGraphBuilder {
 					blobWriter,
 					allocationTimeout,
 					shuffleMaster,
-					forcePartitionReleaseOnConsumption);
+					forcePartitionReleaseOnConsumption,
+					partitionTable);
 		} catch (IOException e) {
 			throw new JobException("Could not create the ExecutionGraph.", e);
 		}

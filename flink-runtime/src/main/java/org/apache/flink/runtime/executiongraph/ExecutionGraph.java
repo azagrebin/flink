@@ -41,6 +41,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
 import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
 import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
@@ -68,6 +69,7 @@ import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.types.Either;
 import org.apache.flink.util.ExceptionUtils;
@@ -284,6 +286,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * strong reference to any user-defined classes.*/
 	private volatile ErrorInfo failureInfo;
 
+	private final PartitionTable<ResourceID> partitionTable;
+
 	/**
 	 * Future for an ongoing or completed scheduling action.
 	 */
@@ -409,7 +413,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			blobWriter,
 			allocationTimeout,
 			NettyShuffleMaster.INSTANCE,
-			true);
+			true,
+			new PartitionTable<>());
 	}
 
 	public ExecutionGraph(
@@ -425,7 +430,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			BlobWriter blobWriter,
 			Time allocationTimeout,
 			ShuffleMaster<?> shuffleMaster,
-			boolean forcePartitionReleaseOnConsumption) throws IOException {
+			boolean forcePartitionReleaseOnConsumption,
+			PartitionTable<ResourceID> partitionTable) throws IOException {
 
 		checkNotNull(futureExecutor);
 
@@ -476,6 +482,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		this.shuffleMaster = checkNotNull(shuffleMaster);
 
 		this.forcePartitionReleaseOnConsumption = forcePartitionReleaseOnConsumption;
+
+		this.partitionTable = checkNotNull(partitionTable);
 
 		LOG.info("Job recovers via failover strategy: {}", failoverStrategy.getStrategyName());
 	}
@@ -1818,5 +1826,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 	ShuffleMaster<?> getShuffleMaster() {
 		return shuffleMaster;
+	}
+
+	public PartitionTable<ResourceID> getPartitionTable() {
+		return partitionTable;
 	}
 }

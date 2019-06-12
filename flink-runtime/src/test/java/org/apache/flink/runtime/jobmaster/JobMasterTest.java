@@ -115,6 +115,7 @@ import org.apache.flink.runtime.taskexecutor.AccumulatorReport;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
 import org.apache.flink.runtime.taskexecutor.TestingTaskExecutorGateway;
 import org.apache.flink.runtime.taskexecutor.TestingTaskExecutorGatewayBuilder;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskexecutor.rpc.RpcCheckpointResponder;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.LocalTaskManagerLocation;
@@ -307,7 +308,8 @@ public class JobMasterTest extends TestLogger {
 				testingFatalErrorHandler,
 				JobMasterTest.class.getClassLoader(),
 				schedulerNGFactory,
-				NettyShuffleMaster.INSTANCE) {
+				NettyShuffleMaster.INSTANCE,
+				new PartitionTable<>()) {
 				@Override
 				public void declineCheckpoint(DeclineCheckpoint declineCheckpoint) {
 					declineCheckpointMessageFuture.complete(declineCheckpoint.getReason());
@@ -1623,7 +1625,8 @@ public class JobMasterTest extends TestLogger {
 			testingFatalErrorHandler,
 			JobMasterTest.class.getClassLoader(),
 			schedulerNGFactory,
-			NettyShuffleMaster.INSTANCE) {
+			NettyShuffleMaster.INSTANCE,
+			new PartitionTable<>()) {
 
 			@Override
 			public CompletableFuture<String> triggerSavepoint(
@@ -2152,7 +2155,8 @@ public class JobMasterTest extends TestLogger {
 				testingFatalErrorHandler,
 				JobMasterTest.class.getClassLoader(),
 				schedulerNGFactory,
-				shuffleMaster);
+				shuffleMaster,
+				new PartitionTable<>());
 		}
 	}
 
