@@ -1791,6 +1791,50 @@ public class JobMasterTest extends TestLogger {
 		return testingResourceManagerGateway;
 	}
 
+	@Test
+	public void testPartitionTableCleanupOnDisconnect() throws Exception {
+		final JobManagerSharedServices jobManagerSharedServices = new TestingJobManagerSharedServicesBuilder().build();
+		final JobGraph jobGraph = createSingleVertexJobGraph();
+
+		final ResultPartitionID resultPartitionId = new ResultPartitionID();
+		final LocalTaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
+		final PartitionTable<ResourceID> partitionTable = new PartitionTable<>();
+		partitionTable.startTrackingPartitions(taskManagerLocation.getResourceID(), Collections.singletonList(resultPartitionId));
+
+		final JobMaster jobMaster = new JobMasterBuilder()
+			.withConfiguration(configuration)
+			.withJobGraph(jobGraph)
+			.withHighAvailabilityServices(haServices)
+			.withJobManagerSharedServices(jobManagerSharedServices)
+			.withHeartbeatServices(heartbeatServices)
+			.withOnCompletionActions(new TestingOnCompletionActions())
+			.withPartitionTable(partitionTable)
+			.createJobMaster();
+
+		final CompletableFuture<JobID> disconnectTaskExecutorFuture = new CompletableFuture<>();
+		final TestingTaskExecutorGateway testingTaskExecutorGateway = new TestingTaskExecutorGatewayBuilder()
+			.setDisconnectJobManagerConsumer((jobID, throwable) -> disconnectTaskExecutorFuture.complete(jobID))
+			.createTestingTaskExecutorGateway();
+
+		try {
+			jobMaster.start(jobMasterId).get();
+
+			final JobMasterGateway jobMasterGateway = jobMaster.getSelfGateway(JobMasterGateway.class);
+
+			// register a slot to establish a connection
+			registerSlotsAtJobMaster(1, jobMasterGateway, testingTaskExecutorGateway, taskManagerLocation);
+
+			assertThat(partitionTable.hasTrackedPartitions(taskManagerLocation.getResourceID()), is(true));
+
+			jobMasterGateway.disconnectTaskManager(taskManagerLocation.getResourceID(), new Exception("test"));
+			disconnectTaskExecutorFuture.get();
+
+			assertThat(partitionTable.hasTrackedPartitions(taskManagerLocation.getResourceID()), is(false));
+		} finally {
+			RpcUtils.terminateRpcEndpoint(jobMaster, testingTimeout);
+		}
+	}
+
 	/**
 	 * Tests that the job execution is failed if the TaskExecutor disconnects from the
 	 * JobMaster.
@@ -2095,6 +2139,8 @@ public class JobMasterTest extends TestLogger {
 
 		private ShuffleMaster<?> shuffleMaster = NettyShuffleMaster.INSTANCE;
 
+		private PartitionTable<ResourceID> partitionTable = new PartitionTable<>();
+
 		private JobMasterBuilder withConfiguration(Configuration configuration) {
 			this.configuration = configuration;
 			return this;
@@ -2135,6 +2181,11 @@ public class JobMasterTest extends TestLogger {
 			return this;
 		}
 
+		private JobMasterBuilder withPartitionTable(PartitionTable<ResourceID> partitionTable) {
+			this.partitionTable = partitionTable;
+			return this;
+		}
+
 		private JobMaster createJobMaster() throws Exception {
 			final JobMasterConfiguration jobMasterConfiguration = JobMasterConfiguration.fromConfiguration(configuration);
 			final SchedulerNGFactory schedulerNGFactory = new LegacySchedulerFactory(
@@ -2156,7 +2207,7 @@ public class JobMasterTest extends TestLogger {
 				JobMasterTest.class.getClassLoader(),
 				schedulerNGFactory,
 				shuffleMaster,
-				new PartitionTable<>());
+				partitionTable);
 		}
 	}
 

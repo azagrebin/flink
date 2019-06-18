@@ -30,6 +30,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
@@ -57,6 +58,7 @@ import org.apache.flink.runtime.shuffle.PartitionDescriptor;
 import org.apache.flink.runtime.shuffle.ProducerDescriptor;
 import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
+import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
@@ -1064,8 +1066,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 				if (transitionState(current, FINISHED)) {
 					try {
+						List<IntermediateResultPartition> finishedBlockingPartitions = getVertex().finishAllBlockingPartitions();
+						startTrackingUnreleasedPartitions(finishedBlockingPartitions);
+
 						for (IntermediateResultPartition finishedPartition
-								: getVertex().finishAllBlockingPartitions()) {
+								: finishedBlockingPartitions) {
 
 							IntermediateResultPartition[] allPartitions = finishedPartition
 									.getIntermediateResult().getPartitions();
@@ -1103,6 +1108,19 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				// this should not happen, we need to fail this
 				markFailed(new Exception("Vertex received FINISHED message while being in state " + state));
 				return;
+			}
+		}
+	}
+
+	private void startTrackingUnreleasedPartitions(final Collection<IntermediateResultPartition> partitions) {
+		PartitionTable<ResourceID> partitionTable = vertex.getExecutionGraph().getPartitionTable();
+		for (IntermediateResultPartition partition : partitions) {
+			ResultPartitionDeploymentDescriptor descriptor = producedPartitions.get(partition.getPartitionId());
+			final boolean hasLocalResources = descriptor.getShuffleDescriptor().storesLocalResourcesOn().isPresent();
+			if (!descriptor.isReleasedOnConsumption() && hasLocalResources) {
+				partitionTable.startTrackingPartitions(
+					getAssignedResourceLocation().getResourceID(),
+					Collections.singletonList(descriptor.getShuffleDescriptor().getResultPartitionID()));
 			}
 		}
 	}

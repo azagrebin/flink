@@ -415,6 +415,7 @@ public class JobMaster extends FencedRpcEndpoint<JobMasterId> implements JobMast
 
 		taskManagerHeartbeatManager.unmonitorTarget(resourceID);
 		slotPool.releaseTaskManager(resourceID, cause);
+		partitionTable.stopTrackingPartitions(resourceID);
 
 		Tuple2<TaskManagerLocation, TaskExecutorGateway> taskManagerConnection = registeredTaskManagers.remove(resourceID);
 

@@ -588,6 +588,68 @@ public class ExecutionTest extends TestLogger {
 		assertThat(returnedSlotFuture.get(), is(equalTo(slotRequestIdFuture.get())));
 	}
 
+	@Test
+	public void testPartitionTrackedWhenFinished() throws Exception {
+		testPartitionTrackingForStateTransition(Execution::markFinished, true);
+	}
+
+	@Test
+	public void testPartitionNotTrackedWhenCanceled() throws Exception {
+		testPartitionTrackingForStateTransition(Execution::cancel, false);
+	}
+
+	@Test
+	public void testPartitionNotTrackedWhenFailed() throws Exception {
+		testPartitionTrackingForStateTransition(execution -> execution.fail(new Exception()), false);
+	}
+
+	private void testPartitionTrackingForStateTransition(final Consumer<Execution> stateTransition, final boolean shouldPartitionBeTracked) throws Exception {
+		final JobVertex producerVertex = createNoOpJobVertex();
+		final JobVertex consumerVertex = createNoOpJobVertex();
+		consumerVertex.connectNewDataSetAsInput(producerVertex, DistributionPattern.ALL_TO_ALL, ResultPartitionType.BLOCKING);
+
+		final TaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
+
+		final SimpleSlot slot = new SimpleSlot(
+			new SingleSlotTestingSlotOwner(),
+			taskManagerLocation,
+			0,
+			new SimpleAckingTaskManagerGateway());
+
+		final ProgrammedSlotProvider slotProvider = new ProgrammedSlotProvider(1);
+		slotProvider.addSlot(producerVertex.getID(), 0, CompletableFuture.completedFuture(slot));
+
+		final ExecutionGraph executionGraph = ExecutionGraphTestUtils.createSimpleTestGraph(
+			new JobID(),
+			slotProvider,
+			new NoRestartStrategy(),
+			producerVertex,
+			consumerVertex);
+
+		executionGraph.start(TestingComponentMainThreadExecutorServiceAdapter.forMainThread());
+
+		final ExecutionJobVertex executionJobVertex = executionGraph.getJobVertex(producerVertex.getID());
+		final ExecutionVertex executionVertex = executionJobVertex.getTaskVertices()[0];
+
+		final Execution execution = executionVertex.getCurrentExecutionAttempt();
+
+		execution.allocateResourcesForExecution(
+			slotProvider,
+			false,
+			LocationPreferenceConstraint.ALL,
+			Collections.emptySet(),
+			TestingUtils.infiniteTime());
+
+		execution.deploy();
+		execution.switchToRunning();
+
+		assertFalse(executionGraph.getPartitionTable().hasTrackedPartitions(taskManagerLocation.getResourceID()));
+
+		stateTransition.accept(execution);
+
+		assertThat(executionGraph.getPartitionTable().hasTrackedPartitions(taskManagerLocation.getResourceID()), is(shouldPartitionBeTracked));
+	}
+
 	/**
 	 * Tests that a slot release will atomically release the assigned {@link Execution}.
 	 */
