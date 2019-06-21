@@ -33,6 +33,7 @@ import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.utils.SimpleAckingTaskManagerGateway;
 import org.apache.flink.runtime.executiongraph.utils.SimpleSlotProvider;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertex;
@@ -42,7 +43,7 @@ import org.apache.flink.runtime.jobmanager.slots.TaskManagerGateway;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
+import org.apache.flink.runtime.taskexecutor.TestingTaskExecutorGatewayBuilder;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.testtasks.NoOpInvokable;
 import org.apache.flink.runtime.testutils.DirectScheduledExecutorService;
@@ -56,6 +57,7 @@ import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
@@ -397,6 +399,12 @@ public class ExecutionGraphTestUtils {
 		checkNotNull(vertices);
 		checkNotNull(timeout);
 
+		final PartitionTracker partitionTracker = new PartitionTracker(
+			jid,
+			NettyShuffleMaster.INSTANCE,
+			ignored -> Optional.of(new TestingTaskExecutorGatewayBuilder().createTestingTaskExecutorGateway())
+		);
+
 		return ExecutionGraphBuilder.buildGraph(
 			null,
 			new JobGraph(jid, "test job", vertices),
@@ -413,7 +421,7 @@ public class ExecutionGraphTestUtils {
 			timeout,
 			TEST_LOGGER,
 			NettyShuffleMaster.INSTANCE,
-			new PartitionTable<>());
+			partitionTracker);
 	}
 
 	public static JobVertex createNoOpVertex(int parallelism) {

@@ -643,11 +643,11 @@ public class ExecutionTest extends TestLogger {
 		execution.deploy();
 		execution.switchToRunning();
 
-		assertFalse(executionGraph.getPartitionTable().hasTrackedPartitions(taskManagerLocation.getResourceID()));
+		assertFalse(executionGraph.getPartitionTracker().isTrackingPartitionsFor(taskManagerLocation.getResourceID()));
 
 		stateTransition.accept(execution);
 
-		assertThat(executionGraph.getPartitionTable().hasTrackedPartitions(taskManagerLocation.getResourceID()), is(shouldPartitionBeTracked));
+		assertThat(executionGraph.getPartitionTracker().isTrackingPartitionsFor(taskManagerLocation.getResourceID()), is(shouldPartitionBeTracked));
 	}
 
 	/**

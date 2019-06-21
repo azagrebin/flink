@@ -42,6 +42,7 @@ import org.apache.flink.runtime.executiongraph.failover.RestartAllStrategy;
 import org.apache.flink.runtime.executiongraph.restart.NoRestartStrategy;
 import org.apache.flink.runtime.executiongraph.utils.SimpleAckingTaskManagerGateway;
 import org.apache.flink.runtime.instance.SimpleSlot;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionType;
 import org.apache.flink.runtime.jobgraph.DistributionPattern;
 import org.apache.flink.runtime.jobgraph.JobGraph;
@@ -63,7 +64,6 @@ import org.apache.flink.runtime.operators.BatchTask;
 import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.taskexecutor.TestingTaskExecutorGateway;
 import org.apache.flink.runtime.taskexecutor.TestingTaskExecutorGatewayBuilder;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.LocalTaskManagerLocation;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -826,7 +826,10 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			timeout,
 			LoggerFactory.getLogger(getClass()),
 			NettyShuffleMaster.INSTANCE,
-			new PartitionTable<>());
+			new PartitionTracker(
+				jobId,
+				NettyShuffleMaster.INSTANCE
+			));
 	}
 
 	private static final class ExecutionStageMatcher extends TypeSafeMatcher<List<ExecutionAttemptID>> {

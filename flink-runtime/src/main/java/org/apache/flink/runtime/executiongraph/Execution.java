@@ -30,7 +30,6 @@ import org.apache.flink.runtime.checkpoint.CheckpointOptions;
 import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
@@ -40,6 +39,7 @@ import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptorFactory;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
@@ -58,7 +58,6 @@ import org.apache.flink.runtime.shuffle.PartitionDescriptor;
 import org.apache.flink.runtime.shuffle.ProducerDescriptor;
 import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
 import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
@@ -1113,15 +1112,11 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	}
 
 	private void startTrackingUnreleasedPartitions(final Collection<IntermediateResultPartition> partitions) {
-		PartitionTable<ResourceID> partitionTable = vertex.getExecutionGraph().getPartitionTable();
+		PartitionTracker partitionTracker = vertex.getExecutionGraph().getPartitionTracker();
 		for (IntermediateResultPartition partition : partitions) {
-			ResultPartitionDeploymentDescriptor descriptor = producedPartitions.get(partition.getPartitionId());
-			final boolean hasLocalResources = descriptor.getShuffleDescriptor().storesLocalResourcesOn().isPresent();
-			if (!descriptor.isReleasedOnConsumption() && hasLocalResources) {
-				partitionTable.startTrackingPartitions(
-					getAssignedResourceLocation().getResourceID(),
-					Collections.singletonList(descriptor.getShuffleDescriptor().getResultPartitionID()));
-			}
+			partitionTracker.startTrackingPartition(
+				getAssignedResourceLocation().getResourceID(),
+				producedPartitions.get(partition.getPartitionId()));
 		}
 	}
 

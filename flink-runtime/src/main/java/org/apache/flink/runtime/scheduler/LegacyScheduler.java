@@ -35,7 +35,6 @@ import org.apache.flink.runtime.checkpoint.CheckpointRecoveryFactory;
 import org.apache.flink.runtime.checkpoint.CompletedCheckpoint;
 import org.apache.flink.runtime.checkpoint.TaskStateSnapshot;
 import org.apache.flink.runtime.client.JobExecutionException;
-import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -51,6 +50,7 @@ import org.apache.flink.runtime.executiongraph.JobStatusListener;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategyFactory;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategyResolving;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
@@ -72,7 +72,6 @@ import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureSta
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.OperatorBackPressureStats;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.KeyGroupRange;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.runtime.webmonitor.WebMonitorUtils;
@@ -147,7 +146,7 @@ public class LegacyScheduler implements SchedulerNG {
 			final JobManagerJobMetricGroup jobManagerJobMetricGroup,
 			final Time slotRequestTimeout,
 			final ShuffleMaster<?> shuffleMaster,
-			final PartitionTable<ResourceID> partitionTable) throws Exception {
+			final PartitionTracker partitionTracker) throws Exception {
 
 		this.log = checkNotNull(log);
 		this.jobGraph = checkNotNull(jobGraph);
@@ -174,15 +173,15 @@ public class LegacyScheduler implements SchedulerNG {
 		this.blobWriter = checkNotNull(blobWriter);
 		this.slotRequestTimeout = checkNotNull(slotRequestTimeout);
 
-		this.executionGraph = createAndRestoreExecutionGraph(jobManagerJobMetricGroup, checkNotNull(shuffleMaster), checkNotNull(partitionTable));
+		this.executionGraph = createAndRestoreExecutionGraph(jobManagerJobMetricGroup, checkNotNull(shuffleMaster), checkNotNull(partitionTracker));
 	}
 
 	private ExecutionGraph createAndRestoreExecutionGraph(
 			JobManagerJobMetricGroup currentJobManagerJobMetricGroup,
 			ShuffleMaster<?> shuffleMaster,
-			PartitionTable<ResourceID> partitionTable) throws Exception {
+			PartitionTracker partitionTracker) throws Exception {
 
-		ExecutionGraph newExecutionGraph = createExecutionGraph(currentJobManagerJobMetricGroup, shuffleMaster, partitionTable);
+		ExecutionGraph newExecutionGraph = createExecutionGraph(currentJobManagerJobMetricGroup, shuffleMaster, partitionTracker);
 
 		final CheckpointCoordinator checkpointCoordinator = newExecutionGraph.getCheckpointCoordinator();
 
@@ -204,7 +203,7 @@ public class LegacyScheduler implements SchedulerNG {
 	private ExecutionGraph createExecutionGraph(
 			JobManagerJobMetricGroup currentJobManagerJobMetricGroup,
 			ShuffleMaster<?> shuffleMaster,
-			final PartitionTable<ResourceID> partitionTable) throws JobExecutionException, JobException {
+			final PartitionTracker partitionTracker) throws JobExecutionException, JobException {
 		return ExecutionGraphBuilder.buildGraph(
 			null,
 			jobGraph,
@@ -221,7 +220,7 @@ public class LegacyScheduler implements SchedulerNG {
 			slotRequestTimeout,
 			log,
 			shuffleMaster,
-			partitionTable);
+			partitionTracker);
 	}
 
 	/**

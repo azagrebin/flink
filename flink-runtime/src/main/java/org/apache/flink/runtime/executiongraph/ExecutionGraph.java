@@ -41,7 +41,6 @@ import org.apache.flink.runtime.checkpoint.CheckpointStatsTracker;
 import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
 import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.concurrent.FutureUtils.ConjunctFuture;
@@ -52,6 +51,7 @@ import org.apache.flink.runtime.executiongraph.failover.RestartAllStrategy;
 import org.apache.flink.runtime.executiongraph.restart.ExecutionGraphRestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartCallback;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
@@ -69,7 +69,6 @@ import org.apache.flink.runtime.shuffle.NettyShuffleMaster;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.SharedStateRegistry;
 import org.apache.flink.runtime.state.StateBackend;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.types.Either;
 import org.apache.flink.util.ExceptionUtils;
@@ -286,7 +285,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 	 * strong reference to any user-defined classes.*/
 	private volatile ErrorInfo failureInfo;
 
-	private final PartitionTable<ResourceID> partitionTable;
+	private final PartitionTracker partitionTracker;
 
 	/**
 	 * Future for an ongoing or completed scheduling action.
@@ -414,7 +413,9 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			allocationTimeout,
 			NettyShuffleMaster.INSTANCE,
 			true,
-			new PartitionTable<>());
+			new PartitionTracker(
+				jobInformation.getJobId(),
+				NettyShuffleMaster.INSTANCE));
 	}
 
 	public ExecutionGraph(
@@ -431,7 +432,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			Time allocationTimeout,
 			ShuffleMaster<?> shuffleMaster,
 			boolean forcePartitionReleaseOnConsumption,
-			PartitionTable<ResourceID> partitionTable) throws IOException {
+			PartitionTracker partitionTracker) throws IOException {
 
 		checkNotNull(futureExecutor);
 
@@ -483,7 +484,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
 		this.forcePartitionReleaseOnConsumption = forcePartitionReleaseOnConsumption;
 
-		this.partitionTable = checkNotNull(partitionTable);
+		this.partitionTracker = checkNotNull(partitionTracker);
 
 		LOG.info("Job recovers via failover strategy: {}", failoverStrategy.getStrategyName());
 	}
@@ -1828,7 +1829,7 @@ public class ExecutionGraph implements AccessExecutionGraph {
 		return shuffleMaster;
 	}
 
-	public PartitionTable<ResourceID> getPartitionTable() {
-		return partitionTable;
+	public PartitionTracker getPartitionTracker() {
+		return partitionTracker;
 	}
 }

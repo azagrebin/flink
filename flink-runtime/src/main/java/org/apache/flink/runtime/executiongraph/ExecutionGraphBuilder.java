@@ -36,7 +36,6 @@ import org.apache.flink.runtime.checkpoint.MasterTriggerRestoreHook;
 import org.apache.flink.runtime.checkpoint.hooks.MasterHooks;
 import org.apache.flink.runtime.client.JobExecutionException;
 import org.apache.flink.runtime.client.JobSubmissionException;
-import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategy;
 import org.apache.flink.runtime.executiongraph.failover.FailoverStrategyLoader;
 import org.apache.flink.runtime.executiongraph.metrics.DownTimeGauge;
@@ -44,6 +43,7 @@ import org.apache.flink.runtime.executiongraph.metrics.NumberOfFullRestartsGauge
 import org.apache.flink.runtime.executiongraph.metrics.RestartTimeGauge;
 import org.apache.flink.runtime.executiongraph.metrics.UpTimeGauge;
 import org.apache.flink.runtime.executiongraph.restart.RestartStrategy;
+import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -54,7 +54,6 @@ import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.state.StateBackend;
 import org.apache.flink.runtime.state.StateBackendLoader;
-import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.util.DynamicCodeLoadingException;
 import org.apache.flink.util.SerializedValue;
 
@@ -97,7 +96,7 @@ public class ExecutionGraphBuilder {
 			Time allocationTimeout,
 			Logger log,
 			ShuffleMaster<?> shuffleMaster,
-			PartitionTable<ResourceID> partitionTable)
+			PartitionTracker partitionTracker)
 		throws JobExecutionException, JobException {
 
 		checkNotNull(jobGraph, "job graph cannot be null");
@@ -140,7 +139,7 @@ public class ExecutionGraphBuilder {
 					allocationTimeout,
 					shuffleMaster,
 					forcePartitionReleaseOnConsumption,
-					partitionTable);
+					partitionTracker);
 		} catch (IOException e) {
 			throw new JobException("Could not create the ExecutionGraph.", e);
 		}
