@@ -39,7 +39,6 @@ import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptorFactory;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.instance.SlotSharingGroupId;
-import org.apache.flink.runtime.io.network.partition.PartitionTracker;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
@@ -54,10 +53,8 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.StackTraceSampleResponse;
-import org.apache.flink.runtime.shuffle.PartitionDescriptor;
 import org.apache.flink.runtime.shuffle.ProducerDescriptor;
 import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
-import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FlinkException;
@@ -73,7 +70,6 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,8 +185,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 	private volatile IOMetrics ioMetrics;
 
-	private Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions;
-
 	// --------------------------------------------------------------------------------------------
 
 	/**
@@ -229,7 +223,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 		markTimestamp(CREATED, startTimestamp);
 
 		this.partitionInfos = new ArrayList<>(16);
-		this.producedPartitions = Collections.emptyMap();
 		this.terminalStateFuture = new CompletableFuture<>();
 		this.releaseFuture = new CompletableFuture<>();
 		this.taskManagerLocationFuture = new CompletableFuture<>();
@@ -622,70 +615,16 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 	CompletableFuture<Execution> registerProducedPartitions(TaskManagerLocation location) {
 		assertRunningInJobMasterMainThread();
 
-		return FutureUtils.thenApplyAsyncIfNotDone(
-			registerProducedPartitions(vertex, location, attemptId),
-			vertex.getExecutionGraph().getJobMasterMainThreadExecutor(),
-			producedPartitionsCache -> {
-				producedPartitions = producedPartitionsCache;
-				return this;
-			});
-	}
-
-	@VisibleForTesting
-	static CompletableFuture<Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor>> registerProducedPartitions(
-			ExecutionVertex vertex,
-			TaskManagerLocation location,
-			ExecutionAttemptID attemptId) {
 		ProducerDescriptor producerDescriptor = ProducerDescriptor.create(location, attemptId);
-
-		boolean lazyScheduling = vertex.getExecutionGraph().getScheduleMode().allowLazyDeployment();
-
 		Collection<IntermediateResultPartition> partitions = vertex.getProducedPartitions().values();
-		Collection<CompletableFuture<ResultPartitionDeploymentDescriptor>> partitionRegistrations =
-			new ArrayList<>(partitions.size());
+		boolean lazyScheduling = vertex.getExecutionGraph().getScheduleMode().allowLazyDeployment();
+		Executor mainThreadExecutor = vertex.getExecutionGraph().getJobMasterMainThreadExecutor();
 
-		for (IntermediateResultPartition partition : partitions) {
-			PartitionDescriptor partitionDescriptor = PartitionDescriptor.from(partition);
-			int maxParallelism = getPartitionMaxParallelism(partition);
-			CompletableFuture<? extends ShuffleDescriptor> shuffleDescriptorFuture = vertex
-				.getExecutionGraph()
-				.getShuffleMaster()
-				.registerPartitionWithProducer(partitionDescriptor, producerDescriptor);
-
-			final boolean releasePartitionOnConsumption =
-				vertex.getExecutionGraph().isForcePartitionReleaseOnConsumption()
-				|| !partitionDescriptor.getPartitionType().isBlocking();
-
-			CompletableFuture<ResultPartitionDeploymentDescriptor> partitionRegistration = shuffleDescriptorFuture
-				.thenApply(shuffleDescriptor -> new ResultPartitionDeploymentDescriptor(
-					partitionDescriptor,
-					shuffleDescriptor,
-					maxParallelism,
-					lazyScheduling,
-					releasePartitionOnConsumption
-						? ShuffleDescriptor.ReleaseType.AUTO
-						: ShuffleDescriptor.ReleaseType.MANUAL));
-			partitionRegistrations.add(partitionRegistration);
-		}
-
-		return FutureUtils.combineAll(partitionRegistrations).thenApply(rpdds -> {
-			Map<IntermediateResultPartitionID, ResultPartitionDeploymentDescriptor> producedPartitions =
-				new LinkedHashMap<>(partitions.size());
-			rpdds.forEach(rpdd -> producedPartitions.put(rpdd.getPartitionId(), rpdd));
-			return producedPartitions;
-		});
-	}
-
-	private static int getPartitionMaxParallelism(IntermediateResultPartition partition) {
-		// TODO consumers.isEmpty() only exists for test, currently there has to be exactly one consumer in real jobs!
-		final List<List<ExecutionEdge>> consumers = partition.getConsumers();
-		int maxParallelism = KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM;
-		if (!consumers.isEmpty()) {
-			List<ExecutionEdge> consumer = consumers.get(0);
-			ExecutionJobVertex consumerVertex = consumer.get(0).getTarget().getJobVertex();
-			maxParallelism = consumerVertex.getMaxParallelism();
-		}
-		return maxParallelism;
+		return vertex
+			.getExecutionGraph()
+			.getPartitionTracker()
+			.registerProducedPartitions(partitions, producerDescriptor, lazyScheduling, mainThreadExecutor)
+			.thenApply(v -> this);
 	}
 
 	/**
@@ -746,7 +685,7 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 					slot.getAllocationId(),
 					slot.getPhysicalSlotNumber(),
 					taskRestore,
-					producedPartitions.values());
+					vertex.getExecutionGraph().getPartitionTracker().getResultPartitionDeploymentDescriptors(attemptId));
 
 			// null taskRestore to let it be GC'ed
 			taskRestore = null;
@@ -1065,11 +1004,8 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 
 				if (transitionState(current, FINISHED)) {
 					try {
-						List<IntermediateResultPartition> finishedBlockingPartitions = getVertex().finishAllBlockingPartitions();
-						startTrackingUnreleasedPartitions(finishedBlockingPartitions);
-
 						for (IntermediateResultPartition finishedPartition
-								: finishedBlockingPartitions) {
+								: getVertex().finishAllBlockingPartitions()) {
 
 							IntermediateResultPartition[] allPartitions = finishedPartition
 									.getIntermediateResult().getPartitions();
@@ -1108,15 +1044,6 @@ public class Execution implements AccessExecution, Archiveable<ArchivedExecution
 				markFailed(new Exception("Vertex received FINISHED message while being in state " + state));
 				return;
 			}
-		}
-	}
-
-	private void startTrackingUnreleasedPartitions(final Collection<IntermediateResultPartition> partitions) {
-		PartitionTracker partitionTracker = vertex.getExecutionGraph().getPartitionTracker();
-		for (IntermediateResultPartition partition : partitions) {
-			partitionTracker.startTrackingPartition(
-				getAssignedResourceLocation().getResourceID(),
-				producedPartitions.get(partition.getPartitionId()));
 		}
 	}
 

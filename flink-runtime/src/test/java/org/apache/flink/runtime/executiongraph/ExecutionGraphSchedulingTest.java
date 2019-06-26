@@ -595,8 +595,8 @@ public class ExecutionGraphSchedulingTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 	}
 
 	private SimpleSlot createSlot(TaskManagerGateway taskManager, JobID jobId) {

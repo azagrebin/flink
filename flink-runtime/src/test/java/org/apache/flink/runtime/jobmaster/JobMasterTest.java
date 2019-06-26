@@ -313,7 +313,7 @@ public class JobMasterTest extends TestLogger {
 				NettyShuffleMaster.INSTANCE,
 				new PartitionTracker(
 					jobGraph.getJobID(),
-					NettyShuffleMaster.INSTANCE)) {
+					NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor)) {
 				@Override
 				public void declineCheckpoint(DeclineCheckpoint declineCheckpoint) {
 					declineCheckpointMessageFuture.complete(declineCheckpoint.getReason());
@@ -1632,7 +1632,7 @@ public class JobMasterTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE)) {
+				NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor)) {
 
 			@Override
 			public CompletableFuture<String> triggerSavepoint(
@@ -1723,7 +1723,7 @@ public class JobMasterTest extends TestLogger {
 		final LocalTaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
 		final PartitionTracker partitionTracker = new PartitionTracker(
 				jobGraph.getJobID(),
-			NettyShuffleMaster.INSTANCE);
+			NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor =
 			PartitionTestUtils.createResultPartitionDeploymentDescriptor(new ResultPartitionID(), false, true);
@@ -1866,7 +1866,7 @@ public class JobMasterTest extends TestLogger {
 		final LocalTaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			jobGraph.getJobID(),
-			NettyShuffleMaster.INSTANCE);
+			NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor =
 			PartitionTestUtils.createResultPartitionDeploymentDescriptor(new ResultPartitionID(), false, true);
@@ -1915,7 +1915,7 @@ public class JobMasterTest extends TestLogger {
 		final LocalTaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			jobGraph.getJobID(),
-			NettyShuffleMaster.INSTANCE);
+			NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final ResultPartitionID resultPartitionId = new ResultPartitionID();
 		final ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor =
@@ -2275,7 +2275,7 @@ public class JobMasterTest extends TestLogger {
 
 		private ShuffleMaster<?> shuffleMaster = NettyShuffleMaster.INSTANCE;
 
-		private PartitionTracker partitionTracker = new PartitionTracker(jobGraph.getJobID(), NettyShuffleMaster.INSTANCE);
+		private PartitionTracker partitionTracker = new PartitionTracker(jobGraph.getJobID(), NettyShuffleMaster.INSTANCE, forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		private JobMasterBuilder withConfiguration(Configuration configuration) {
 			this.configuration = configuration;

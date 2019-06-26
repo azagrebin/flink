@@ -83,8 +83,8 @@ public class ExecutionGraphRescalingTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 
 		for (JobVertex jv : jobVertices) {
 			assertThat(jv.getParallelism(), is(initialParallelism));
@@ -117,8 +117,8 @@ public class ExecutionGraphRescalingTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 
 		for (JobVertex jv : jobVertices) {
 			assertThat(jv.getParallelism(), is(1));
@@ -151,8 +151,8 @@ public class ExecutionGraphRescalingTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 
 		for (JobVertex jv : jobVertices) {
 			assertThat(jv.getParallelism(), is(scaleUpParallelism));
@@ -198,8 +198,8 @@ public class ExecutionGraphRescalingTest extends TestLogger {
 				NettyShuffleMaster.INSTANCE,
 				new PartitionTracker(
 					jobGraph.getJobID(),
-					NettyShuffleMaster.INSTANCE
-				));
+					NettyShuffleMaster.INSTANCE,
+					forcePartitionReleaseOnConsumption, mainThreadExecutor));
 
 			fail("Building the ExecutionGraph with a parallelism higher than the max parallelism should fail.");
 		} catch (JobException e) {

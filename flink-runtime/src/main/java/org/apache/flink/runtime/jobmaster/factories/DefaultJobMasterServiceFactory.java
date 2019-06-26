@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.jobmaster.factories;
 
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.heartbeat.HeartbeatServices;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServices;
@@ -92,6 +93,9 @@ public class DefaultJobMasterServiceFactory implements JobMasterServiceFactory {
 			OnCompletionActions jobCompletionActions,
 			ClassLoader userCodeClassloader) throws Exception {
 
+		final boolean forcePartitionReleaseOnConsumption =
+			jobMasterConfiguration.getConfiguration().getBoolean(JobManagerOptions.FORCE_PARTITION_RELEASE_ON_CONSUMPTION);
+
 		return new JobMaster(
 			rpcService,
 			jobMasterConfiguration,
@@ -110,7 +114,7 @@ public class DefaultJobMasterServiceFactory implements JobMasterServiceFactory {
 			shuffleMaster,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				shuffleMaster
-			));
+				shuffleMaster,
+				forcePartitionReleaseOnConsumption));
 	}
 }

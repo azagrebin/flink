@@ -19,21 +19,33 @@ package org.apache.flink.runtime.io.network.partition;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
+import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
+import org.apache.flink.runtime.executiongraph.ExecutionEdge;
+import org.apache.flink.runtime.executiongraph.ExecutionJobVertex;
+import org.apache.flink.runtime.executiongraph.IntermediateResultPartition;
+import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
+import org.apache.flink.runtime.shuffle.PartitionDescriptor;
+import org.apache.flink.runtime.shuffle.ProducerDescriptor;
 import org.apache.flink.runtime.shuffle.ShuffleDescriptor;
+import org.apache.flink.runtime.shuffle.ShuffleDescriptor.ReleaseType;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
+import org.apache.flink.runtime.state.KeyGroupRangeAssignment;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
 import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.util.Preconditions;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -46,29 +58,83 @@ public class PartitionTracker {
 
 	private final JobID jobId;
 
-	private final PartitionTable<ResourceID> partitionTable = new PartitionTable<>();
-	private final Map<ResultPartitionID, ResourceID> partitionLocations = new HashMap<>();
-	private final Map<ResultPartitionID, ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors = new HashMap<>();
+	private final PartitionTable<ResourceID> partitionTable;
+	private final Map<ExecutionAttemptID, Map<IntermediateResultPartitionID, InternalPartitionInfo>> partitionInfo;
 
 	private final ShuffleMaster<?> shuffleMaster;
+	private final boolean forcePartitionReleaseOnConsumption;
 
 	private Function<ResourceID, Optional<TaskExecutorGateway>> taskExecutorGatewayFunction;
 
 	public PartitionTracker(
-		JobID jobId,
-		ShuffleMaster<?> shuffleMaster) {
-		this(jobId, shuffleMaster, null);
+			JobID jobId,
+			ShuffleMaster<?> shuffleMaster,
+			boolean forcePartitionReleaseOnConsumption) {
+		this(jobId, shuffleMaster, forcePartitionReleaseOnConsumption, null);
 	}
 
 	@VisibleForTesting
 	public PartitionTracker(
-		JobID jobId,
-		ShuffleMaster<?> shuffleMaster,
-		Function<ResourceID, Optional<TaskExecutorGateway>> taskExecutorGatewayFunction) {
-
+			JobID jobId,
+			ShuffleMaster<?> shuffleMaster,
+			boolean forcePartitionReleaseOnConsumption,
+			Function<ResourceID, Optional<TaskExecutorGateway>> taskExecutorGatewayFunction) {
 		this.jobId = Preconditions.checkNotNull(jobId);
 		this.shuffleMaster = Preconditions.checkNotNull(shuffleMaster);
+		this.forcePartitionReleaseOnConsumption = forcePartitionReleaseOnConsumption;
 		this.taskExecutorGatewayFunction = taskExecutorGatewayFunction;
+		this.partitionTable = new PartitionTable<>();
+		this.partitionInfo = new HashMap<>(10);
+	}
+
+	public CompletableFuture<Void> registerProducedPartitions(
+			Collection<IntermediateResultPartition> partitions,
+			ProducerDescriptor producerDescriptor,
+			boolean lazyScheduling,
+			Executor mainThreadExecutor) {
+		Collection<CompletableFuture<ResultPartitionDeploymentDescriptor>> partitionRegistrations =
+			new ArrayList<>(partitions.size());
+
+		for (IntermediateResultPartition partition : partitions) {
+			PartitionDescriptor partitionDescriptor = PartitionDescriptor.from(partition);
+			int maxParallelism = getPartitionMaxParallelism(partition);
+			CompletableFuture<? extends ShuffleDescriptor> shuffleDescriptorFuture =
+				shuffleMaster.registerPartitionWithProducer(partitionDescriptor, producerDescriptor);
+
+			boolean releasePartitionOnConsumption =
+				forcePartitionReleaseOnConsumption
+					|| !partitionDescriptor.getPartitionType().isBlocking();
+			ReleaseType releaseType = releasePartitionOnConsumption ? ReleaseType.AUTO : ReleaseType.MANUAL;
+
+			CompletableFuture<ResultPartitionDeploymentDescriptor> partitionRegistration = shuffleDescriptorFuture
+				.thenApply(shuffleDescriptor -> new ResultPartitionDeploymentDescriptor(
+					partitionDescriptor,
+					shuffleDescriptor,
+					maxParallelism,
+					lazyScheduling,
+					releaseType));
+			partitionRegistrations.add(partitionRegistration);
+		}
+
+		return FutureUtils.thenApplyAsyncIfNotDone(
+			FutureUtils.combineAll(partitionRegistrations),
+			mainThreadExecutor,
+			producedPartitions -> {
+				producedPartitions.forEach(p -> startTrackingPartition(producerDescriptor.getProducerLocation(), p));
+				return null;
+			});
+	}
+
+	private static int getPartitionMaxParallelism(IntermediateResultPartition partition) {
+		// TODO consumers.isEmpty() only exists for test, currently there has to be exactly one consumer in real jobs!
+		final List<List<ExecutionEdge>> consumers = partition.getConsumers();
+		int maxParallelism = KeyGroupRangeAssignment.UPPER_BOUND_MAX_PARALLELISM;
+		if (!consumers.isEmpty()) {
+			List<ExecutionEdge> consumer = consumers.get(0);
+			ExecutionJobVertex consumerVertex = consumer.get(0).getTarget().getJobVertex();
+			maxParallelism = consumerVertex.getMaxParallelism();
+		}
+		return maxParallelism;
 	}
 
 	/**
@@ -79,7 +145,8 @@ public class PartitionTracker {
 	 *
 	 * @param taskExecutorGatewayFunction
 	 */
-	public void setTaskExecutorGatewayRetriever(final Function<ResourceID, Optional<TaskExecutorGateway>> taskExecutorGatewayFunction) {
+	public void setTaskExecutorGatewayRetriever(
+			Function<ResourceID, Optional<TaskExecutorGateway>> taskExecutorGatewayFunction) {
 		Preconditions.checkState(this.taskExecutorGatewayFunction == null);
 		Preconditions.checkNotNull(taskExecutorGatewayFunction);
 		this.taskExecutorGatewayFunction = taskExecutorGatewayFunction;
@@ -95,22 +162,19 @@ public class PartitionTracker {
 	 * @param producingTaskExecutorId
 	 * @param resultPartitionDeploymentDescriptor
 	 */
-	public void startTrackingPartition(ResourceID producingTaskExecutorId, ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor) {
+	private void startTrackingPartition(
+			ResourceID producingTaskExecutorId,
+			ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor) {
 		ensureInitialized();
 
 		Preconditions.checkNotNull(producingTaskExecutorId);
 		Preconditions.checkNotNull(resultPartitionDeploymentDescriptor);
 
-		// if it is released on consumption we do not need to issue any release calls
-		if (resultPartitionDeploymentDescriptor.isReleasedOnConsumption()) {
-			return;
-		}
-
 		final ResultPartitionID resultPartitionId = resultPartitionDeploymentDescriptor.getShuffleDescriptor().getResultPartitionID();
 
-		partitionDeploymentDescriptors.put(resultPartitionId, resultPartitionDeploymentDescriptor);
+		InternalPartitionInfo info = new InternalPartitionInfo(producingTaskExecutorId, resultPartitionDeploymentDescriptor);
+		partitionInfo.put(resultPartitionId, info);
 		partitionTable.startTrackingPartitions(producingTaskExecutorId, Collections.singletonList(resultPartitionId));
-		partitionLocations.put(resultPartitionId, producingTaskExecutorId);
 	}
 
 	/**
@@ -136,7 +200,8 @@ public class PartitionTracker {
 	 *
 	 * @param resultPartitionIds
 	 */
-	public void stopTrackingAndReleasePartitions(Collection<ResultPartitionID> resultPartitionIds) {
+	@VisibleForTesting
+	void stopTrackingAndReleasePartitions(Collection<ResultPartitionID> resultPartitionIds) {
 		ensureInitialized();
 
 		Preconditions.checkNotNull(resultPartitionIds);
@@ -147,9 +212,9 @@ public class PartitionTracker {
 			.filter(Optional::isPresent)
 			.map(Optional::get)
 			.collect(Collectors.groupingBy(
-				partitionMetaData -> partitionMetaData.f0,
+				partitionMetaData -> partitionMetaData.location,
 				Collectors.mapping(
-					partitionMetaData -> partitionMetaData.f1,
+					partitionMetaData -> partitionMetaData.descriptor,
 					toList())));
 
 		partitionsToReleaseByResourceId.forEach(this::internalReleasePartitions);
@@ -184,28 +249,33 @@ public class PartitionTracker {
 		return partitionTable.hasTrackedPartitions(producingTaskExecutorId);
 	}
 
-	private Optional<Tuple2<ResourceID, ResultPartitionDeploymentDescriptor>> internalStopTrackingPartition(ResultPartitionID resultPartitionId) {
-		final ResourceID partitionLocation = partitionLocations.remove(resultPartitionId);
-		if (partitionLocation == null) {
+	public Collection<ResultPartitionDeploymentDescriptor> getResultPartitionDeploymentDescriptors(ExecutionAttemptID executionAttemptID) {
+		return partitionInfo.get(executionAttemptID).values().stream().map(i -> i.descriptor).collect(Collectors.toList());
+	}
+
+	private Optional<InternalPartitionInfo> internalStopTrackingPartition(ResultPartitionID resultPartitionId) {
+		final InternalPartitionInfo info = partitionInfo.remove(resultPartitionId);
+		if (info == null) {
 			return Optional.empty();
 		}
-		partitionTable.stopTrackingPartitions(partitionLocation, Collections.singletonList(resultPartitionId));
-		final ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor = partitionDeploymentDescriptors.remove(resultPartitionId);
-
-		return Optional.of(Tuple2.of(partitionLocation, resultPartitionDeploymentDescriptor));
+		partitionTable.stopTrackingPartitions(info.location, Collections.singletonList(resultPartitionId));
+		return Optional.of(info);
 	}
 
 	private void internalReleasePartitions(
-		ResourceID potentialPartitionLocation,
-		Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
-
-		internalReleasePartitionsOnTaskExecutor(potentialPartitionLocation, partitionDeploymentDescriptors);
-		internalReleasePartitionsOnShuffleMaster(partitionDeploymentDescriptors);
+			ResourceID potentialPartitionLocation,
+			Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
+		Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptorsToRelease =
+			partitionDeploymentDescriptors.stream()
+				.filter(ResultPartitionDeploymentDescriptor::isReleasedOnConsumption)
+				.collect(Collectors.toList());
+		internalReleasePartitionsOnTaskExecutor(potentialPartitionLocation, partitionDeploymentDescriptorsToRelease);
+		internalReleasePartitionsOnShuffleMaster(partitionDeploymentDescriptorsToRelease);
 	}
 
 	private void internalReleasePartitionsOnTaskExecutor(
-		ResourceID potentialPartitionLocation,
-		Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
+			ResourceID potentialPartitionLocation,
+			Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
 
 		final List<ResultPartitionID> partitionsRequiringRpcReleaseCalls = partitionDeploymentDescriptors.stream()
 			.map(ResultPartitionDeploymentDescriptor::getShuffleDescriptor)
@@ -221,9 +291,20 @@ public class PartitionTracker {
 		}
 	}
 
-	private void internalReleasePartitionsOnShuffleMaster(Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
+	private void internalReleasePartitionsOnShuffleMaster(
+			Collection<ResultPartitionDeploymentDescriptor> partitionDeploymentDescriptors) {
 		partitionDeploymentDescriptors.stream()
 			.map(ResultPartitionDeploymentDescriptor::getShuffleDescriptor)
 			.forEach(shuffleMaster::releasePartitionExternally);
+	}
+
+	private static class InternalPartitionInfo {
+		private final ResourceID location;
+		private final ResultPartitionDeploymentDescriptor descriptor;
+
+		private InternalPartitionInfo(ResourceID location, ResultPartitionDeploymentDescriptor descriptor) {
+			this.location = location;
+			this.descriptor = descriptor;
+		}
 	}
 }

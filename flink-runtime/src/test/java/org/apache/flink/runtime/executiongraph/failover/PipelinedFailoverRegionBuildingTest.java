@@ -648,7 +648,7 @@ public class PipelinedFailoverRegionBuildingTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobGraph.getJobID(),
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 	}
 }

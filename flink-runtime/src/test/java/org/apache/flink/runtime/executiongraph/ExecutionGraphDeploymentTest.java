@@ -828,8 +828,8 @@ public class ExecutionGraphDeploymentTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobId,
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 	}
 
 	private static final class ExecutionStageMatcher extends TypeSafeMatcher<List<ExecutionAttemptID>> {

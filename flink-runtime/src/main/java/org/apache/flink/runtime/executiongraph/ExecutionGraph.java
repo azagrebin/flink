@@ -415,7 +415,8 @@ public class ExecutionGraph implements AccessExecutionGraph {
 			true,
 			new PartitionTracker(
 				jobInformation.getJobId(),
-				NettyShuffleMaster.INSTANCE));
+				NettyShuffleMaster.INSTANCE,
+				true));
 	}
 
 	public ExecutionGraph(

@@ -230,8 +230,8 @@ public class ExecutionVertexLocalityTest extends TestLogger {
 			NettyShuffleMaster.INSTANCE,
 			new PartitionTracker(
 				jobId,
-				NettyShuffleMaster.INSTANCE
-			));
+				NettyShuffleMaster.INSTANCE,
+				forcePartitionReleaseOnConsumption, mainThreadExecutor));
 	}
 
 	private void initializeLocation(ExecutionVertex vertex, TaskManagerLocation location) throws Exception {

@@ -35,6 +35,7 @@ import org.junit.Test;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -55,8 +56,8 @@ public class PartitionTrackerTest extends TestLogger {
 	public void testMissingInitializationThrowsException() {
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			new JobID(),
-			new TestingShuffleMaster()
-		);
+			new TestingShuffleMaster(),
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		try {
 			partitionTracker.startTrackingPartition(
@@ -104,8 +105,8 @@ public class PartitionTrackerTest extends TestLogger {
 	private void testReleaseOnConsumptionHandling(boolean releasedOnConsumption) {
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			new JobID(),
-			new TestingShuffleMaster()
-		);
+			new TestingShuffleMaster(),
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		partitionTracker.setTaskExecutorGatewayRetriever(ignored -> Optional.empty());
 
@@ -125,8 +126,8 @@ public class PartitionTrackerTest extends TestLogger {
 	public void testStartStopTracking() {
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			new JobID(),
-			new TestingShuffleMaster()
-		);
+			new TestingShuffleMaster(),
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final Queue<Tuple3<ResourceID, JobID, Collection<ResultPartitionID>>> releaseCalls = new ArrayBlockingQueue<>(4);
 		partitionTracker.setTaskExecutorGatewayRetriever(resourceId -> Optional.of(createTaskExecutorGateway(resourceId, releaseCalls)));
@@ -155,8 +156,8 @@ public class PartitionTrackerTest extends TestLogger {
 
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			jobId,
-			shuffleMaster
-		);
+			shuffleMaster,
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final Queue<Tuple3<ResourceID, JobID, Collection<ResultPartitionID>>> releaseCalls = new ArrayBlockingQueue<>(4);
 		partitionTracker.setTaskExecutorGatewayRetriever(resourceId -> Optional.of(createTaskExecutorGateway(resourceId, releaseCalls)));
@@ -208,8 +209,8 @@ public class PartitionTrackerTest extends TestLogger {
 
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			new JobID(),
-			shuffleMaster
-		);
+			shuffleMaster,
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final Queue<Tuple3<ResourceID, JobID, Collection<ResultPartitionID>>> taskExecutorReleaseCalls = new ArrayBlockingQueue<>(4);
 		partitionTracker.setTaskExecutorGatewayRetriever(resourceId -> Optional.of(createTaskExecutorGateway(resourceId, taskExecutorReleaseCalls)));
@@ -251,8 +252,8 @@ public class PartitionTrackerTest extends TestLogger {
 
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			new JobID(),
-			shuffleMaster
-		);
+			shuffleMaster,
+			forcePartitionReleaseOnConsumption, mainThreadExecutor);
 
 		final Queue<Tuple3<ResourceID, JobID, Collection<ResultPartitionID>>> taskExecutorReleaseCalls = new ArrayBlockingQueue<>(4);
 		partitionTracker.setTaskExecutorGatewayRetriever(resourceId -> Optional.of(createTaskExecutorGateway(resourceId, taskExecutorReleaseCalls)));
@@ -293,6 +294,11 @@ public class PartitionTrackerTest extends TestLogger {
 					return hasLocalResources
 						? Optional.of(ResourceID.generate())
 						: Optional.empty();
+				}
+
+				@Override
+				public EnumSet<ReleaseType> getSupportedReleaseTypes() {
+					return EnumSet.allOf(ReleaseType.class);
 				}
 			},
 			1,

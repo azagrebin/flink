@@ -29,6 +29,7 @@ import org.apache.flink.runtime.util.NettyShuffleDescriptorBuilder;
 import org.hamcrest.Matchers;
 
 import java.io.IOException;
+import java.util.EnumSet;
 import java.util.Optional;
 
 import static org.junit.Assert.assertThat;
@@ -107,9 +108,14 @@ public class PartitionTestUtils {
 						? Optional.of(ResourceID.generate())
 						: Optional.empty();
 				}
+
+				@Override
+				public EnumSet<ReleaseType> getSupportedReleaseTypes() {
+					return EnumSet.allOf(ReleaseType.class);
+				}
 			},
 			1,
 			true,
-			releasedOnConsumption);
+			releasedOnConsumption ? ShuffleDescriptor.ReleaseType.AUTO : ShuffleDescriptor.ReleaseType.MANUAL);
 	}
 }

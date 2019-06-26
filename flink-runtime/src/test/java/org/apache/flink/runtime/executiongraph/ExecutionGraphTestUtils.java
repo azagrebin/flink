@@ -402,7 +402,7 @@ public class ExecutionGraphTestUtils {
 		final PartitionTracker partitionTracker = new PartitionTracker(
 			jid,
 			NettyShuffleMaster.INSTANCE,
-			ignored -> Optional.of(new TestingTaskExecutorGatewayBuilder().createTestingTaskExecutorGateway())
+			forcePartitionReleaseOnConsumption, ignored -> Optional.of(new TestingTaskExecutorGatewayBuilder().createTestingTaskExecutorGateway())
 		);
 
 		return ExecutionGraphBuilder.buildGraph(
