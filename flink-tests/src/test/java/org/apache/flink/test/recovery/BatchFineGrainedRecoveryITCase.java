@@ -19,98 +19,168 @@
 package org.apache.flink.test.recovery;
 
 import org.apache.flink.api.common.functions.AbstractRichFunction;
+import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.GroupReduceFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.functions.RichGroupReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.test.util.JavaProgramTestBase;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.StreamSupport;
 
 public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 	@Override
 	protected void testProgram() throws Exception {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-		env.getConfig().set
 
 		DataSet<Integer> input = env.createInput(...);
 
+		Tracker tracker = new TrackerImpl();
+		FailureStrategy failureStrategy = new FailureStrategyImpl(50, 100);
+
 		input
-			.flatMap(new RichFlatMapFunction<Integer, Integer>() {
+			.flatMap(new RichTrackedFlatMapFunction<Integer, Integer>(tracker, failureStrategy) {
+				private static final long serialVersionUID = 1L;
+				private final Random rnd = new Random();
+
+				@Override
+				void doFlatMap(Integer value, Collector<Integer> out) {
+					out.collect(value + rnd.nextInt(100));
+					out.collect(value + rnd.nextInt(100));
+					out.collect(value + rnd.nextInt(100));
+				}
+			})
+			.setParallelism(5)
+			.groupBy(i -> i % 10)
+			.reduceGroup(new RichTrackedGroupReduceFunction<Integer, Integer>(tracker, failureStrategy) {
 				private static final long serialVersionUID = 1L;
 
 				@Override
-				public void flatMap(Integer value, Collector<Integer> out) {
-
+				void doReduce(Iterable<Integer> values, Collector<Integer> out) {
+					out.collect(StreamSupport.stream(values.spliterator(), false).mapToInt(i -> i).sum());
 				}
 			})
-			.groupBy(i -> i % 10)
-			.reduceGroup(new RichGroupReduceFunction<Integer, Integer>() {
-				@Override
-				public void reduce(Iterable<Integer> values, Collector<Integer> out) {
-
-				}
-			})
+			.setParallelism(3)
 			.output(...);
 
 		env.execute();
 	}
 
 	private abstract static class RichTrackedFunction extends AbstractRichFunction {
-		private final Tracker tracker;
+		private static final long serialVersionUID = 1L;
+
 		private final RegionID regionID;
+		private final Tracker tracker;
+		private final FailureStrategy failureStrategy;
 		private TaskInfo taskInfo;
-		private boolean started;
 
-		protected RichTrackedFunction(Tracker tracker, RegionID regionID) {
+		RichTrackedFunction(Tracker tracker, FailureStrategy failureStrategy) {
+			this.regionID = new RegionID();
 			this.tracker = tracker;
-			this.regionID = regionID;
+			this.failureStrategy = failureStrategy;
 		}
 
-		protected void doTracking(Element<?> element) {
-			if (taskInfo == null) {
-				taskInfo = new TaskInfo(getRuntimeContext().getTaskName(), new RegionInfo(regionID, getRuntimeContext().getIndexOfThisSubtask()));
-			}
+		@Override
+		public void open(Configuration parameters) throws Exception {
+			super.open(parameters);
+			taskInfo = new TaskInfo(getRuntimeContext().getTaskName(), new RegionInfo(regionID, getRuntimeContext().getIndexOfThisSubtask()));
+			tracker.trackEvent(new StartEvent(taskInfo));
+		}
 
-			if (element.type == ElementType.FIRST) {
-				started = true;
-				tracker.trackEvent();
+		@Override
+		public void close() throws Exception {
+			tracker.trackEvent(new FinishEvent(taskInfo));
+			super.close();
+		}
+
+		protected void failOrNot() {
+			failureStrategy.failOrNot(taskInfo, tracker);
+		}
+	}
+
+	private abstract static class RichTrackedFlatMapFunction<T, O> extends RichTrackedFunction implements FlatMapFunction<T, O> {
+		private static final long serialVersionUID = 1L;
+
+		private RichTrackedFlatMapFunction(Tracker tracker, FailureStrategy failureStrategy) {
+			super(tracker, failureStrategy);
+		}
+
+		@Override
+		public void flatMap(T value, Collector<O> out) {
+			failOrNot();
+			doFlatMap(value, out);
+		}
+
+		abstract void doFlatMap(T value, Collector<O> out);
+	}
+
+	private abstract static class RichTrackedGroupReduceFunction<T, O> extends RichTrackedFunction implements GroupReduceFunction<T, O> {
+		private static final long serialVersionUID = 1L;
+
+		private RichTrackedGroupReduceFunction(Tracker tracker, FailureStrategy failureStrategy) {
+			super(tracker, failureStrategy);
+		}
+
+		@Override
+		public void reduce(Iterable<T> values, Collector<O> out) throws Exception {
+			failOrNot();
+			doReduce(values, out);
+		}
+
+		abstract void doReduce(Iterable<T> values, Collector<O> out);
+	}
+
+	private static class FailureStrategyImpl implements FailureStrategy {
+		private static final Random rnd = new Random();
+
+		private final int failureCount;
+		private int callCount;
+
+		private FailureStrategyImpl(int failureCountMin, int failureCountMax) {
+			this.failureCount = (rnd.nextInt() % failureCountMax) + failureCountMin;
+		}
+
+		@Override
+		public void failOrNot(TaskInfo taskInfo, Tracker tracker) {
+			tracker.trackEvent(new FailureEvent(taskInfo));
+			if (callCount % 100 == 0) {
+				throw new FineGrainedRecoveryTestFailure(taskInfo);
 			}
 		}
 	}
 
-	private enum TaskState {
-		CREATED,
-		STARTED,
-		LAST
+	private interface FailureStrategy {
+		void failOrNot(TaskInfo taskInfo, Tracker tracker);
 	}
 
-	private static class Element<T> {
-		private final ElementType type;
-		private final T data;
-	}
-
-	private enum ElementType {
-		FIRST,
-		MIDDLE,
-		LAST
+	private static class FineGrainedRecoveryTestFailure extends FlinkRuntimeException {
+		private FineGrainedRecoveryTestFailure(TaskInfo taskInfo) {
+			super(String.format("BOOM!!! Generate failure in %s", taskInfo));
+		}
 	}
 
 	private interface Tracker extends Serializable {
 		void trackEvent(Event event);
 	}
 
-	private static class TrackerImpl {
+	private static class TrackerImpl implements Tracker {
 		private static final long serialVersionUID = 1L;
 
-		private static final Queue<Event> eventQueue;
+		private static final Queue<Event> eventQueue = new ConcurrentLinkedQueue<>();
 
 		@Override
 		public void trackEvent(Event event) {
@@ -118,11 +188,11 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 	}
 
-	private static class RegionGraph {
-		private final Collection<Region> inputRegions;
-		private final Map<RegionInfo, Region> allRegions;
-		private final Map<TaskID, TaskInfo> allTasks;
-	}
+//	private static class RegionGraph {
+//		private final Collection<Region> inputRegions;
+//		private final Map<RegionInfo, Region> allRegions;
+//		private final Map<TaskID, TaskInfo> allTasks;
+//	}
 
 	private static class Region {
 		private final RegionInfo regionInfo;
@@ -140,6 +210,24 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 	private static class RegionID extends AbstractID {
 		private static final long serialVersionUID = 1L;
+	}
+
+	private static class RegionInfo {
+		private final RegionID id;
+		private final int parallelIndex;
+
+		private RegionInfo(RegionID id, int parallelIndex) {
+			this.id = id;
+			this.parallelIndex = parallelIndex;
+		}
+
+		public RegionID getId() {
+			return id;
+		}
+
+		public int getParallelIndex() {
+			return parallelIndex;
+		}
 	}
 
 	private static class TaskID extends AbstractID {
@@ -174,22 +262,10 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 	}
 
-	private static class RegionInfo {
-		private final RegionID id;
-		private final int parallelIndex;
-
-		private RegionInfo(RegionID id, int parallelIndex) {
-			this.id = id;
-			this.parallelIndex = parallelIndex;
-		}
-
-		public RegionID getId() {
-			return id;
-		}
-
-		public int getParallelIndex() {
-			return parallelIndex;
-		}
+	private enum TaskState {
+		CREATED,
+		STARTED,
+		LAST
 	}
 
 	private abstract static class Event {
@@ -201,6 +277,24 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 		public TaskInfo getTaskInfo() {
 			return taskInfo;
+		}
+	}
+
+	private static class StartEvent extends Event {
+		private StartEvent(TaskInfo taskInfo) {
+			super(taskInfo);
+		}
+	}
+
+	private static class FailureEvent extends Event {
+		private FailureEvent(TaskInfo taskInfo) {
+			super(taskInfo);
+		}
+	}
+
+	private static class FinishEvent extends Event {
+		private FinishEvent(TaskInfo taskInfo) {
+			super(taskInfo);
 		}
 	}
 }
