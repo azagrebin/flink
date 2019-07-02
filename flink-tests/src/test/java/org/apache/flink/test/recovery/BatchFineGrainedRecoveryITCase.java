@@ -24,29 +24,31 @@ import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.io.DefaultInputSplitAssigner;
 import org.apache.flink.api.common.io.InputFormat;
+import org.apache.flink.api.common.io.RichInputFormat;
 import org.apache.flink.api.common.io.RichOutputFormat;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.common.typeinfo.IntegerTypeInfo;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.io.ParallelIteratorInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.io.GenericInputSplit;
+import org.apache.flink.core.io.InputSplit;
 import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.test.util.JavaProgramTestBase;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
-import org.apache.flink.util.SplittableIterator;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -61,21 +63,24 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		env.setRestartStrategy(RestartStrategies.fixedDelayRestart(5, Time.seconds(1)));
 
-		DataSet<Integer> input = env.createInput(Generator.generate(30, 10)).setParallelism(MAP_PARALLELISM).map(t -> t.f1);
-
 		Tracker tracker = new TrackerImpl();
-		FailureStrategy failureStrategy = new FailureStrategyImpl(1, 1000);
+		FailureStrategy failureStrategy = new FailureStrategyImpl(1, 100);
+
+		DataSet<Tuple2<String, Integer>> input = env.createInput(
+			InputFormatTrackingWrapper.wrapWithTracking(
+				Generator.generate(30, 10), tracker, failureStrategy), TypeInformation.of(new TypeHint<Tuple2<String, Integer>>() {}))
+			.setParallelism(MAP_PARALLELISM);
 
 		input
-			.flatMap(new RichTrackedFlatMapFunction<Integer, Integer>(tracker, failureStrategy) {
+			.flatMap(new RichTrackedFlatMapFunction<Tuple2<String, Integer>, Integer>(tracker, failureStrategy) {
 				private static final long serialVersionUID = 1L;
 				private final Random rnd = new Random();
 
 				@Override
-				void doFlatMap(Integer value, Collector<Integer> out) {
-					out.collect(value + rnd.nextInt(100));
-					out.collect(value + rnd.nextInt(100));
-					out.collect(value + rnd.nextInt(100));
+				void doFlatMap(Tuple2<String, Integer> value, Collector<Integer> out) {
+					out.collect(value.f1 + rnd.nextInt(100));
+					out.collect(value.f1 + rnd.nextInt(100));
+					out.collect(value.f1 + rnd.nextInt(100));
 				}
 			})
 			.setParallelism(MAP_PARALLELISM)
@@ -89,30 +94,9 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 				}
 			})
 			.setParallelism(REDUCE_PARALLELISM)
-			.output(new RichOutputFormatStub());
+			.output(new EmptyTrackedOutputFormat(tracker, failureStrategy));
 
 		env.execute();
-	}
-
-	private static class RichOutputFormatStub extends RichOutputFormat<Integer> {
-		@Override
-		public void configure(Configuration parameters) {
-		}
-
-		@Override
-		public void open(int taskNumber, int numTasks) throws IOException {
-
-		}
-
-		@Override
-		public void writeRecord(Integer record) throws IOException {
-
-		}
-
-		@Override
-		public void close() throws IOException {
-
-		}
 	}
 
 	private static class TrackedTask implements Serializable {
@@ -152,47 +136,67 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 	}
 
-	private static class TrackedParallelIteratorInputFormat<T> extends ParallelIteratorInputFormat<T> {
+	private static class InputFormatTrackingWrapper<OT, T extends InputSplit> extends RichInputFormat<OT, T> {
+		private static final long serialVersionUID = 1L;
+
+		private final InputFormat<OT, T> wrappedInputFormat;
 		private final TrackedTask trackedTask;
 
-		private TrackedParallelIteratorInputFormat(SplittableIterator<T> iterator, Tracker tracker, FailureStrategy failureStrategy) {
-			super(iterator);
+		private InputFormatTrackingWrapper(
+				InputFormat<OT, T> wrappedInputFormat,
+				Tracker tracker,
+				FailureStrategy failureStrategy) {
+			this.wrappedInputFormat = wrappedInputFormat;
 			this.trackedTask = new TrackedTask(tracker, failureStrategy);
 		}
 
+		private static <OT, T extends InputSplit> InputFormat<OT, T> wrapWithTracking(
+				InputFormat<OT, T> wrappedInputFormat,
+				Tracker tracker,
+				FailureStrategy failureStrategy) {
+			return new InputFormatTrackingWrapper<>(wrappedInputFormat, tracker, failureStrategy);
+		}
+
 		@Override
-		public void open(GenericInputSplit split) throws IOException {
-			super.open(split);
+		public void configure(Configuration parameters) {
+			wrappedInputFormat.configure(parameters);
+		}
+
+		@Override
+		public BaseStatistics getStatistics(BaseStatistics cachedStatistics) throws IOException {
+			return wrappedInputFormat.getStatistics(cachedStatistics);
+		}
+
+		@Override
+		public T[] createInputSplits(int minNumSplits) throws IOException {
+			return wrappedInputFormat.createInputSplits(minNumSplits);
+		}
+
+		@Override
+		public InputSplitAssigner getInputSplitAssigner(T[] inputSplits) {
+			return wrappedInputFormat.getInputSplitAssigner(inputSplits);
+		}
+
+		@Override
+		public void open(T split) throws IOException {
+			wrappedInputFormat.open(split);
 			trackedTask.startTracking(getRuntimeContext());
+		}
+
+		@Override
+		public boolean reachedEnd() throws IOException {
+			return wrappedInputFormat.reachedEnd();
+		}
+
+		@Override
+		public OT nextRecord(OT reuse) throws IOException {
+			return wrappedInputFormat.nextRecord(reuse);
 		}
 
 		@Override
 		public void close() throws IOException {
 			trackedTask.stopTracking();
-			super.close();
-		}
-	}
-
-	private static class RandomSplittableIterator extends SplittableIterator<Integer> {
-
-		@Override
-		public Iterator<Integer>[] split(int numPartitions) {
-			return new Iterator[0];
-		}
-
-		@Override
-		public int getMaximumNumberOfSplits() {
-			return 0;
-		}
-
-		@Override
-		public boolean hasNext() {
-			return false;
-		}
-
-		@Override
-		public Integer next() {
-			return null;
+			wrappedInputFormat.close();
 		}
 	}
 
@@ -248,6 +252,59 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 
 		abstract void doReduce(Iterable<T> values, Collector<O> out);
+	}
+
+	private abstract static class TrackedOutputFormat<T> extends RichOutputFormat<T> {
+		private static final long serialVersionUID = 1L;
+
+		final TrackedTask trackedTask;
+
+		private TrackedOutputFormat(Tracker tracker, FailureStrategy failureStrategy) {
+			this.trackedTask = new TrackedTask(tracker, failureStrategy);
+		}
+
+		@Override
+		public void configure(Configuration parameters) {
+		}
+
+		@Override
+		public void open(int taskNumber, int numTasks) {
+			trackedTask.startTracking(getRuntimeContext());
+		}
+
+		@Override
+		public void close() {
+			trackedTask.stopTracking();
+		}
+
+		@Override
+		public void writeRecord(T record) {
+			trackedTask.failOrNot();
+			doWriteRecord(record);
+		}
+
+		abstract void doWriteRecord(T record);
+	}
+
+	private static class EmptyTrackedOutputFormat extends TrackedOutputFormat<Integer> {
+		private static final long serialVersionUID = 1L;
+
+		private EmptyTrackedOutputFormat(Tracker tracker, FailureStrategy failureStrategy) {
+			super(tracker, failureStrategy);
+		}
+
+		@Override
+		void doWriteRecord(Integer record) {
+
+		}
+	}
+
+	private enum NoFailureStrategy implements FailureStrategy {
+		INSTANCE;
+
+		@Override
+		public void failOrNot(TaskInfo taskInfo) {
+		}
 	}
 
 	private static class FailureStrategyImpl implements FailureStrategy {
@@ -410,9 +467,7 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 		@Override
 		public String toString() {
-			return "{" +
-				"" + taskInfo +
-				'}';
+			return taskInfo.toString();
 		}
 	}
 
@@ -434,7 +489,7 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 	}
 
-	public static class Generator implements InputFormat<Tuple2<String, Integer>, GenericInputSplit> {
+	public static class Generator extends RichInputFormat<Tuple2<String, Integer>, GenericInputSplit> {
 
 		// total number of records
 		private final long numRecords;
