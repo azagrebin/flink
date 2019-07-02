@@ -26,6 +26,8 @@ import org.apache.flink.api.common.io.DefaultInputSplitAssigner;
 import org.apache.flink.api.common.io.InputFormat;
 import org.apache.flink.api.common.io.RichOutputFormat;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.io.ParallelIteratorInputFormat;
@@ -51,17 +53,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.StreamSupport;
 
 public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
-	private static final int MAP_PARALLELISM = 5;
-	private static final int REDUCE_PARALLELISM = 3;
+	private static final int MAP_PARALLELISM = 3;
+	private static final int REDUCE_PARALLELISM = 2;
 
 	@Override
 	protected void testProgram() throws Exception {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+		env.setRestartStrategy(RestartStrategies.fixedDelayRestart(5, Time.seconds(1)));
 
-		DataSet<Integer> input = env.createInput(Generator.generate(100, 300)).setParallelism(MAP_PARALLELISM).map(t -> t.f1);
+		DataSet<Integer> input = env.createInput(Generator.generate(30, 10)).setParallelism(MAP_PARALLELISM).map(t -> t.f1);
 
 		Tracker tracker = new TrackerImpl();
-		FailureStrategy failureStrategy = new FailureStrategyImpl(50, 100);
+		FailureStrategy failureStrategy = new FailureStrategyImpl(1, 1000);
 
 		input
 			.flatMap(new RichTrackedFlatMapFunction<Integer, Integer>(tracker, failureStrategy) {
@@ -86,28 +89,30 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 				}
 			})
 			.setParallelism(REDUCE_PARALLELISM)
-			.output(new RichOutputFormat<Integer>() {
-				@Override
-				public void configure(Configuration parameters) {
-				}
-
-				@Override
-				public void open(int taskNumber, int numTasks) throws IOException {
-
-				}
-
-				@Override
-				public void writeRecord(Integer record) throws IOException {
-
-				}
-
-				@Override
-				public void close() throws IOException {
-
-				}
-			});
+			.output(new RichOutputFormatStub());
 
 		env.execute();
+	}
+
+	private static class RichOutputFormatStub extends RichOutputFormat<Integer> {
+		@Override
+		public void configure(Configuration parameters) {
+		}
+
+		@Override
+		public void open(int taskNumber, int numTasks) throws IOException {
+
+		}
+
+		@Override
+		public void writeRecord(Integer record) throws IOException {
+
+		}
+
+		@Override
+		public void close() throws IOException {
+
+		}
 	}
 
 	private static class TrackedTask implements Serializable {
@@ -138,7 +143,12 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		}
 
 		private void failOrNot() {
-			failureStrategy.failOrNot(taskInfo, tracker);
+			try {
+				failureStrategy.failOrNot(taskInfo);
+			} catch (Throwable t) {
+				tracker.trackEvent(new FailureEvent(taskInfo));
+				throw t;
+			}
 		}
 	}
 
@@ -243,32 +253,38 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 	private static class FailureStrategyImpl implements FailureStrategy {
 		private static final Random rnd = new Random();
 
-		private final int failureCount;
+		private final int probFraction;
+		private final int probBase;
 		private int callCount;
 
-		private FailureStrategyImpl(int failureCountMin, int failureCountMax) {
-			this.failureCount = (rnd.nextInt() % failureCountMax) + failureCountMin;
+		private FailureStrategyImpl(int probFraction, int probBase) {
+			this.probFraction = probFraction;
+			this.probBase = probBase;
 		}
 
 		@Override
-		public void failOrNot(TaskInfo taskInfo, Tracker tracker) {
-			tracker.trackEvent(new FailureEvent(taskInfo));
-			if (callCount % 100 == 0) {
+		public void failOrNot(TaskInfo taskInfo) {
+			callCount++;
+			int prob = rnd.nextInt(probBase) + 1;
+			if (prob <= probFraction) {
 				throw new FineGrainedRecoveryTestFailure(taskInfo);
 			}
 		}
 	}
 
-	private interface FailureStrategy {
-		void failOrNot(TaskInfo taskInfo, Tracker tracker);
+	private interface FailureStrategy extends Serializable {
+		void failOrNot(TaskInfo taskInfo);
 	}
 
 	private static class FineGrainedRecoveryTestFailure extends FlinkRuntimeException {
+		private static final long serialVersionUID = 1L;
+
 		private FineGrainedRecoveryTestFailure(TaskInfo taskInfo) {
 			super(String.format("BOOM!!! Generate failure in %s", taskInfo));
 		}
 	}
 
+	@FunctionalInterface
 	private interface Tracker extends Serializable {
 		void trackEvent(Event event);
 	}
@@ -324,6 +340,14 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		public int getParallelIndex() {
 			return parallelIndex;
 		}
+
+		@Override
+		public String toString() {
+			return "{" +
+				"rid=" + id +
+				", index=" + parallelIndex +
+				'}';
+		}
 	}
 
 	private static class TaskID extends AbstractID {
@@ -356,6 +380,15 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		public RegionInfo getRegionInfo() {
 			return regionInfo;
 		}
+
+		@Override
+		public String toString() {
+			return "TI{" +
+				"'" + name + '\'' +
+				", id=" + id +
+				"(" + regionInfo +
+				")}";
+		}
 	}
 
 	private enum TaskState {
@@ -373,6 +406,13 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 		public TaskInfo getTaskInfo() {
 			return taskInfo;
+		}
+
+		@Override
+		public String toString() {
+			return "{" +
+				"" + taskInfo +
+				'}';
 		}
 	}
 
