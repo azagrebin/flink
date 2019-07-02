@@ -21,33 +21,44 @@ package org.apache.flink.test.recovery;
 import org.apache.flink.api.common.functions.AbstractRichFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.functions.RichFlatMapFunction;
-import org.apache.flink.api.common.functions.RichGroupReduceFunction;
+import org.apache.flink.api.common.functions.RuntimeContext;
+import org.apache.flink.api.common.io.DefaultInputSplitAssigner;
+import org.apache.flink.api.common.io.InputFormat;
+import org.apache.flink.api.common.io.RichOutputFormat;
+import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.io.ParallelIteratorInputFormat;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.io.GenericInputSplit;
+import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.test.util.JavaProgramTestBase;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.SplittableIterator;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Map;
+import java.util.Iterator;
 import java.util.Queue;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.StreamSupport;
 
 public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
+	private static final int MAP_PARALLELISM = 5;
+	private static final int REDUCE_PARALLELISM = 3;
 
 	@Override
 	protected void testProgram() throws Exception {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 
-		DataSet<Integer> input = env.createInput(...);
+		DataSet<Integer> input = env.createInput(Generator.generate(100, 300)).setParallelism(MAP_PARALLELISM).map(t -> t.f1);
 
 		Tracker tracker = new TrackerImpl();
 		FailureStrategy failureStrategy = new FailureStrategyImpl(50, 100);
@@ -64,7 +75,7 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 					out.collect(value + rnd.nextInt(100));
 				}
 			})
-			.setParallelism(5)
+			.setParallelism(MAP_PARALLELISM)
 			.groupBy(i -> i % 10)
 			.reduceGroup(new RichTrackedGroupReduceFunction<Integer, Integer>(tracker, failureStrategy) {
 				private static final long serialVersionUID = 1L;
@@ -74,13 +85,32 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 					out.collect(StreamSupport.stream(values.spliterator(), false).mapToInt(i -> i).sum());
 				}
 			})
-			.setParallelism(3)
-			.output(...);
+			.setParallelism(REDUCE_PARALLELISM)
+			.output(new RichOutputFormat<Integer>() {
+				@Override
+				public void configure(Configuration parameters) {
+				}
+
+				@Override
+				public void open(int taskNumber, int numTasks) throws IOException {
+
+				}
+
+				@Override
+				public void writeRecord(Integer record) throws IOException {
+
+				}
+
+				@Override
+				public void close() throws IOException {
+
+				}
+			});
 
 		env.execute();
 	}
 
-	private abstract static class RichTrackedFunction extends AbstractRichFunction {
+	private static class TrackedTask implements Serializable {
 		private static final long serialVersionUID = 1L;
 
 		private final RegionID regionID;
@@ -88,27 +118,93 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 		private final FailureStrategy failureStrategy;
 		private TaskInfo taskInfo;
 
-		RichTrackedFunction(Tracker tracker, FailureStrategy failureStrategy) {
+		private TrackedTask(Tracker tracker, FailureStrategy failureStrategy) {
 			this.regionID = new RegionID();
 			this.tracker = tracker;
 			this.failureStrategy = failureStrategy;
 		}
 
+		private void startTracking(RuntimeContext context) {
+			startTracking(context.getTaskName(), context.getIndexOfThisSubtask());
+		}
+
+		private void startTracking(String name, int taskNumber) {
+			taskInfo = new TaskInfo(name, new RegionInfo(regionID, taskNumber));
+			tracker.trackEvent(new StartEvent(taskInfo));
+		}
+
+		private void stopTracking() {
+			tracker.trackEvent(new FinishEvent(taskInfo));
+		}
+
+		private void failOrNot() {
+			failureStrategy.failOrNot(taskInfo, tracker);
+		}
+	}
+
+	private static class TrackedParallelIteratorInputFormat<T> extends ParallelIteratorInputFormat<T> {
+		private final TrackedTask trackedTask;
+
+		private TrackedParallelIteratorInputFormat(SplittableIterator<T> iterator, Tracker tracker, FailureStrategy failureStrategy) {
+			super(iterator);
+			this.trackedTask = new TrackedTask(tracker, failureStrategy);
+		}
+
+		@Override
+		public void open(GenericInputSplit split) throws IOException {
+			super.open(split);
+			trackedTask.startTracking(getRuntimeContext());
+		}
+
+		@Override
+		public void close() throws IOException {
+			trackedTask.stopTracking();
+			super.close();
+		}
+	}
+
+	private static class RandomSplittableIterator extends SplittableIterator<Integer> {
+
+		@Override
+		public Iterator<Integer>[] split(int numPartitions) {
+			return new Iterator[0];
+		}
+
+		@Override
+		public int getMaximumNumberOfSplits() {
+			return 0;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return false;
+		}
+
+		@Override
+		public Integer next() {
+			return null;
+		}
+	}
+
+	private abstract static class RichTrackedFunction extends AbstractRichFunction {
+		private static final long serialVersionUID = 1L;
+
+		final TrackedTask trackedTask;
+
+		private RichTrackedFunction(Tracker tracker, FailureStrategy failureStrategy) {
+			this.trackedTask = new TrackedTask(tracker, failureStrategy);
+		}
+
 		@Override
 		public void open(Configuration parameters) throws Exception {
 			super.open(parameters);
-			taskInfo = new TaskInfo(getRuntimeContext().getTaskName(), new RegionInfo(regionID, getRuntimeContext().getIndexOfThisSubtask()));
-			tracker.trackEvent(new StartEvent(taskInfo));
+			trackedTask.startTracking(getRuntimeContext());
 		}
 
 		@Override
 		public void close() throws Exception {
-			tracker.trackEvent(new FinishEvent(taskInfo));
+			trackedTask.stopTracking();
 			super.close();
-		}
-
-		protected void failOrNot() {
-			failureStrategy.failOrNot(taskInfo, tracker);
 		}
 	}
 
@@ -121,7 +217,7 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 		@Override
 		public void flatMap(T value, Collector<O> out) {
-			failOrNot();
+			trackedTask.failOrNot();
 			doFlatMap(value, out);
 		}
 
@@ -137,7 +233,7 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 
 		@Override
 		public void reduce(Iterable<T> values, Collector<O> out) throws Exception {
-			failOrNot();
+			trackedTask.failOrNot();
 			doReduce(values, out);
 		}
 
@@ -295,6 +391,117 @@ public class BatchFineGrainedRecoveryITCase extends JavaProgramTestBase {
 	private static class FinishEvent extends Event {
 		private FinishEvent(TaskInfo taskInfo) {
 			super(taskInfo);
+		}
+	}
+
+	public static class Generator implements InputFormat<Tuple2<String, Integer>, GenericInputSplit> {
+
+		// total number of records
+		private final long numRecords;
+		// total number of keys
+		private final long numKeys;
+
+		// records emitted per partition
+		private long recordsPerPartition;
+		// number of keys per partition
+		private long keysPerPartition;
+
+		// number of currently emitted records
+		private long recordCnt;
+
+		// id of current partition
+		private int partitionId;
+
+		private final boolean infinite;
+
+		public static Generator generate(long numKeys, int recordsPerKey) {
+			return new Generator(numKeys, recordsPerKey, false);
+		}
+
+		public static Generator generateInfinitely(long numKeys) {
+			return new Generator(numKeys, 0, true);
+		}
+
+		private Generator(long numKeys, int recordsPerKey, boolean infinite) {
+			this.numKeys = numKeys;
+			if (infinite) {
+				this.numRecords = Long.MAX_VALUE;
+			} else {
+				this.numRecords = numKeys * recordsPerKey;
+			}
+			this.infinite = infinite;
+		}
+
+		@Override
+		public void configure(Configuration parameters) {
+		}
+
+		@Override
+		public BaseStatistics getStatistics(BaseStatistics cachedStatistics) {
+			return null;
+		}
+
+		@Override
+		public GenericInputSplit[] createInputSplits(int minNumSplits) {
+
+			GenericInputSplit[] splits = new GenericInputSplit[minNumSplits];
+			for (int i = 0; i < minNumSplits; i++) {
+				splits[i] = new GenericInputSplit(i, minNumSplits);
+			}
+			return splits;
+		}
+
+		@Override
+		public InputSplitAssigner getInputSplitAssigner(GenericInputSplit[] inputSplits) {
+			return new DefaultInputSplitAssigner(inputSplits);
+		}
+
+		@Override
+		public void open(GenericInputSplit split) throws IOException {
+			this.partitionId = split.getSplitNumber();
+			// total number of partitions
+			int numPartitions = split.getTotalNumberOfSplits();
+
+			// ensure even distribution of records and keys
+			Preconditions.checkArgument(
+				numRecords % numPartitions == 0,
+				"Records cannot be evenly distributed among partitions");
+			Preconditions.checkArgument(
+				numKeys % numPartitions == 0,
+				"Keys cannot be evenly distributed among partitions");
+
+			this.recordsPerPartition = numRecords / numPartitions;
+			this.keysPerPartition = numKeys / numPartitions;
+
+			this.recordCnt = 0;
+		}
+
+		@Override
+		public boolean reachedEnd() {
+			return !infinite && this.recordCnt >= this.recordsPerPartition;
+		}
+
+		@Override
+		public Tuple2<String, Integer> nextRecord(Tuple2<String, Integer> reuse) throws IOException {
+
+			// build key from partition id and count per partition
+			String key = String.format(
+				"%d-%d",
+				this.partitionId,
+				this.recordCnt % this.keysPerPartition);
+
+			// 128 values to filter on
+			int filterVal = (int) this.recordCnt % 128;
+
+			this.recordCnt++;
+
+			reuse.f0 = key;
+			reuse.f1 = filterVal;
+			return reuse;
+		}
+
+		@Override
+		public void close() {
 		}
 	}
 }
