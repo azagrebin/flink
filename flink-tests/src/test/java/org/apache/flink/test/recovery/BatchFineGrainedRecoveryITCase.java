@@ -19,16 +19,43 @@
 package org.apache.flink.test.recovery;
 
 import org.apache.flink.api.common.ExecutionMode;
+import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.accumulators.SerializedListAccumulator;
 import org.apache.flink.api.common.functions.RichMapPartitionFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.Utils.CollectHelper;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.client.deployment.StandaloneClusterId;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.UnmodifiableConfiguration;
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.messages.webmonitor.JobIdsWithStatusOverview;
+import org.apache.flink.runtime.messages.webmonitor.JobIdsWithStatusOverview.JobIdWithStatus;
+import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.TestingMiniCluster;
 import org.apache.flink.runtime.minicluster.TestingMiniClusterConfiguration.Builder;
+import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
+import org.apache.flink.runtime.rest.messages.JobIdsWithStatusesOverviewHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo.JobVertexDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.SubtaskAttemptMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.SubtaskCurrentAttemptDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.job.SubtaskExecutionAttemptDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.job.SubtaskExecutionAttemptDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.SubtaskMessageParameters;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.test.util.TestEnvironment;
+import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.TestLogger;
@@ -38,10 +65,12 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.Serializable;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -72,6 +101,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		LongStream.range(MAP_NUMBER, EMITTED_RECORD_NUMBER + MAP_NUMBER).boxed().collect(Collectors.toList());
 
 	private TestingMiniCluster miniCluster;
+	private static MiniClusterClient client;
 
 	@Before
 	public void setup() throws Exception {
@@ -88,12 +118,17 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 			null);
 
 		miniCluster.start();
+
+		client = new MiniClusterClient(miniCluster);
 	}
 
 	@After
 	public void teardown() throws Exception {
 		if (miniCluster != null) {
 			miniCluster.close();
+		}
+		if (client != null) {
+			client.shutdown();
 		}
 	}
 
@@ -112,9 +147,25 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 				.mapPartition(new TestPartitionMapper(StaticMapFailureTracker.addNewMap(), failureStrategy))
 				.name("Test partition mapper " + i);
 		}
-		assertThat(input.collect(), is(EXPECTED_JOB_OUTPUT));
+		Tuple2<JobExecutionResult, List<Long>> resAndOut = collect(env, input);
+		JobExecutionResult res = resAndOut.f0;
+
+		assertThat(resAndOut.f1, is(EXPECTED_JOB_OUTPUT));
+
+		//JobGraph jobGraph = new JobGraphGenerator().compileJobGraph(new Optimizer(new DataStatistics(), new Configuration()).compile(env.createProgramPlan()));
+
+		JobDetailsInfo jobInfo = client.getJobDetails(res.getJobID()).get();
 
 		StaticMapFailureTracker.verify();
+	}
+
+	private static <T> Tuple2<JobExecutionResult, List<T>> collect(ExecutionEnvironment env, DataSet<T> input) throws Exception {
+		final String id = new AbstractID().toString();
+		final TypeSerializer<T> serializer = input.getType().createSerializer(env.getConfig());
+		input.output(new CollectHelper<>(id, serializer)).name("collect()");
+		JobExecutionResult res = env.execute();
+		List<T> accResult = SerializedListAccumulator.deserializeList(res.getAccumulatorResult(id), serializer);
+		return Tuple2.of(res, accResult);
 	}
 
 	private ExecutionEnvironment createExecutionEnvironment() {
@@ -214,6 +265,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		public void open(Configuration parameters) throws Exception {
 			super.open(parameters);
 			StaticMapFailureTracker.mapRestart(trackingIndex);
+			ResourceID resourceID = client.getTaskManagerByTask(getRuntimeContext().getTaskName(), getRuntimeContext().getIndexOfThisSubtask());
 		}
 
 		@Override
@@ -245,6 +297,71 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 		private static void reset() {
 			failureNumber.set(0);
+		}
+	}
+
+	private static class MiniClusterClient extends RestClusterClient<StandaloneClusterId> {
+		private MiniClusterClient(TestingMiniCluster miniCluster) throws Exception {
+			super(createClientConfiguration(miniCluster), StandaloneClusterId.getInstance());
+		}
+
+		private static Configuration createClientConfiguration(MiniCluster miniCluster) throws ExecutionException, InterruptedException {
+			final URI restAddress = miniCluster.getRestAddress().get();
+			Configuration restClientConfig = new Configuration();
+			restClientConfig.setString(JobManagerOptions.ADDRESS, restAddress.getHost());
+			restClientConfig.setInteger(RestOptions.PORT, restAddress.getPort());
+			return new UnmodifiableConfiguration(restClientConfig);
+		}
+
+		private ResourceID getTaskManagerByTask(String name, int subtaskIndex) throws ExecutionException, InterruptedException {
+			for (JobID jobId : getJobs()) {
+				JobDetailsInfo jobDetailsInfo = getJobDetails(jobId).get();
+				JobVertexID jobVertexID = null;
+				for (JobVertexDetailsInfo jobVertexDetailsInfo : jobDetailsInfo.getJobVertexInfos()) {
+					if (name.equals(jobVertexDetailsInfo.getName())) {
+						jobVertexID = jobVertexDetailsInfo.getJobVertexID();
+						break;
+					}
+				}
+				if (jobVertexID == null) {
+					continue;
+				}
+				String host = getSubtaskExecutionAttemptDetailsInfo(jobId, jobVertexID, subtaskIndex).getHost();
+				ResourceID resourceID = getTaskManagerIdByHost(host);
+				if (resourceID != null) {
+					return resourceID;
+				}
+			}
+			return null;
+		}
+
+		private Collection<JobID> getJobs() throws ExecutionException, InterruptedException {
+			return sendRequest(JobIdsWithStatusesOverviewHeaders.getInstance(), EmptyMessageParameters.getInstance())
+				.get()
+				.getJobsWithStatus()
+				.stream()
+				.map(JobIdWithStatus::getJobId)
+				.collect(Collectors.toList());
+		}
+
+		private SubtaskExecutionAttemptDetailsInfo getSubtaskExecutionAttemptDetailsInfo(JobID jobId, JobVertexID jobVertexID, int subtaskIndex) throws ExecutionException, InterruptedException {
+			SubtaskCurrentAttemptDetailsHeaders detailsHeaders = SubtaskCurrentAttemptDetailsHeaders.getInstance();
+			SubtaskMessageParameters params = new SubtaskMessageParameters();
+			params.jobPathParameter.resolve(jobId);
+			params.jobVertexIdPathParameter.resolve(jobVertexID);
+			params.subtaskIndexPathParameter.resolve(subtaskIndex);
+			return sendRequest(detailsHeaders, params).get();
+		}
+
+		private ResourceID getTaskManagerIdByHost(String host) throws ExecutionException, InterruptedException {
+			TaskManagersHeaders taskManagersHeaders = TaskManagersHeaders.getInstance();
+			EmptyMessageParameters params = EmptyMessageParameters.getInstance();
+			for (TaskManagerInfo info : sendRequest(taskManagersHeaders, params).get().getTaskManagerInfos()) {
+				if (host.equals(info.getAddress())) {
+					return info.getResourceId();
+				}
+			}
+			return null;
 		}
 	}
 }

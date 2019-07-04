@@ -628,7 +628,7 @@ public class RestClusterClient<T> extends ClusterClient<T> implements NewCluster
 	// RestClient Helper
 	//-------------------------------------------------------------------------
 
-	private <M extends MessageHeaders<EmptyRequestBody, P, U>, U extends MessageParameters, P extends ResponseBody> CompletableFuture<P>
+	protected <M extends MessageHeaders<EmptyRequestBody, P, U>, U extends MessageParameters, P extends ResponseBody> CompletableFuture<P>
 			sendRequest(M messageHeaders, U messageParameters) {
 		return sendRequest(messageHeaders, messageParameters, EmptyRequestBody.getInstance());
 	}
