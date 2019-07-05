@@ -41,17 +41,16 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.messages.webmonitor.JobIdsWithStatusOverview;
 import org.apache.flink.runtime.messages.webmonitor.JobIdsWithStatusOverview.JobIdWithStatus;
 import org.apache.flink.runtime.minicluster.MiniCluster;
+import org.apache.flink.runtime.minicluster.RpcServiceSharing;
 import org.apache.flink.runtime.minicluster.TestingMiniCluster;
 import org.apache.flink.runtime.minicluster.TestingMiniClusterConfiguration.Builder;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.JobIdsWithStatusesOverviewHeaders;
+import org.apache.flink.runtime.rest.messages.JobVertexDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.JobVertexDetailsInfo;
+import org.apache.flink.runtime.rest.messages.JobVertexDetailsInfo.VertexTaskDetail;
+import org.apache.flink.runtime.rest.messages.JobVertexMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo.JobVertexDetailsInfo;
-import org.apache.flink.runtime.rest.messages.job.SubtaskAttemptMessageParameters;
-import org.apache.flink.runtime.rest.messages.job.SubtaskCurrentAttemptDetailsHeaders;
-import org.apache.flink.runtime.rest.messages.job.SubtaskExecutionAttemptDetailsHeaders;
-import org.apache.flink.runtime.rest.messages.job.SubtaskExecutionAttemptDetailsInfo;
-import org.apache.flink.runtime.rest.messages.job.SubtaskMessageParameters;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.test.util.TestEnvironment;
@@ -69,14 +68,17 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import static org.apache.flink.configuration.JobManagerOptions.FORCE_PARTITION_RELEASE_ON_CONSUMPTION;
 import static org.apache.flink.runtime.executiongraph.failover.FailoverStrategyLoader.PIPELINED_REGION_RESTART_STRATEGY_NAME;
+import static org.apache.flink.util.ExceptionUtils.getOrRethrow;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 
@@ -97,10 +99,11 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 	private static final int EMITTED_RECORD_NUMBER = 1000;
 	private static final int MAX_FAILURE_NUMBER = 10;
 	private static final int MAP_NUMBER = 3;
+	private static final String TASK_NAME_PREFIX = "Test partition mapper ";
 	private static final List<Long> EXPECTED_JOB_OUTPUT =
 		LongStream.range(MAP_NUMBER, EMITTED_RECORD_NUMBER + MAP_NUMBER).boxed().collect(Collectors.toList());
 
-	private TestingMiniCluster miniCluster;
+	private static TestingMiniCluster miniCluster;
 	private static MiniClusterClient client;
 
 	@Before
@@ -111,9 +114,10 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 		miniCluster = new TestingMiniCluster(
 			new Builder()
-				.setNumTaskManagers(MAP_NUMBER)
+				.setNumTaskManagers(1)
 				.setNumSlotsPerTaskManager(1)
 				.setConfiguration(configuration)
+				.setRpcServiceSharing(RpcServiceSharing.DEDICATED)
 				.build(),
 			null);
 
@@ -139,13 +143,16 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		StaticFailureCounter.reset();
 		StaticMapFailureTracker.reset();
 
-		FailureStrategy failureStrategy = new RandomExceptionFailureStrategy(1, EMITTED_RECORD_NUMBER);
+		CoinToss coin = new CoinToss(1, EMITTED_RECORD_NUMBER);
+		FailureStrategy failureStrategy = new JoinedFailureStrategy(
+			//new RandomExceptionFailureStrategy(coin),
+			new RandomTaskExecutorFailureStrategy(coin));
 
 		DataSet<Long> input = env.generateSequence(0, EMITTED_RECORD_NUMBER - 1);
 		for (int i = 0; i < MAP_NUMBER; i++) {
 			input = input
-				.mapPartition(new TestPartitionMapper(StaticMapFailureTracker.addNewMap(), failureStrategy))
-				.name("Test partition mapper " + i);
+				.mapPartition(new TestPartitionMapper(StaticMapFailureTracker.addNewMap(), i == 0 ? t -> {} : failureStrategy))
+				.name(TASK_NAME_PREFIX + i);
 		}
 		Tuple2<JobExecutionResult, List<Long>> resAndOut = collect(env, input);
 		JobExecutionResult res = resAndOut.f0;
@@ -168,7 +175,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		return Tuple2.of(res, accResult);
 	}
 
-	private ExecutionEnvironment createExecutionEnvironment() {
+	private static ExecutionEnvironment createExecutionEnvironment() {
 		@SuppressWarnings("StaticVariableUsedBeforeInitialization")
 		ExecutionEnvironment env = new TestEnvironment(miniCluster, 1, true);
 		env.setRestartStrategy(RestartStrategies.fixedDelayRestart(MAX_FAILURE_NUMBER, Time.milliseconds(10)));
@@ -201,6 +208,14 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 			expectedMapRestarts.get(index).incrementAndGet();
 		}
 
+		private static void mapFailure(String name) {
+			if (name.contains(TASK_NAME_PREFIX)) {
+				int index = TaskTrackingIndexConverter.taskNameToId(name);
+				IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
+				IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
+			}
+		}
+
 		private static void verify() {
 			assertThat(collect(mapRestarts), is(collect(expectedMapRestarts)));
 		}
@@ -212,23 +227,93 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 	@FunctionalInterface
 	private interface FailureStrategy extends Serializable {
-		void failOrNot();
+		void failOrNot(int trackingIndex);
 	}
 
-	private static class RandomExceptionFailureStrategy implements FailureStrategy {
+	private static class JoinedFailureStrategy implements FailureStrategy {
+		private static final long serialVersionUID = 1L;
+
+		private final FailureStrategy[] failureStrategies;
+
+		private JoinedFailureStrategy(FailureStrategy ... failureStrategies) {
+			this.failureStrategies = failureStrategies;
+		}
+
+		@Override
+		public void failOrNot(int trackingIndex) {
+			for (FailureStrategy failureStrategy : failureStrategies) {
+				failureStrategy.failOrNot(trackingIndex);
+			}
+		}
+	}
+
+	private abstract static class AbstractRandomFailureStrategy implements FailureStrategy {
 		private static final long serialVersionUID = 1L;
 
 		private final CoinToss coin;
 
-		private RandomExceptionFailureStrategy(int probFraction, int probBase) {
-			this.coin = new CoinToss(probFraction, probBase);
+		private AbstractRandomFailureStrategy(CoinToss coin) {
+			this.coin = coin;
 		}
 
 		@Override
-		public void failOrNot() {
+		public void failOrNot(int trackingIndex) {
 			if (coin.toss() && StaticFailureCounter.failOrNot()) {
+				fail(trackingIndex);
 				throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
 			}
+		}
+
+		abstract void fail(int trackingIndex);
+	}
+
+	private static class RandomExceptionFailureStrategy extends AbstractRandomFailureStrategy {
+		private static final long serialVersionUID = 1L;
+
+		private RandomExceptionFailureStrategy(CoinToss coin) {
+			super(coin);
+		}
+
+		@Override
+		void fail(int trackingIndex) {
+			StaticMapFailureTracker.mapFailure(trackingIndex);
+			throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
+		}
+	}
+
+	private static class RandomTaskExecutorFailureStrategy extends AbstractRandomFailureStrategy {
+		private static final long serialVersionUID = 1L;
+
+		private RandomTaskExecutorFailureStrategy(CoinToss coin) {
+			super(coin);
+		}
+
+		@Override
+		void fail(int trackingIndex) {
+			Tuple2<String, Integer> nameWithIndex = TaskTrackingIndexConverter.trackingIndexToNameWithIndex(trackingIndex);
+			// task executor of this task
+			ResourceID taskExecutorId = client
+				.getTaskExecutorIdOfSubtask(nameWithIndex.f0, nameWithIndex.f1)
+				.orElseThrow(() -> new FlinkRuntimeException("Failed to define the task's executor id"));
+			// track failure of all tasks of this task executor
+			StaticMapFailureTracker.mapFailure(nameWithIndex.f1);
+			// fail the task executor
+			miniCluster.terminateTaskExecutor(taskExecutorId);
+			getOrRethrow(miniCluster::startTaskExecutor);
+		}
+	}
+
+	private enum TaskTrackingIndexConverter {
+		;
+
+		private static int taskNameToId(String name) {
+			return Integer.parseInt(name.substring(
+				name.indexOf(TASK_NAME_PREFIX) + TASK_NAME_PREFIX.length(),
+				name.lastIndexOf(')')));
+		}
+
+		private static Tuple2<String, Integer> trackingIndexToNameWithIndex(int trackingIndex) {
+			return Tuple2.of("MapPartition (" + TASK_NAME_PREFIX + trackingIndex + ')', 0);
 		}
 	}
 
@@ -265,7 +350,6 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		public void open(Configuration parameters) throws Exception {
 			super.open(parameters);
 			StaticMapFailureTracker.mapRestart(trackingIndex);
-			ResourceID resourceID = client.getTaskManagerByTask(getRuntimeContext().getTaskName(), getRuntimeContext().getIndexOfThisSubtask());
 		}
 
 		@Override
@@ -277,12 +361,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		}
 
 		private void failOrNot() {
-			try {
-				failureStrategy.failOrNot();
-			} catch (Throwable t) {
-				StaticMapFailureTracker.mapFailure(trackingIndex);
-				throw t;
-			}
+			failureStrategy.failOrNot(trackingIndex);
 		}
 	}
 
@@ -305,63 +384,111 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 			super(createClientConfiguration(miniCluster), StandaloneClusterId.getInstance());
 		}
 
-		private static Configuration createClientConfiguration(MiniCluster miniCluster) throws ExecutionException, InterruptedException {
-			final URI restAddress = miniCluster.getRestAddress().get();
+		private static Configuration createClientConfiguration(MiniCluster miniCluster) {
+			URI restAddress = getOrRethrow(miniCluster.getRestAddress()::get);
 			Configuration restClientConfig = new Configuration();
 			restClientConfig.setString(JobManagerOptions.ADDRESS, restAddress.getHost());
 			restClientConfig.setInteger(RestOptions.PORT, restAddress.getPort());
 			return new UnmodifiableConfiguration(restClientConfig);
 		}
 
-		private ResourceID getTaskManagerByTask(String name, int subtaskIndex) throws ExecutionException, InterruptedException {
-			for (JobID jobId : getJobs()) {
-				JobDetailsInfo jobDetailsInfo = getJobDetails(jobId).get();
-				JobVertexID jobVertexID = null;
-				for (JobVertexDetailsInfo jobVertexDetailsInfo : jobDetailsInfo.getJobVertexInfos()) {
-					if (name.equals(jobVertexDetailsInfo.getName())) {
-						jobVertexID = jobVertexDetailsInfo.getJobVertexID();
-						break;
-					}
-				}
-				if (jobVertexID == null) {
-					continue;
-				}
-				String host = getSubtaskExecutionAttemptDetailsInfo(jobId, jobVertexID, subtaskIndex).getHost();
-				ResourceID resourceID = getTaskManagerIdByHost(host);
-				if (resourceID != null) {
-					return resourceID;
-				}
-			}
-			return null;
+		private Optional<ResourceID> getTaskExecutorIdOfSubtask(String name, int subtaskIndex) {
+			return getJobs()
+				.stream()
+				.map(jobId -> getTaskExecutorIdOfSubtaskForJob(jobId, name, subtaskIndex))
+				.filter(Optional::isPresent)
+				.map(Optional::get)
+				.findFirst();
 		}
 
-		private Collection<JobID> getJobs() throws ExecutionException, InterruptedException {
-			return sendRequest(JobIdsWithStatusesOverviewHeaders.getInstance(), EmptyMessageParameters.getInstance())
-				.get()
+		private Optional<ResourceID> getTaskExecutorIdOfSubtaskForJob(JobID jobId, String name, int subtaskIndex) {
+			return getOrRethrow(getJobDetails(jobId)::get)
+				.getJobVertexInfos()
+				.stream()
+				.filter(jobVertexDetailsInfo -> name.equals(jobVertexDetailsInfo.getName()))
+				.findFirst()
+				.flatMap(vertexInfo ->
+					getJobVertexDetailsInfo(jobId, vertexInfo.getJobVertexID())
+						.getSubtasks()
+						.stream()
+						.filter(subtask -> subtask.getSubtaskIndex() == subtaskIndex)
+						.findFirst()
+						.flatMap(subtask -> getTaskManagerIdByAddress(subtask.getHost())));
+		}
+
+		private List<TaskWithDataPort> getTaskExecutorSubtasks(ResourceID taskExecutorId) {
+			Map<Integer, ResourceID> taskManagerIdsByDataPort = getTaskManagerIdsByDataPort();
+			List<TaskWithDataPort> allSubtasks = getSubtaskskWithDataPort();
+			return allSubtasks
+				.stream()
+				.filter(subtask -> taskExecutorId.equals(taskManagerIdsByDataPort.get(subtask.dataPort)))
+				.collect(Collectors.toList());
+		}
+
+		private List<TaskWithDataPort> getSubtaskskWithDataPort() {
+			return getJobs()
+				.stream()
+				.flatMap(jobId -> getOrRethrow(getJobDetails(jobId)::get)
+					.getJobVertexInfos()
+					.stream()
+					.map(info -> Tuple2.of(jobId, info)))
+				.flatMap(vertexInfoWithJobId ->
+					getJobVertexDetailsInfo(vertexInfoWithJobId.f0, vertexInfoWithJobId.f1.getJobVertexID())
+						.getSubtasks()
+						.stream()
+						.map(subtask -> new TaskWithDataPort(vertexInfoWithJobId.f1.getName(), subtask)))
+				.collect(Collectors.toList());
+		}
+
+		private Collection<JobID> getJobs() {
+			JobIdsWithStatusOverview jobIds = getOrRethrow(
+				sendRequest(JobIdsWithStatusesOverviewHeaders.getInstance(), EmptyMessageParameters.getInstance())::get);
+			return jobIds
 				.getJobsWithStatus()
 				.stream()
 				.map(JobIdWithStatus::getJobId)
 				.collect(Collectors.toList());
 		}
 
-		private SubtaskExecutionAttemptDetailsInfo getSubtaskExecutionAttemptDetailsInfo(JobID jobId, JobVertexID jobVertexID, int subtaskIndex) throws ExecutionException, InterruptedException {
-			SubtaskCurrentAttemptDetailsHeaders detailsHeaders = SubtaskCurrentAttemptDetailsHeaders.getInstance();
-			SubtaskMessageParameters params = new SubtaskMessageParameters();
+		private JobVertexDetailsInfo getJobVertexDetailsInfo(JobID jobId, JobVertexID jobVertexID) {
+			JobVertexDetailsHeaders detailsHeaders = JobVertexDetailsHeaders.getInstance();
+			JobVertexMessageParameters params = new JobVertexMessageParameters();
 			params.jobPathParameter.resolve(jobId);
 			params.jobVertexIdPathParameter.resolve(jobVertexID);
-			params.subtaskIndexPathParameter.resolve(subtaskIndex);
-			return sendRequest(detailsHeaders, params).get();
+			return getOrRethrow(sendRequest(detailsHeaders, params)::get);
 		}
 
-		private ResourceID getTaskManagerIdByHost(String host) throws ExecutionException, InterruptedException {
-			TaskManagersHeaders taskManagersHeaders = TaskManagersHeaders.getInstance();
-			EmptyMessageParameters params = EmptyMessageParameters.getInstance();
-			for (TaskManagerInfo info : sendRequest(taskManagersHeaders, params).get().getTaskManagerInfos()) {
-				if (host.equals(info.getAddress())) {
-					return info.getResourceId();
-				}
+		private Optional<ResourceID> getTaskManagerIdByAddress(String address) {
+			return Optional.ofNullable(getTaskManagerIdsByDataPort().getOrDefault(parsePort(address), null));
+		}
+
+		private Map<Integer, ResourceID> getTaskManagerIdsByDataPort() {
+			return getOrRethrow(sendRequest(TaskManagersHeaders.getInstance(), EmptyMessageParameters.getInstance())::get)
+				.getTaskManagerInfos()
+				.stream()
+				.collect(Collectors.toMap(TaskManagerInfo::getDataPort, TaskManagerInfo::getResourceId));
+		}
+
+		private static int parsePort(String address) {
+			//noinspection HardcodedFileSeparator
+			return URI.create(address.contains("//") ? address : "http://" + address).getPort();
+		}
+
+		private static class TaskWithDataPort {
+			private final String name;
+			private final int subtaskIndex;
+			private final int dataPort;
+
+			private TaskWithDataPort(String name, VertexTaskDetail vertexTaskDetail) {
+				this.name = name;
+				this.subtaskIndex = vertexTaskDetail.getSubtaskIndex();
+				this.dataPort = parsePort(vertexTaskDetail.getHost());
 			}
-			return null;
+
+			@Override
+			public String toString() {
+				return name + " (" + subtaskIndex + ", " + dataPort + ')';
+			}
 		}
 	}
 }
