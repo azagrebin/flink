@@ -180,6 +180,11 @@ public class JobVertexDetailsInfo implements ResponseBody {
 			return subtask;
 		}
 
+		@JsonIgnore
+		public int getAttempt() {
+			return attempt;
+		}
+
 		@Override
 		public boolean equals(Object o) {
 			if (this == o) {

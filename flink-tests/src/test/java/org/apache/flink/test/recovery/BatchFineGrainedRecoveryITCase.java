@@ -71,6 +71,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -151,7 +152,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		DataSet<Long> input = env.generateSequence(0, EMITTED_RECORD_NUMBER - 1);
 		for (int i = 0; i < MAP_NUMBER; i++) {
 			input = input
-				.mapPartition(new TestPartitionMapper(StaticMapFailureTracker.addNewMap(), i == 0 ? t -> {} : failureStrategy))
+				.mapPartition(new TestPartitionMapper(StaticMapFailureTracker.addNewMap(), failureStrategy))
 				.name(TASK_NAME_PREFIX + i);
 		}
 		Tuple2<JobExecutionResult, List<Long>> resAndOut = collect(env, input);
@@ -188,6 +189,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 		private static final List<AtomicInteger> mapRestarts = new ArrayList<>(10);
 		private static final List<AtomicInteger> expectedMapRestarts = new ArrayList<>(10);
+		private static final List<AtomicInteger> mapFailures = new ArrayList<>(10);
 
 		private static void reset() {
 			mapRestarts.clear();
@@ -197,6 +199,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		private static int addNewMap() {
 			mapRestarts.add(new AtomicInteger(0));
 			expectedMapRestarts.add(new AtomicInteger(1));
+			mapFailures.add(new AtomicInteger(0));
 			return mapRestarts.size() - 1;
 		}
 
@@ -205,12 +208,16 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		}
 
 		private static void mapFailure(int index) {
-			expectedMapRestarts.get(index).incrementAndGet();
+			//expectedMapRestarts.get(index).incrementAndGet();
+			mapFailures.get(index).incrementAndGet();
+			IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
+			IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
 		}
 
 		private static void mapFailure(String name) {
 			if (name.contains(TASK_NAME_PREFIX)) {
 				int index = TaskTrackingIndexConverter.taskNameToId(name);
+				mapFailures.get(index).incrementAndGet();
 				IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
 				IntStream.range(0, index + 1).forEach(i -> expectedMapRestarts.get(i).incrementAndGet());
 			}
@@ -225,8 +232,8 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		}
 	}
 
-	@FunctionalInterface
 	private interface FailureStrategy extends Serializable {
+		void open(int trackingIndex);
 		void failOrNot(int trackingIndex);
 	}
 
@@ -237,6 +244,13 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 		private JoinedFailureStrategy(FailureStrategy ... failureStrategies) {
 			this.failureStrategies = failureStrategies;
+		}
+
+		@Override
+		public void open(int trackingIndex) {
+			for (FailureStrategy failureStrategy : failureStrategies) {
+				failureStrategy.open(trackingIndex);
+			}
 		}
 
 		@Override
@@ -251,20 +265,30 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		private static final long serialVersionUID = 1L;
 
 		private final CoinToss coin;
+		transient boolean failed;
 
 		private AbstractRandomFailureStrategy(CoinToss coin) {
 			this.coin = coin;
 		}
 
 		@Override
+		public void open(int trackingIndex) {
+			System.out.println("OPEN - " + trackingIndex);
+			failed = false;
+		}
+
+		@Override
 		public void failOrNot(int trackingIndex) {
-			if (coin.toss() && StaticFailureCounter.failOrNot()) {
-				fail(trackingIndex);
-				throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
+			if (!failed && coin.toss() && StaticFailureCounter.failOrNot()) {
+				failed = fail(trackingIndex);
+				if (failed) {
+					System.out.println("BOOM - " + trackingIndex);
+				}
+				//throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
 			}
 		}
 
-		abstract void fail(int trackingIndex);
+		abstract boolean fail(int trackingIndex);
 	}
 
 	private static class RandomExceptionFailureStrategy extends AbstractRandomFailureStrategy {
@@ -275,7 +299,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		}
 
 		@Override
-		void fail(int trackingIndex) {
+		boolean fail(int trackingIndex) {
 			StaticMapFailureTracker.mapFailure(trackingIndex);
 			throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
 		}
@@ -283,23 +307,37 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 
 	private static class RandomTaskExecutorFailureStrategy extends AbstractRandomFailureStrategy {
 		private static final long serialVersionUID = 1L;
+		private transient boolean failed;
 
 		private RandomTaskExecutorFailureStrategy(CoinToss coin) {
 			super(coin);
 		}
 
 		@Override
-		void fail(int trackingIndex) {
+		boolean fail(int trackingIndex) {
 			Tuple2<String, Integer> nameWithIndex = TaskTrackingIndexConverter.trackingIndexToNameWithIndex(trackingIndex);
 			// task executor of this task
-			ResourceID taskExecutorId = client
-				.getTaskExecutorIdOfSubtask(nameWithIndex.f0, nameWithIndex.f1)
-				.orElseThrow(() -> new FlinkRuntimeException("Failed to define the task's executor id"));
+			Optional<ResourceID> taskExecutorId = client
+				.getTaskExecutorIdOfSubtask(nameWithIndex.f0, nameWithIndex.f1);
+			if (!taskExecutorId.isPresent()) {
+				return false;
+			}
 			// track failure of all tasks of this task executor
-			StaticMapFailureTracker.mapFailure(nameWithIndex.f1);
+			StaticMapFailureTracker.mapFailure(trackingIndex);
 			// fail the task executor
-			miniCluster.terminateTaskExecutor(taskExecutorId);
-			getOrRethrow(miniCluster::startTaskExecutor);
+			try {
+				miniCluster.terminateTaskExecutor(taskExecutorId.get()).get();
+			} catch (InterruptedException e) {
+				// wait for shutdown (should cause interruption)
+				e.printStackTrace();
+				return true;
+			} catch (ExecutionException e) {
+				throw new FlinkRuntimeException("Failed to shutdown the task executor", e);
+			} finally {
+				getOrRethrow(miniCluster::startTaskExecutor);
+				//throw new FlinkRuntimeException("BAGA-BOOM!!! The user function generated test failure.");
+				return true;
+			}
 		}
 	}
 
@@ -349,7 +387,14 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 		@Override
 		public void open(Configuration parameters) throws Exception {
 			super.open(parameters);
+			failureStrategy.open(trackingIndex);
 			StaticMapFailureTracker.mapRestart(trackingIndex);
+		}
+
+		@Override
+		public void close() throws Exception {
+			super.close();
+			System.out.println("CLOSE - " + trackingIndex);
 		}
 
 		@Override
@@ -416,16 +461,16 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 						.flatMap(subtask -> getTaskManagerIdByAddress(subtask.getHost())));
 		}
 
-		private List<TaskWithDataPort> getTaskExecutorSubtasks(ResourceID taskExecutorId) {
+		private List<InternalTaskInfo> getTaskExecutorSubtasks(ResourceID taskExecutorId) {
 			Map<Integer, ResourceID> taskManagerIdsByDataPort = getTaskManagerIdsByDataPort();
-			List<TaskWithDataPort> allSubtasks = getSubtaskskWithDataPort();
+			List<InternalTaskInfo> allSubtasks = getInternalTaskInfos();
 			return allSubtasks
 				.stream()
 				.filter(subtask -> taskExecutorId.equals(taskManagerIdsByDataPort.get(subtask.dataPort)))
 				.collect(Collectors.toList());
 		}
 
-		private List<TaskWithDataPort> getSubtaskskWithDataPort() {
+		private List<InternalTaskInfo> getInternalTaskInfos() {
 			return getJobs()
 				.stream()
 				.flatMap(jobId -> getOrRethrow(getJobDetails(jobId)::get)
@@ -436,7 +481,7 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 					getJobVertexDetailsInfo(vertexInfoWithJobId.f0, vertexInfoWithJobId.f1.getJobVertexID())
 						.getSubtasks()
 						.stream()
-						.map(subtask -> new TaskWithDataPort(vertexInfoWithJobId.f1.getName(), subtask)))
+						.map(subtask -> new InternalTaskInfo(vertexInfoWithJobId.f1.getName(), subtask)))
 				.collect(Collectors.toList());
 		}
 
@@ -474,20 +519,22 @@ public class BatchFineGrainedRecoveryITCase extends TestLogger {
 			return URI.create(address.contains("//") ? address : "http://" + address).getPort();
 		}
 
-		private static class TaskWithDataPort {
+		private static class InternalTaskInfo {
 			private final String name;
 			private final int subtaskIndex;
 			private final int dataPort;
+			private final int attempt;
 
-			private TaskWithDataPort(String name, VertexTaskDetail vertexTaskDetail) {
+			private InternalTaskInfo(String name, VertexTaskDetail vertexTaskDetail) {
 				this.name = name;
 				this.subtaskIndex = vertexTaskDetail.getSubtaskIndex();
 				this.dataPort = parsePort(vertexTaskDetail.getHost());
+				this.attempt = vertexTaskDetail.getAttempt();
 			}
 
 			@Override
 			public String toString() {
-				return name + " (" + subtaskIndex + ", " + dataPort + ')';
+				return name + " (N:" + subtaskIndex + ", P:" + dataPort + ", A:" + attempt + ')';
 			}
 		}
 	}

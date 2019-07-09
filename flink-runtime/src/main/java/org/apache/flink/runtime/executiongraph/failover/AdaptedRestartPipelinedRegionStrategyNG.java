@@ -96,6 +96,7 @@ public class AdaptedRestartPipelinedRegionStrategyNG extends FailoverStrategy {
 		final ExecutionVertexID vertexID = getExecutionVertexID(taskExecution.getVertex());
 
 		final Set<ExecutionVertexID> tasksToRestart = restartPipelinedRegionStrategy.getTasksNeedingRestart(vertexID, cause);
+		System.out.println(cause.getMessage() + " - " + taskExecution.getVertex().getTaskName());
 		restartTasks(tasksToRestart);
 	}
 
