@@ -26,7 +26,6 @@ package org.apache.flink.util;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.util.function.RunnableWithException;
-import org.apache.flink.util.function.SupplierWithException;
 
 import javax.annotation.Nullable;
 
@@ -475,16 +474,6 @@ public final class ExceptionUtils {
 			if (isJvmFatalError(t)) {
 				rethrow(t);
 			}
-		}
-	}
-
-	public static <T, E extends Throwable> T getOrRethrow(SupplierWithException<T, E> supplier) {
-		//noinspection OverlyBroadCatchBlock
-		try {
-			return supplier.get();
-		} catch (Throwable t) {
-			rethrow(t);
-			throw new RuntimeException("Unreachable", t); // to prevent returning null and IDE null analysis
 		}
 	}
 

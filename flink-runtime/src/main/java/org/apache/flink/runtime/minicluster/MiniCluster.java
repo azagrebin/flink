@@ -485,14 +485,13 @@ public class MiniCluster implements JobExecutorService, AutoCloseableAsync {
 	}
 
 	@VisibleForTesting
-	ResourceID startTaskExecutor() throws Exception {
+	void startTaskExecutor() throws Exception {
 		synchronized (lock) {
 			final Configuration configuration = miniClusterConfiguration.getConfiguration();
 
-			ResourceID resourceID = new ResourceID(UUID.randomUUID().toString());
 			final TaskExecutor taskExecutor = TaskManagerRunner.startTaskManager(
 				configuration,
-				resourceID,
+				new ResourceID(UUID.randomUUID().toString()),
 				taskManagerRpcServiceFactory.createRpcService(),
 				haServices,
 				heartbeatServices,
@@ -503,7 +502,6 @@ public class MiniCluster implements JobExecutorService, AutoCloseableAsync {
 
 			taskExecutor.start();
 			taskManagers.add(taskExecutor);
-			return resourceID;
 		}
 	}
 

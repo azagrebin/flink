@@ -20,7 +20,6 @@ package org.apache.flink.runtime.minicluster;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.blob.BlobServer;
-import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.dispatcher.DispatcherGateway;
 import org.apache.flink.runtime.dispatcher.MemoryArchivedExecutionGraphStore;
 import org.apache.flink.runtime.entrypoint.component.DispatcherResourceManagerComponent;
@@ -29,7 +28,6 @@ import org.apache.flink.runtime.heartbeat.HeartbeatServices;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServices;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
-import org.apache.flink.runtime.taskexecutor.TaskExecutor;
 import org.apache.flink.runtime.webmonitor.retriever.MetricQueryServiceRetriever;
 
 import javax.annotation.Nonnull;
@@ -37,11 +35,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
@@ -57,8 +51,6 @@ public class TestingMiniCluster extends MiniCluster {
 
 	@Nullable
 	private final Supplier<HighAvailabilityServices> highAvailabilityServicesSupplier;
-
-	private final Map<ResourceID, Integer> taskExecutorIds = new HashMap<>(5);
 
 	public TestingMiniCluster(
 			TestingMiniClusterConfiguration miniClusterConfiguration,
@@ -79,10 +71,6 @@ public class TestingMiniCluster extends MiniCluster {
 		return super.getDispatcherResourceManagerComponents();
 	}
 
-	public CompletableFuture<Void> terminateTaskExecutor(ResourceID resourceID) {
-		return terminateTaskExecutor(taskExecutorIds.get(resourceID));
-	}
-
 	@Nonnull
 	@Override
 	public CompletableFuture<Void> terminateTaskExecutor(int index) {
@@ -90,10 +78,8 @@ public class TestingMiniCluster extends MiniCluster {
 	}
 
 	@Override
-	public ResourceID startTaskExecutor() throws Exception {
-		ResourceID resourceID = super.startTaskExecutor();
-		taskExecutorIds.put(resourceID, taskExecutorIds.size());
-		return resourceID;
+	public void startTaskExecutor() throws Exception {
+		super.startTaskExecutor();
 	}
 
 	@Override

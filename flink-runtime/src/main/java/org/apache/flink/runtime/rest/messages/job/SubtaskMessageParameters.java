@@ -30,7 +30,7 @@ import java.util.Collection;
  */
 public class SubtaskMessageParameters extends JobVertexMessageParameters {
 
-	public final SubtaskIndexPathParameter subtaskIndexPathParameter = new SubtaskIndexPathParameter();
+	protected final SubtaskIndexPathParameter subtaskIndexPathParameter = new SubtaskIndexPathParameter();
 
 	@Override
 	public Collection<MessagePathParameter<?>> getPathParameters() {
