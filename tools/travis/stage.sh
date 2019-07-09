@@ -214,7 +214,7 @@ function get_test_modules_for_stage() {
             echo "-pl $modules_tests"
         ;;
         (${STAGE_MISC})
-            echo "-pl $modules_misc"
+            echo "-pl flink-yarn-tests -Dtest=org.apache.flink.yarn.YARNITCase"
         ;;
     esac
 }
