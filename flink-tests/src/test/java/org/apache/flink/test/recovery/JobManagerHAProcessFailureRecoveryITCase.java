@@ -76,6 +76,7 @@ import scala.concurrent.duration.FiniteDuration;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -178,6 +179,7 @@ public class JobManagerHAProcessFailureRecoveryITCase extends TestLogger {
 					@Override
 					public Long map(Long value) throws Exception {
 						if (!markerCreated) {
+							System.out.println("map par: " + getRuntimeContext().getNumberOfParallelSubtasks());
 							int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
 							AbstractTaskManagerProcessFailureRecoveryTest.touchFile(
 									new File(coordinateDir, READY_MARKER_FILE_PREFIX + taskIndex));
@@ -211,6 +213,7 @@ public class JobManagerHAProcessFailureRecoveryITCase extends TestLogger {
 						assertEquals(numElements * (numElements + 1L) / 2L, (long) value);
 
 						int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
+						System.out.println("flatMap par: " + getRuntimeContext().getNumberOfParallelSubtasks());
 						AbstractTaskManagerProcessFailureRecoveryTest.touchFile(
 								new File(coordinateDir, FINISH_MARKER_FILE_PREFIX + taskIndex));
 					}
@@ -258,6 +261,7 @@ public class JobManagerHAProcessFailureRecoveryITCase extends TestLogger {
 
 		try {
 			final Deadline deadline = TestTimeOut.fromNow();
+			printStat("init", coordinateTempDir, deadline);
 
 			// Coordination directory
 			coordinateTempDir = temporaryFolder.newFolder();
@@ -315,26 +319,35 @@ public class JobManagerHAProcessFailureRecoveryITCase extends TestLogger {
 
 			//start the test program
 			programTrigger.start();
+			printStat("programTrigger.start()", coordinateTempDir, deadline);
 
 			// wait until all marker files are in place, indicating that all tasks have started
-			AbstractTaskManagerProcessFailureRecoveryTest.waitForMarkerFiles(coordinateTempDir,
+			boolean allReady = AbstractTaskManagerProcessFailureRecoveryTest.waitForMarkerFiles(coordinateTempDir,
 					READY_MARKER_FILE_PREFIX, PARALLELISM, deadline.timeLeft().toMillis());
+			printStat("wait for READY_MARKER_FILE_PREFIX", coordinateTempDir, deadline);
+			assertTrue(allReady);
 
 			// Kill one of the job managers and trigger recovery
 			dispatcherProcesses[0].destroy();
+			printStat("dispatcherProcesses[0].destroy()", coordinateTempDir, deadline);
 
 			dispatcherProcesses[1] = new DispatcherProcess(1, config);
 			dispatcherProcesses[1].startProcess();
+			printStat("dispatcherProcesses[1].startProcess()", coordinateTempDir, deadline);
 
 			// we create the marker file which signals the program functions tasks that they can complete
 			AbstractTaskManagerProcessFailureRecoveryTest.touchFile(new File(coordinateTempDir, PROCEED_MARKER_FILE));
+			printStat("PROCEED_MARKER_FILE", coordinateTempDir, deadline);
 
 			programTrigger.join(deadline.timeLeft().toMillis());
+			printStat("programTrigger.join", coordinateTempDir, deadline);
 
 			// We wait for the finish marker file. We don't wait for the program trigger, because
 			// we submit in detached mode.
-			AbstractTaskManagerProcessFailureRecoveryTest.waitForMarkerFiles(coordinateTempDir,
+			boolean allDone = AbstractTaskManagerProcessFailureRecoveryTest.waitForMarkerFiles(coordinateTempDir,
 					FINISH_MARKER_FILE_PREFIX, 1, deadline.timeLeft().toMillis());
+			printStat("wait for FINISH_MARKER_FILE_PREFIX", coordinateTempDir, deadline);
+			assertTrue(allDone);
 
 			// check that the program really finished
 			assertFalse("The program did not finish in time", programTrigger.isAlive());
@@ -391,6 +404,14 @@ public class JobManagerHAProcessFailureRecoveryITCase extends TestLogger {
 				}
 			}
 		}
+	}
+
+	private void printStat(String message, File coordinateTempDir, Deadline deadline) {
+		AbstractTaskManagerProcessFailureRecoveryTest
+			.printStat(coordinateTempDir, READY_MARKER_FILE_PREFIX, PARALLELISM);
+		AbstractTaskManagerProcessFailureRecoveryTest
+			.printStat(coordinateTempDir, FINISH_MARKER_FILE_PREFIX, 1);
+		System.out.println("Deadline after " + message + ':' + deadline.timeLeft().toMillis());
 	}
 
 	private void waitForTaskManagers(int numberOfTaskManagers, DispatcherGateway dispatcherGateway, FiniteDuration timeLeft) throws ExecutionException, InterruptedException {

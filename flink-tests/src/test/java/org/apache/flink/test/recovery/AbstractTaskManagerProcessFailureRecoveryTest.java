@@ -47,6 +47,8 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -302,6 +304,21 @@ public abstract class AbstractTaskManagerProcessFailureRecoveryTest extends Test
 		}
 
 		return false;
+	}
+
+	protected static void printStat(File basedir, String prefix, int num) {
+		List<Integer> notReady = new ArrayList<>();
+		for (int i = 0; i < num; i++) {
+			File nextToCheck = new File(basedir, prefix + i);
+			if (!nextToCheck.exists()) {
+				notReady.add(i);
+			}
+		}
+		if (notReady.isEmpty()) {
+			System.out.println(prefix + " (" + num + '/' + num + ')');
+		} else {
+			System.out.println(prefix + " (" + (num - notReady.size()) + '/' + num + ", not exist: " + notReady + ")");
+		}
 	}
 
 	// --------------------------------------------------------------------------------------------

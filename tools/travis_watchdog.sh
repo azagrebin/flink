@@ -197,6 +197,14 @@ watchdog () {
 	done
 }
 
+loop() {
+    for i in {0..100}
+    do
+      echo "Iteration: $i"
+      $MVN_TEST
+    done
+}
+
 # =============================================================================
 # WATCHDOG
 # =============================================================================
@@ -246,7 +254,7 @@ if [ $CMD_TYPE == "MVN" ]; then
 		# Run $MVN_TEST and pipe output to $MVN_OUT for the watchdog. The PID is written to $MVN_PID to
 		# allow the watchdog to kill $MVN if it is not producing any output anymore. $MVN_EXIT contains
 		# the exit code. This is important for Travis' build life-cycle (success/failure).
-		( $MVN_TEST & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
+		( loop & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$MVN_PID 4>$MVN_EXIT | tee $MVN_OUT
 
 		EXIT_CODE=$(<$MVN_EXIT)
 
