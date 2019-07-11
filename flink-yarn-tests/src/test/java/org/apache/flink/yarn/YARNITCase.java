@@ -57,6 +57,15 @@ public class YARNITCase extends YarnTestBase {
 	}
 
 	@Test
+	public void testLoop() throws Exception {
+		int i = 0;
+		while(true) {
+			System.out.println("Iter " + i);
+			testPerJobMode();
+			i++;
+		}
+	}
+
 	public void testPerJobMode() throws Exception {
 		runTest(() -> {
 			Configuration configuration = new Configuration();
@@ -97,6 +106,7 @@ public class YARNITCase extends YarnTestBase {
 				ApplicationId applicationId = null;
 				ClusterClient<ApplicationId> clusterClient = null;
 
+				JobResult jobResult = null;
 				try {
 					clusterClient = yarnClusterDescriptor.deployJobCluster(
 						clusterSpecification,
@@ -109,11 +119,11 @@ public class YARNITCase extends YarnTestBase {
 
 					final CompletableFuture<JobResult> jobResultCompletableFuture = restClusterClient.requestJobResult(jobGraph.getJobID());
 
-					final JobResult jobResult = jobResultCompletableFuture.get();
-
+					jobResult = jobResultCompletableFuture.get();
+				} finally {
 					assertThat(jobResult, is(notNullValue()));
 					assertThat(jobResult.getSerializedThrowable().isPresent(), is(false));
-				} finally {
+
 					if (clusterClient != null) {
 						clusterClient.shutdown();
 					}
