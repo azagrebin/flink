@@ -211,7 +211,7 @@ function get_test_modules_for_stage() {
             echo "-pl $MODULES_KAFKA_GELLY"
         ;;
         (${STAGE_TESTS})
-            echo "-pl $modules_tests -Dtest=org.apache.flink.test.recovery.JobManagerHAProcessFailureRecoveryITCase"
+            echo "-pl $modules_tests"
         ;;
         (${STAGE_MISC})
             echo "-pl $modules_misc"
