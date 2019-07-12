@@ -260,6 +260,10 @@ if [ $CMD_TYPE == "MVN" ]; then
 
             rm $MVN_PID
             rm $MVN_EXIT
+
+            if [ "$EXIT_CODE" -ne 0 ]; then
+                break
+            fi
         done
 	else
 		echo "=============================================================================="

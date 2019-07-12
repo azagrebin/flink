@@ -57,15 +57,6 @@ public class YARNITCase extends YarnTestBase {
 	}
 
 	@Test
-	public void testLoop() throws Exception {
-		int i = 0;
-		while (true) {
-			System.out.println("Iter " + i);
-			testPerJobMode();
-			i++;
-		}
-	}
-
 	public void testPerJobMode() throws Exception {
 		runTest(() -> {
 			Configuration configuration = new Configuration();
