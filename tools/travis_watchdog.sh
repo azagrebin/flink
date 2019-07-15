@@ -205,30 +205,37 @@ watchdog () {
 run_with_watchdog() {
 	local cmd="$1"
 
-	watchdog &
-	WD_PID=$!
-	echo "STARTED watchdog (${WD_PID})."
+    for i in {0..60}; do
+        echo "Iteration: $i"
+        watchdog &
+        WD_PID=$!
+        echo "STARTED watchdog (${WD_PID})."
 
-	# Make sure to be in project root
-	cd "$HERE/../"
+        # Make sure to be in project root
+        cd "$HERE/../"
 
-	echo "RUNNING '${cmd}'."
+        echo "RUNNING '${cmd}'."
 
-	# Run $CMD and pipe output to $CMD_OUT for the watchdog. The PID is written to $CMD_PID to
-	# allow the watchdog to kill $CMD if it is not producing any output anymore. $CMD_EXIT contains
-	# the exit code. This is important for Travis' build life-cycle (success/failure).
-	( $cmd & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$CMD_PID 4>$CMD_EXIT | tee $CMD_OUT
+        # Run $CMD and pipe output to $CMD_OUT for the watchdog. The PID is written to $CMD_PID to
+        # allow the watchdog to kill $CMD if it is not producing any output anymore. $CMD_EXIT contains
+        # the exit code. This is important for Travis' build life-cycle (success/failure).
+        ( $cmd & PID=$! ; echo $PID >&3 ; wait $PID ; echo $? >&4 ) 3>$CMD_PID 4>$CMD_EXIT | tee $CMD_OUT
 
-	EXIT_CODE=$(<$CMD_EXIT)
+        EXIT_CODE=$(<$CMD_EXIT)
 
-	echo "${CMD_TYPE} exited with EXIT CODE: ${EXIT_CODE}."
+        echo "${CMD_TYPE} exited with EXIT CODE: ${EXIT_CODE}."
 
-	# Make sure to kill the watchdog in any case after $CMD has completed
-	echo "Trying to KILL watchdog (${WD_PID})."
-	( kill $WD_PID 2>&1 ) > /dev/null
+        # Make sure to kill the watchdog in any case after $CMD has completed
+        echo "Trying to KILL watchdog (${WD_PID})."
+        ( kill $WD_PID 2>&1 ) > /dev/null
 
-	rm $CMD_PID
-	rm $CMD_EXIT
+        rm $CMD_PID
+        rm $CMD_EXIT
+
+        if [ "$EXIT_CODE" -ne 0 ]; then
+            break
+        fi
+    done
 }
 
 run_with_watchdog "$CMD"
