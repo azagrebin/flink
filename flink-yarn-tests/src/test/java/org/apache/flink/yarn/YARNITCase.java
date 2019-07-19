@@ -18,6 +18,7 @@
 
 package org.apache.flink.yarn;
 
+import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
@@ -28,15 +29,20 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.sink.DiscardingSink;
+import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.yarn.util.YarnTestUtils;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.client.api.YarnClient;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
@@ -97,7 +103,7 @@ public class YARNITCase extends YarnTestBase {
 				ApplicationId applicationId = null;
 				ClusterClient<ApplicationId> clusterClient = null;
 
-				//try {
+				try {
 					clusterClient = yarnClusterDescriptor.deployJobCluster(
 						clusterSpecification,
 						jobGraph,
@@ -112,16 +118,33 @@ public class YARNITCase extends YarnTestBase {
 					final JobResult jobResult = jobResultCompletableFuture.get();
 					assertThat(jobResult, is(notNullValue()));
 					assertThat(jobResult.getSerializedThrowable().isPresent(), is(false));
-				//} finally {
+				} finally {
 					if (clusterClient != null) {
 						clusterClient.shutdown();
 					}
 
 					if (applicationId != null) {
-						yarnClusterDescriptor.killCluster(applicationId);
+						confirmYarnAppFinished(yarnClient, yarnClusterDescriptor, applicationId);
 					}
-				//}
+				}
 			}
 		});
+	}
+
+	private void confirmYarnAppFinished(
+			YarnClient yarnClient,
+			ClusterDescriptor<ApplicationId> yarnClusterDescriptor,
+			ApplicationId applicationId) throws InterruptedException, IOException, YarnException, FlinkException {
+		YarnApplicationState state = YarnApplicationState.RUNNING;
+		for (int i = 0; i < 100 && state == YarnApplicationState.RUNNING; i++) {
+			state = yarnClient.getApplicationReport(applicationId).getYarnApplicationState();
+			System.out.println("APP STATE: " + state);
+			Thread.sleep(100);
+		}
+
+		if (state == YarnApplicationState.RUNNING) {
+			yarnClusterDescriptor.killCluster(applicationId);
+			throw new AssertionError("Yarn application is not finished after a timeout");
+		}
 	}
 }
