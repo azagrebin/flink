@@ -77,6 +77,13 @@ GROUP BY TUMBLE(rowtime, INTERVAL '20' SECOND)"
 
 #start_cluster
 
+set_config_key "jobmanager.execution.failover-strategy" "region"
+
+mkdir -p $FLINK_DIR/plugins
+cp $FLINK_DIR/opt/flink-s3-fs-presto-*.jar $FLINK_DIR/plugins/.
+
+aws s3 rm ${OUTPUT_FILE_PATH}
+
 # The task has total 2 x (1 + 1 + 1 + 1) + 1 = 9 slots
 $FLINK_DIR/bin/flink run -m yarn-cluster -ytm 4096m -ys 4 -p 2 $TEST_PROGRAM_JAR -outputPath "${OUTPUT_FILE_PATH}" -sqlStatement \
     "INSERT INTO sinkTable $(sqlJobQuery)"
