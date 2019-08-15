@@ -24,7 +24,7 @@ source "$(dirname "$0")"/common.sh
 
 TEST_PROGRAM_JAR=${END_TO_END_DIR}/flink-batch-sql-test/target/BatchSQLTestProgram.jar
 
-OUTPUT_FILE_PATH="s3://andrey-flink-ir/results.csv"
+OUTPUT_FILE_PATH=andrey-flink-ir/results.csv
 
 function sqlJobQuery() {
     local tumbleWindowSizeSeconds=10
@@ -82,14 +82,17 @@ set_config_key "jobmanager.execution.failover-strategy" "region"
 mkdir -p $FLINK_DIR/plugins
 cp $FLINK_DIR/opt/flink-s3-fs-presto-*.jar $FLINK_DIR/plugins/.
 
-aws s3 rm ${OUTPUT_FILE_PATH}
+aws s3 rm s3://${OUTPUT_FILE_PATH}
 
 # The task has total 2 x (1 + 1 + 1 + 1) + 1 = 9 slots
-$FLINK_DIR/bin/flink run -m yarn-cluster -ytm 4096m -ys 4 -p 2 $TEST_PROGRAM_JAR -outputPath "${OUTPUT_FILE_PATH}" -sqlStatement \
+$FLINK_DIR/bin/flink run -m yarn-cluster -ytm 4096m -ys 4 -p 2 $TEST_PROGRAM_JAR -outputPath "s3a://${OUTPUT_FILE_PATH}" -sqlStatement \
     "INSERT INTO sinkTable $(sqlJobQuery)"
+
+rm -rf ./results.csv
+aws s3 cp s3://${OUTPUT_FILE_PATH} ./results.csv
 
 # check result:
 #1980,1970-01-01 00:00:00.0
 #1980,1970-01-01 00:00:20.0
 #1980,1970-01-01 00:00:40.0
-#check_result_hash "BatchSQL" "${OUTPUT_FILE_PATH}" "c7ccd2c3a25c3e06616806cf6aecaa66"
+check_result_hash "BatchSQL" "./results.csv" "c7ccd2c3a25c3e06616806cf6aecaa66"
