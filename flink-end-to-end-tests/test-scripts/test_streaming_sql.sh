@@ -23,24 +23,29 @@ PLANNER="${1:-old}"
 
 TEST_PROGRAM_JAR=${END_TO_END_DIR}/flink-stream-sql-test/target/StreamSQLTestProgram.jar
 
-start_cluster
-$FLINK_DIR/bin/taskmanager.sh start
-$FLINK_DIR/bin/taskmanager.sh start
-$FLINK_DIR/bin/taskmanager.sh start
+#start_cluster
+#$FLINK_DIR/bin/taskmanager.sh start
+#$FLINK_DIR/bin/taskmanager.sh start
+#$FLINK_DIR/bin/taskmanager.sh start
 
-$FLINK_DIR/bin/flink run -p 4 $TEST_PROGRAM_JAR -outputPath file://${TEST_DATA_DIR}/out/result -planner ${PLANNER}
+OUT=/out
 
-function sql_cleanup() {
-  stop_cluster
-  $FLINK_DIR/bin/taskmanager.sh stop-all
-}
-on_exit sql_cleanup
+hdfs dfs -rm -r -f ${OUT}
+
+$FLINK_DIR/bin/flink run -m yarn-cluster -p 4 $TEST_PROGRAM_JAR -outputPath hdfs://${OUT} -planner ${PLANNER}
+
+#function sql_cleanup() {
+#  stop_cluster
+#  $FLINK_DIR/bin/taskmanager.sh stop-all
+#}
+#on_exit sql_cleanup
 
 # collect results from files
-cat $TEST_DATA_DIR/out/result/20/.part-* $TEST_DATA_DIR/out/result/20/part-* | sort > $TEST_DATA_DIR/out/result-complete
+mkdir -p out
+hdfs dfs -cat $OUT/20/.part-* $OUT/20/part-* | sort > out/result-complete
 
 # check result:
 # 20,1970-01-01 00:00:00.0
 # 20,1970-01-01 00:00:20.0
 # 20,1970-01-01 00:00:40.0
-check_result_hash "StreamSQL" $TEST_DATA_DIR/out/result-complete "b29f14ed221a936211202ff65b51ee26"
+check_result_hash "StreamSQL" out/result-complete "b29f14ed221a936211202ff65b51ee26"
