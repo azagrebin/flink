@@ -509,7 +509,9 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 			taskSlot.remove(task.getExecutionId());
 
+			LOG.info("Try to trigger free slot aloc id {}", taskSlot.getAllocationId());
 			if (taskSlot.isReleasing() && taskSlot.isEmpty()) {
+				LOG.info("Trigger free slot aloc id {}", taskSlot.getAllocationId());
 				slotActions.freeSlot(taskSlot.getAllocationId());
 			}
 
