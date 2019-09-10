@@ -18,11 +18,6 @@
             <td>Memory allocation method (JVM heap or off-heap), used for managed memory of the TaskManager. For setups with larger quantities of memory, this can improve the efficiency of the operations performed on the memory.<br />When set to true, then it is advised that <span markdown="span">`taskmanager.memory.preallocate`</span> is also set to true.</td>
         </tr>
         <tr>
-            <td><h5>taskmanager.memory.preallocate</h5></td>
-            <td style="word-wrap: break-word;">false</td>
-            <td>Whether TaskManager managed memory should be pre-allocated when the TaskManager is starting. When <span markdown="span">`taskmanager.memory.off-heap`</span> is set to true, then it is advised that this configuration is also set to true. If this configuration is set to false cleaning up of the allocated off-heap memory happens only when the configured JVM parameter MaxDirectMemorySize is reached by triggering a full GC. For streaming setups, it is highly recommended to set this value to false as the core state backends currently do not use the managed memory.</td>
-        </tr>
-        <tr>
             <td><h5>taskmanager.memory.segment-size</h5></td>
             <td style="word-wrap: break-word;">"32kb"</td>
             <td>Size of memory buffers used by the network stack and the memory manager.</td>

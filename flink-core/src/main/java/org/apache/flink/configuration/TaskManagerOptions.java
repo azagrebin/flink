@@ -234,16 +234,15 @@ public class TaskManagerOptions {
 	/**
 	 * Whether TaskManager managed memory should be pre-allocated when the TaskManager is starting.
 	 */
+	@Deprecated
 	public static final ConfigOption<Boolean> MANAGED_MEMORY_PRE_ALLOCATE =
 			key(MANAGED_MEMORY_PRE_ALLOCATE_KEY)
 			.defaultValue(false)
-			.withDescription(Description.builder()
-				.text("Whether TaskManager managed memory should be pre-allocated when the TaskManager is starting." +
-					" When %s is set to true, then it is advised that this configuration is also" +
-					" set to true. If this configuration is set to false cleaning up of the allocated off-heap memory" +
-					" happens only when the configured JVM parameter MaxDirectMemorySize is reached by triggering a full" +
-					" GC. For streaming setups, it is highly recommended to set this value to false as the core state" +
-					" backends currently do not use the managed memory.", code(MEMORY_OFF_HEAP.key())).build());
+			.withDescription(
+				Description
+					.builder()
+					.text("The option is deprecated. It will have no affect and might be removed in future versions.", code(MEMORY_OFF_HEAP.key()))
+					.build());
 
 	/**
 	 * The config parameter for automatically defining the TaskManager's binding address,
