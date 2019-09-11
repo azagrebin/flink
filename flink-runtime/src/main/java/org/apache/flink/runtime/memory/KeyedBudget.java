@@ -147,6 +147,10 @@ class KeyedBudget<K> {
 		return maxBudgetByKey.values().stream().mapToLong(b -> b).sum();
 	}
 
+	long maxTotalBudgetForKey(K key) {
+		return maxBudgetByKey.get(key);
+	}
+
 	long totalAvailableBudget() {
 		return availableBudgetForKeys(maxBudgetByKey.keySet());
 	}
