@@ -237,4 +237,26 @@ public class MemoryManagerTest {
 		split.put(MemoryType.OFF_HEAP, offHeapPages);
 		return split;
 	}
+
+	@Test
+	public void testMemoryReservation() throws MemoryAllocationException {
+		Object owner = new Object();
+
+		memoryManager.reserveMemory(owner, MemoryType.HEAP, PAGE_SIZE);
+		memoryManager.reserveMemory(owner, MemoryType.OFF_HEAP, memoryManager.getMemorySizeByType(MemoryType.OFF_HEAP));
+
+		memoryManager.releaseMemory(owner, MemoryType.HEAP, PAGE_SIZE);
+		memoryManager.releaseAllMemory(owner, MemoryType.OFF_HEAP);
+	}
+
+	@Test
+	public void testMemoryTooBigReservation() {
+		Object owner = new Object();
+		try {
+			memoryManager.reserveMemory(owner, MemoryType.HEAP, memoryManager.getMemorySizeByType(MemoryType.HEAP) + PAGE_SIZE);
+			fail("Expected MemoryAllocationException.");
+		} catch (MemoryAllocationException e) {
+			// expected
+		}
+	}
 }
