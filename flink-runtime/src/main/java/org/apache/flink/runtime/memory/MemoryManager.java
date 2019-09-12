@@ -33,13 +33,13 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,7 +54,7 @@ import static org.apache.flink.core.memory.MemorySegmentFactory.allocateUnpooled
  * of memory segments.
  *
  * <p>The memory may be represented as on-heap byte arrays or as off-heap memory regions
- * (both via {@link HybridMemorySegment}). Which kind of memory the MemoryManager serves can
+ * (both via {@link HybridMemorySegment}). Which kinds of memory the MemoryManager serves and their sizes can
  * be passed as an argument to the initialization. Releasing a memory segment will make it re-claimable
  * by the garbage collector.
  */
@@ -78,14 +78,8 @@ public class MemoryManager {
 	/** The initial total size, for verification. */
 	private final int totalNumPages;
 
-	/** The total size of the memory managed by this memory manager. */
-	private final long memorySize;
-
 	/** Number of slots of the task manager. */
 	private final int numberOfSlots;
-
-	/** Type of the managed memory. */
-	private final MemoryType memoryType;
 
 	private final KeyedBudget<MemoryType> budgetByType;
 
@@ -93,34 +87,32 @@ public class MemoryManager {
 	private volatile boolean isShutDown;
 
 	/**
-	 * Creates a memory manager with the given capacity and given page size.
+	 * Creates a memory manager with the given memory types, capacity and given page size.
 	 *
-	 * @param memorySize The total size of the memory to be managed by this memory manager.
+	 * @param memorySizeByType The total size of the memory to be managed by this memory manager for each type (heap / off-heap).
 	 * @param numberOfSlots The number of slots of the task manager.
 	 * @param pageSize The size of the pages handed out by the memory manager.
-	 * @param memoryType The type of memory (heap / off-heap) that the memory manager should allocate.
 	 */
 	public MemoryManager(
-			long memorySize,
+			Map<MemoryType, Long> memorySizeByType,
 			int numberOfSlots,
-			int pageSize,
-			MemoryType memoryType) {
-		sanityCheck(memorySize, pageSize, memoryType);
+			int pageSize) {
+		for (Entry<MemoryType, Long> sizeForType : memorySizeByType.entrySet()) {
+			sanityCheck(sizeForType.getValue(), pageSize, sizeForType.getKey());
+		}
 
 		this.allocatedSegments = new ConcurrentHashMap<>();
-		this.memorySize = memorySize;
 		this.numberOfSlots = numberOfSlots;
 		this.pageSize = pageSize;
-		this.totalNumPages = calculateTotalNumberOfPages(memorySize, pageSize);
-		this.memoryType = memoryType;
-		this.budgetByType = new KeyedBudget<>(Collections.singletonMap(memoryType, memorySize));
+		this.totalNumPages = calculateTotalNumberOfPages(memorySizeByType, pageSize);
+		this.budgetByType = new KeyedBudget<>(memorySizeByType);
 
 		LOG.debug(
-			"Initialized MemoryManager with total memory size {}, number of slots {}, page size {} and memory type {}.",
-			memorySize,
+			"Initialized MemoryManager with total memory size {} ({}), number of slots {}, page size {}.",
+			budgetByType.totalAvailableBudget(),
+			memorySizeByType,
 			numberOfSlots,
-			pageSize,
-			memoryType);
+			pageSize);
 	}
 
 	private static void sanityCheck(long memorySize, int pageSize, MemoryType memoryType) {
@@ -134,11 +126,16 @@ public class MemoryManager {
 			"The given page size is not a power of two.");
 	}
 
-	private static int calculateTotalNumberOfPages(long memorySize, int pageSize) {
-		long numPagesLong = memorySize / pageSize;
+	private static int calculateTotalNumberOfPages(Map<MemoryType, Long> memorySizeByType, int pageSize) {
+		long numPagesLong = 0L;
+		for (long sizeForType : memorySizeByType.values()) {
+			numPagesLong += sizeForType / pageSize;
+		}
 		Preconditions.checkArgument(
 			numPagesLong <= Integer.MAX_VALUE,
-			"The given number of memory bytes (%s) corresponds to more than MAX_INT pages.", memorySize);
+			"The given number of memory bytes (%d: %s) corresponds to more than MAX_INT pages.",
+			numPagesLong,
+			memorySizeByType);
 
 		@SuppressWarnings("NumericCastThatLosesPrecision")
 		int totalNumPages = (int) numPagesLong;
@@ -191,7 +188,7 @@ public class MemoryManager {
 	 */
 	@VisibleForTesting
 	public boolean verifyEmpty() {
-		return budgetByType.totalAvailableBudget() == memorySize;
+		return budgetByType.totalAvailableBudget() == budgetByType.maxTotalBudget();
 	}
 
 	// ------------------------------------------------------------------------
@@ -200,6 +197,9 @@ public class MemoryManager {
 
 	/**
 	 * Allocates a set of memory segments from this memory manager.
+	 *
+	 * <p>The returned segments can have any memory type. The total allocated memory for each type will not exceed its
+	 * size limit, announced in the constructor.
 	 *
 	 * @param owner The owner to associate with the memory segment, for the fallback release.
 	 * @param numPages The number of pages to allocate.
@@ -215,6 +215,9 @@ public class MemoryManager {
 
 	/**
 	 * Allocates a set of memory segments from this memory manager.
+	 *
+	 * <p>The returned segments can have any memory type. The total allocated memory for each type will not exceed its
+	 * size limit, announced in the constructor.
 	 *
 	 * @param owner The owner to associate with the memory segment, for the fallback release.
 	 * @param target The list into which to put the allocated memory pages.
@@ -244,10 +247,12 @@ public class MemoryManager {
 		allocatedSegments.compute(owner, (o, currentSegmentsForOwner) -> {
 			Set<MemorySegment> segmentsForOwner = currentSegmentsForOwner == null ?
 				new HashSet<>(numPages) : currentSegmentsForOwner;
-			for (int i = numPages; i > 0; i--) {
-				MemorySegment segment = allocateManagedSegment(memoryType, owner);
-				target.add(segment);
-				segmentsForOwner.add(segment);
+			for (MemoryType memoryType : acquiredBudget.left().keySet()) {
+				for (long i = acquiredBudget.left().get(memoryType); i > 0; i--) {
+					MemorySegment segment = allocateManagedSegment(memoryType, owner);
+					target.add(segment);
+					segmentsForOwner.add(segment);
+				}
 			}
 			return segmentsForOwner;
 		});
@@ -259,7 +264,8 @@ public class MemoryManager {
 	 * Tries to release the memory for the specified segment.
 	 *
 	 * <p>If the segment has already been released or is null, the request is simply ignored.
-	 * The segment is only freed and made eligible for reclamation by the GC.
+	 * The segment is only freed and made eligible for reclamation by the GC. The segment will be returned to
+	 * the memory pool of its type, increasing its available limit for the later allocations.
 	 *
 	 * @param segment The segment to be released.
 	 * @throws IllegalArgumentException Thrown, if the given segment is of an incompatible type.
@@ -290,7 +296,8 @@ public class MemoryManager {
 	/**
 	 * Tries to release many memory segments together.
 	 *
-	 * <p>The segment is only freed and made eligible for reclamation by the GC.
+	 * <p>The segment is only freed and made eligible for reclamation by the GC. Each segment will be returned to
+	 * the memory pool of its type, increasing its available limit for the later allocations.
 	 *
 	 * @param segments The segments to be released.
 	 * @throws NullPointerException Thrown, if the given collection is null.
@@ -426,7 +433,17 @@ public class MemoryManager {
 	 * @return The total size of memory.
 	 */
 	public long getMemorySize() {
-		return memorySize;
+		return budgetByType.maxTotalBudget();
+	}
+
+	/**
+	 * Returns the total size of the certain type of memory handled by this memory manager.
+	 *
+	 * @param memoryType The type of memory.
+	 * @return The total size of memory.
+	 */
+	public long getMemorySizeByType(MemoryType memoryType) {
+		return budgetByType.maxTotalBudgetForKey(memoryType);
 	}
 
 	/**
