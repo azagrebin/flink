@@ -371,10 +371,9 @@ public class TaskManagerServices {
 		final MemoryManager memoryManager;
 		try {
 			memoryManager = new MemoryManager(
-				memorySize,
+				Collections.singletonMap(memType, memorySize),
 				taskManagerServicesConfiguration.getNumberOfSlots(),
-				taskManagerServicesConfiguration.getPageSize(),
-				memType);
+				taskManagerServicesConfiguration.getPageSize());
 		} catch (OutOfMemoryError e) {
 			if (memType == MemoryType.HEAP) {
 				throw new Exception("OutOfMemory error (" + e.getMessage() +
