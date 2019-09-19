@@ -45,7 +45,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.apache.flink.core.memory.MemorySegmentFactory.allocateUnpooledOffHeapMemory;
+import static org.apache.flink.core.memory.MemorySegmentFactory.allocateUnpooledOffHeapUnsafeMemory;
 import static org.apache.flink.core.memory.MemorySegmentFactory.allocateUnpooledSegment;
 
 /**
@@ -568,7 +568,7 @@ public class MemoryManager {
 			case HEAP:
 				return allocateUnpooledSegment(pageSize, owner);
 			case OFF_HEAP:
-				return allocateUnpooledOffHeapMemory(pageSize, owner);
+				return allocateUnpooledOffHeapUnsafeMemory(pageSize, owner);
 			default:
 				throw new IllegalArgumentException("unrecognized memory type: " + memoryType);
 		}

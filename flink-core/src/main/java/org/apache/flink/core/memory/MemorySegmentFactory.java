@@ -75,6 +75,19 @@ public final class MemorySegmentFactory {
 	}
 
 	/**
+	 * Allocates some unsafe off-heap memory and creates a new memory segment that
+	 * represents that memory.
+	 *
+	 * @param size The size of the off-heap memory segment to allocate.
+	 * @param owner The owner to associate with the off-heap memory segment.
+	 * @return A new memory segment, backed by unsafe off-heap memory.
+	 */
+	public static MemorySegment allocateUnpooledOffHeapUnsafeMemory(int size, Object owner) {
+		ByteBuffer memory = ByteBuffer.allocateDirect(size);
+		return wrapPooledOffHeapMemory(memory, owner);
+	}
+
+	/**
 	 * Allocates some unpooled off-heap memory and creates a new memory segment that
 	 * represents that memory.
 	 *
