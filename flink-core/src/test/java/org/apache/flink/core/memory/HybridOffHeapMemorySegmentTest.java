@@ -52,7 +52,7 @@ public class HybridOffHeapMemorySegmentTest extends MemorySegmentTestBase {
 	@Test
 	public void testHybridHeapSegmentSpecifics() {
 		final ByteBuffer buffer = ByteBuffer.allocateDirect(411);
-		HybridMemorySegment seg = new HybridMemorySegment(buffer, null);
+		HybridMemorySegment seg = new HybridMemorySegment(buffer, null, null);
 
 		assertFalse(seg.isFreed());
 		assertTrue(seg.isOffHeap());
