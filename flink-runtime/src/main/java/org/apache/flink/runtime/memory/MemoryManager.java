@@ -24,6 +24,7 @@ import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.core.memory.MemoryType;
 import org.apache.flink.util.MathUtils;
 
+import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The memory manager governs the memory that Flink uses for sorting, hashing, and caching. Memory
@@ -393,6 +395,10 @@ public class MemoryManager {
 		if (segments == null) {
 			return;
 		}
+
+		Preconditions.checkArgument(
+			segments.stream().map(MemorySegment::getOwner).collect(Collectors.toSet()).size() <= 1,
+			"More one segment owner to release");
 
 		// -------------------- BEGIN CRITICAL SECTION -------------------
 		synchronized (lock) {
