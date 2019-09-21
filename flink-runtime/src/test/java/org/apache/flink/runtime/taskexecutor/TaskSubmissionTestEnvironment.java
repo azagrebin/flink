@@ -27,7 +27,6 @@ import org.apache.flink.runtime.blob.BlobCacheService;
 import org.apache.flink.runtime.blob.VoidBlobStore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.execution.librarycache.LibraryCacheManager;
@@ -50,6 +49,7 @@ import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskexecutor.rpc.RpcResultPartitionConsumableNotifier;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
+import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTableBuilder;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
 import org.apache.flink.runtime.taskmanager.CheckpointResponder;
 import org.apache.flink.runtime.taskmanager.NoOpTaskManagerActions;
@@ -68,7 +68,6 @@ import java.io.File;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -188,11 +187,7 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 	}
 
 	private TaskSlotTable generateTaskSlotTable(int numSlot) {
-		Collection<ResourceProfile> resourceProfiles = new ArrayList<>();
-		for (int i = 0; i < numSlot; i++) {
-			resourceProfiles.add(ResourceProfile.UNKNOWN);
-		}
-		return new TaskSlotTable(resourceProfiles, timerService);
+		return TaskSlotTableBuilder.newBuilderWithDefaultSlots(numSlot).setTimerService(timerService).build();
 	}
 
 	@Nonnull

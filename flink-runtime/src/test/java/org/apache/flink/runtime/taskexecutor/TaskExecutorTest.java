@@ -1731,7 +1731,7 @@ public class TaskExecutorTest extends TestLogger {
 	public void testSyncSlotsWithJobMasterByHeartbeat() throws Exception {
 		final CountDownLatch activeSlots = new CountDownLatch(2);
 		final TaskSlotTable taskSlotTable = new ActivateSlotNotifyingTaskSlotTable(
-				TaskSlotTableBuilder.createDefaultSlotProfiles(2),
+				2,
 				timerService,
 				activeSlots);
 		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder().setTaskSlotTable(taskSlotTable).build();
@@ -2043,7 +2043,7 @@ public class TaskExecutorTest extends TestLogger {
 		private final Queue<SlotReport> slotReports;
 
 		private TestingTaskSlotTable(Queue<SlotReport> slotReports) {
-			super(Collections.singleton(ResourceProfile.UNKNOWN), new TimerService<>(TestingUtils.defaultExecutor(), 10000L));
+			super(TaskSlotTableBuilder.createDefaultSlotProfiles(1), new TimerService<>(TestingUtils.defaultExecutor(), 10000L));
 			this.slotReports = slotReports;
 		}
 
@@ -2060,7 +2060,7 @@ public class TaskExecutorTest extends TestLogger {
 		private AllocateSlotNotifyingTaskSlotTable(
 				TimerService<AllocationID> timerService,
 				OneShotLatch allocateSlotLatch) {
-			super(Collections.singleton(ResourceProfile.UNKNOWN), timerService);
+			super(TaskSlotTableBuilder.createDefaultSlotProfiles(1), timerService);
 			this.allocateSlotLatch = allocateSlotLatch;
 		}
 
@@ -2077,8 +2077,8 @@ public class TaskExecutorTest extends TestLogger {
 
 		private final CountDownLatch slotsToActivate;
 
-		private ActivateSlotNotifyingTaskSlotTable(Collection<ResourceProfile> resourceProfiles, TimerService<AllocationID> timerService, CountDownLatch slotsToActivate) {
-			super(resourceProfiles, timerService);
+		private ActivateSlotNotifyingTaskSlotTable(int numberOfDefaultSlots, TimerService<AllocationID> timerService, CountDownLatch slotsToActivate) {
+			super(TaskSlotTableBuilder.createDefaultSlotProfiles(numberOfDefaultSlots), timerService);
 			this.slotsToActivate = slotsToActivate;
 		}
 
