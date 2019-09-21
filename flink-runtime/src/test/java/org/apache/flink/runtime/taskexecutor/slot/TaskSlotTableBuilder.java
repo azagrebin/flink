@@ -21,6 +21,7 @@ package org.apache.flink.runtime.taskexecutor.slot;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.taskexecutor.TaskManagerServices;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 
 import java.util.ArrayList;
@@ -33,10 +34,10 @@ public class TaskSlotTableBuilder {
 	private static final TimerService<AllocationID> DEFAULT_TIMER_SERVICE =
 		new TimerService<>(TestingUtils.defaultExecutor(), 10000L);
 
-	private List<ResourceProfile> taskSlots;
+	private List<TaskSlot> taskSlots;
 	private TimerService<AllocationID> timerService = DEFAULT_TIMER_SERVICE;
 
-	private TaskSlotTableBuilder setTaskSlots(List<ResourceProfile> taskSlots) {
+	private TaskSlotTableBuilder setTaskSlots(List<TaskSlot> taskSlots) {
 		this.taskSlots = new ArrayList<>(taskSlots);
 		return this;
 	}
@@ -60,13 +61,13 @@ public class TaskSlotTableBuilder {
 	}
 
 	public static TaskSlotTableBuilder newBuilderWithDefaultSlots(int numberOfDefaultSlots) {
-		return new TaskSlotTableBuilder().setTaskSlots(createDefaultSlotProfiles(numberOfDefaultSlots));
+		return new TaskSlotTableBuilder().setTaskSlots(createDefaultSlots(numberOfDefaultSlots));
 	}
 
-	public static List<ResourceProfile> createDefaultSlotProfiles(int numberOfDefaultSlots) {
-		return IntStream
+	public static List<TaskSlot> createDefaultSlots(int numberOfDefaultSlots) {
+		return TaskManagerServices.createTaskSlotsFromResources(IntStream
 			.range(0, numberOfDefaultSlots)
 			.mapToObj(i -> ResourceProfile.UNKNOWN)
-			.collect(Collectors.toList());
+			.collect(Collectors.toList()));
 	}
 }
