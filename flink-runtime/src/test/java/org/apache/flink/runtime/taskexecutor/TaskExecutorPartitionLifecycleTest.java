@@ -27,7 +27,6 @@ import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.blob.BlobCacheService;
 import org.apache.flink.runtime.blob.VoidBlobStore;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
-import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
@@ -63,9 +62,8 @@ import org.apache.flink.runtime.shuffle.ShuffleIOOwnerContext;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
 import org.apache.flink.runtime.taskexecutor.partition.PartitionTable;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
-import org.apache.flink.runtime.taskexecutor.slot.TimerService;
+import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTableBuilder;
 import org.apache.flink.runtime.taskmanager.NoOpTaskManagerActions;
-import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.runtime.util.TestingFatalErrorHandler;
 import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.TestLogger;
@@ -442,9 +440,7 @@ public class TaskExecutorPartitionLifecycleTest extends TestLogger {
 	}
 
 	private static TaskSlotTable createTaskSlotTable() {
-		return new TaskSlotTable(
-			Collections.singletonList(ResourceProfile.UNKNOWN),
-			new TimerService<>(TestingUtils.defaultExecutor(), timeout.toMilliseconds()));
+		return TaskSlotTableBuilder.newBuilderWithDefaultSlots(1).withTimerServiceTimeout(timeout).build();
 
 	}
 

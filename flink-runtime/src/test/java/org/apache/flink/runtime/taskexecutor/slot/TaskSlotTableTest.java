@@ -21,8 +21,6 @@ package org.apache.flink.runtime.taskexecutor.slot;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
-import org.apache.flink.runtime.testingUtils.TestingUtils;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.flink.shaded.guava18.com.google.common.collect.Sets;
@@ -30,11 +28,7 @@ import org.apache.flink.shaded.guava18.com.google.common.collect.Sets;
 import org.apache.commons.collections.IteratorUtils;
 import org.junit.Test;
 
-import javax.annotation.Nonnull;
-
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -53,7 +47,7 @@ public class TaskSlotTableTest extends TestLogger {
 	 */
 	@Test
 	public void testTryMarkSlotActive() throws SlotNotFoundException {
-		final TaskSlotTable taskSlotTable = createTaskSlotTable(Collections.nCopies(3, ResourceProfile.UNKNOWN));
+		final TaskSlotTable taskSlotTable = TaskSlotTableBuilder.newBuilderWithDefaultSlots(3).build();
 
 		try {
 			taskSlotTable.start(new TestingSlotActionsBuilder().build());
@@ -83,13 +77,6 @@ public class TaskSlotTableTest extends TestLogger {
 		} finally {
 			taskSlotTable.stop();
 		}
-	}
-
-	@Nonnull
-	private TaskSlotTable createTaskSlotTable(final Collection<ResourceProfile> resourceProfiles) {
-		return new TaskSlotTable(
-			resourceProfiles,
-			new TimerService<>(TestingUtils.defaultExecutor(), 10000L));
 	}
 
 }
