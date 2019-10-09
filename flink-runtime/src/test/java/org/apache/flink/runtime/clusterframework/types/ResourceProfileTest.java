@@ -191,7 +191,8 @@ public class ResourceProfileTest {
 
 		assertEquals(ResourceProfile.UNKNOWN, rp1.merge(ResourceProfile.UNKNOWN));
 		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN.merge(rp1));
-		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN.merge(ResourceProfile.UNKNOWN));
+		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN
+			.merge(ResourceProfile.UNKNOWN));
 		assertEquals(ResourceProfile.ANY, rp1.merge(ResourceProfile.ANY));
 		assertEquals(ResourceProfile.ANY, ResourceProfile.ANY.merge(rp1));
 		assertEquals(ResourceProfile.ANY, ResourceProfile.ANY.merge(ResourceProfile.ANY));
@@ -237,7 +238,8 @@ public class ResourceProfileTest {
 
 		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN.subtract(rp3));
 		assertEquals(ResourceProfile.UNKNOWN, rp3.subtract(ResourceProfile.UNKNOWN));
-		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN.subtract(ResourceProfile.UNKNOWN));
+		assertEquals(ResourceProfile.UNKNOWN, ResourceProfile.UNKNOWN
+			.subtract(ResourceProfile.UNKNOWN));
 	}
 
 	@Test
