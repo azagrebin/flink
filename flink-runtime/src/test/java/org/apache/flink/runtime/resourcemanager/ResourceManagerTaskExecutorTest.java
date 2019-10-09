@@ -237,7 +237,11 @@ public class ResourceManagerTaskExecutorTest extends TestLogger {
 
 			CompletableFuture<RegistrationResponse> firstFuture =
 				rmGateway.registerTaskExecutor(
-					new ResourceManagerGatewayRegisterTaskExecutorParams(taskExecutorGateway.getAddress(), taskExecutorResourceID, dataPort, hardwareDescription),
+					new ResourceManagerGatewayRegisterTaskExecutorParams(
+						taskExecutorGateway.getAddress(),
+						taskExecutorResourceID, dataPort,
+						hardwareDescription,
+						ResourceProfile.ZERO),
 					fastTimeout);
 			try {
 				firstFuture.get();
@@ -252,7 +256,12 @@ public class ResourceManagerTaskExecutorTest extends TestLogger {
 			rpcService.resetRpcGatewayFutureFunction();
 			CompletableFuture<RegistrationResponse> secondFuture =
 				rmGateway.registerTaskExecutor(
-					new ResourceManagerGatewayRegisterTaskExecutorParams(taskExecutorGateway.getAddress(), taskExecutorResourceID, dataPort, hardwareDescription),
+					new ResourceManagerGatewayRegisterTaskExecutorParams(
+						taskExecutorGateway.getAddress(),
+						taskExecutorResourceID,
+						dataPort,
+						hardwareDescription,
+						ResourceProfile.ZERO),
 					TIMEOUT);
 			RegistrationResponse response = secondFuture.get();
 			assertTrue(response instanceof TaskExecutorRegistrationSuccess);
@@ -339,7 +348,8 @@ public class ResourceManagerTaskExecutorTest extends TestLogger {
 
 	private CompletableFuture<RegistrationResponse> registerTaskExecutor(ResourceManagerGateway resourceManagerGateway, String taskExecutorAddress) {
 		return resourceManagerGateway.registerTaskExecutor(
-			new ResourceManagerGatewayRegisterTaskExecutorParams(taskExecutorAddress, taskExecutorResourceID, dataPort, hardwareDescription),
+			new ResourceManagerGatewayRegisterTaskExecutorParams(
+				taskExecutorAddress, taskExecutorResourceID, dataPort, hardwareDescription, ResourceProfile.ZERO),
 			TIMEOUT);
 	}
 }

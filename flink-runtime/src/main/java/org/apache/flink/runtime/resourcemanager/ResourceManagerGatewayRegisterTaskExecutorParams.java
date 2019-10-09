@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.resourcemanager;
 
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.HardwareDescription;
 
 import java.io.Serializable;
@@ -47,15 +48,22 @@ public class ResourceManagerGatewayRegisterTaskExecutorParams implements Seriali
 	 */
 	private final HardwareDescription hardwareDescription;
 
+	/**
+	 * The default resource profile for slots requested with unknown resource requirements.
+	 */
+	private final ResourceProfile defaultSlotResourceProfile;
+
 	public ResourceManagerGatewayRegisterTaskExecutorParams(
 		final String taskExecutorAddress,
 		final ResourceID resourceId,
 		final int dataPort,
-		final HardwareDescription hardwareDescription) {
+		final HardwareDescription hardwareDescription,
+		final ResourceProfile defaultSlotResourceProfile) {
 		this.taskExecutorAddress = taskExecutorAddress;
 		this.resourceId = resourceId;
 		this.dataPort = dataPort;
 		this.hardwareDescription = hardwareDescription;
+		this.defaultSlotResourceProfile = defaultSlotResourceProfile;
 	}
 
 	public String getTaskExecutorAddress() {
@@ -72,5 +80,9 @@ public class ResourceManagerGatewayRegisterTaskExecutorParams implements Seriali
 
 	public HardwareDescription getHardwareDescription() {
 		return hardwareDescription;
+	}
+
+	public ResourceProfile getDefaultSlotResourceProfile() {
+		return defaultSlotResourceProfile;
 	}
 }

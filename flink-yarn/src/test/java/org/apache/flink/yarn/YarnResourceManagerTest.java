@@ -404,7 +404,8 @@ public class YarnResourceManagerTest extends TestLogger {
 
 				CompletableFuture<Integer> numberRegisteredSlotsFuture = rmGateway
 					.registerTaskExecutor(
-						new ResourceManagerGatewayRegisterTaskExecutorParams(taskHost, taskManagerResourceId, dataPort, hardwareDescription),
+						new ResourceManagerGatewayRegisterTaskExecutorParams(
+							taskHost, taskManagerResourceId, dataPort, hardwareDescription, ResourceProfile.ZERO),
 						Time.seconds(10L))
 					.thenCompose(
 						(RegistrationResponse response) -> {

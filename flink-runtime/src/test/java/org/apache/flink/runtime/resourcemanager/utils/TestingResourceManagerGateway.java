@@ -138,7 +138,19 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 	}
 
 	public void setRegisterTaskExecutorFunction(Function<ResourceManagerGatewayRegisterTaskExecutorParams, CompletableFuture<RegistrationResponse>> registerTaskExecutorFunction) {
+
 		this.registerTaskExecutorFunction = registerTaskExecutorFunction;
+	}
+
+	public void setRegisterTaskExecutorConsumer(Consumer<ResourceManagerGatewayRegisterTaskExecutorParams> registerTaskExecutorConsumer) {
+		this.registerTaskExecutorFunction = params -> {
+			registerTaskExecutorConsumer.accept(params);
+			return CompletableFuture.completedFuture(
+				new TaskExecutorRegistrationSuccess(
+					new InstanceID(),
+					ownResourceId,
+					new ClusterInformation("localhost", 1234)));
+		};
 	}
 
 	public void setRequestTaskManagerFileUploadFunction(Function<Tuple2<ResourceID, FileType>, CompletableFuture<TransientBlobKey>> requestTaskManagerFileUploadFunction) {
@@ -213,6 +225,7 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 	}
 
 	@Override
+
 	public CompletableFuture<RegistrationResponse> registerTaskExecutor(ResourceManagerGatewayRegisterTaskExecutorParams params, Time timeout) {
 		final Function<ResourceManagerGatewayRegisterTaskExecutorParams, CompletableFuture<RegistrationResponse>> currentFunction = registerTaskExecutorFunction;
 

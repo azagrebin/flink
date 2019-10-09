@@ -165,7 +165,8 @@ public class ResourceManagerTest extends TestLogger {
 
 	private void registerTaskExecutor(ResourceManagerGateway resourceManagerGateway, ResourceID taskExecutorId, String taskExecutorAddress) throws Exception {
 		final CompletableFuture<RegistrationResponse> registrationFuture = resourceManagerGateway.registerTaskExecutor(
-			new ResourceManagerGatewayRegisterTaskExecutorParams(taskExecutorAddress, taskExecutorId, dataPort, hardwareDescription),
+			new ResourceManagerGatewayRegisterTaskExecutorParams(
+				taskExecutorAddress, taskExecutorId, dataPort, hardwareDescription, ResourceProfile.ZERO),
 			TestingUtils.TIMEOUT());
 
 		assertThat(registrationFuture.get(), instanceOf(RegistrationResponse.Success.class));

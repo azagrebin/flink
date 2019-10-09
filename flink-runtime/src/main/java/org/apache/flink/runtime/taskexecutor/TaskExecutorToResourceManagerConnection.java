@@ -20,6 +20,7 @@ package org.apache.flink.runtime.taskexecutor;
 
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.registration.RegisteredRpcConnection;
 import org.apache.flink.runtime.registration.RegistrationConnectionListener;
@@ -58,6 +59,8 @@ public class TaskExecutorToResourceManagerConnection
 
 	private final RegistrationConnectionListener<TaskExecutorToResourceManagerConnection, TaskExecutorRegistrationSuccess> registrationListener;
 
+	private final ResourceProfile defaultSlotResourceProfile;
+
 	public TaskExecutorToResourceManagerConnection(
 			Logger log,
 			RpcService rpcService,
@@ -69,7 +72,8 @@ public class TaskExecutorToResourceManagerConnection
 			String resourceManagerAddress,
 			ResourceManagerId resourceManagerId,
 			Executor executor,
-			RegistrationConnectionListener<TaskExecutorToResourceManagerConnection, TaskExecutorRegistrationSuccess> registrationListener) {
+			RegistrationConnectionListener<TaskExecutorToResourceManagerConnection, TaskExecutorRegistrationSuccess> registrationListener,
+			ResourceProfile defaultSlotResourceProfile) {
 
 		super(log, resourceManagerAddress, resourceManagerId, executor);
 
@@ -80,6 +84,7 @@ public class TaskExecutorToResourceManagerConnection
 		this.dataPort = dataPort;
 		this.hardwareDescription = checkNotNull(hardwareDescription);
 		this.registrationListener = checkNotNull(registrationListener);
+		this.defaultSlotResourceProfile = checkNotNull(defaultSlotResourceProfile);
 	}
 
 	@Override
@@ -93,7 +98,8 @@ public class TaskExecutorToResourceManagerConnection
 			taskManagerAddress,
 			taskManagerResourceId,
 			dataPort,
-			hardwareDescription);
+			hardwareDescription,
+			defaultSlotResourceProfile);
 	}
 
 	@Override
@@ -126,6 +132,8 @@ public class TaskExecutorToResourceManagerConnection
 
 		private final HardwareDescription hardwareDescription;
 
+		private final ResourceProfile defaultSlotResourceProfile;
+
 		ResourceManagerRegistration(
 				Logger log,
 				RpcService rpcService,
@@ -135,13 +143,15 @@ public class TaskExecutorToResourceManagerConnection
 				String taskExecutorAddress,
 				ResourceID resourceID,
 				int dataPort,
-				HardwareDescription hardwareDescription) {
+				HardwareDescription hardwareDescription,
+				ResourceProfile defaultSlotResourceProfile) {
 
 			super(log, rpcService, "ResourceManager", ResourceManagerGateway.class, targetAddress, resourceManagerId, retryingRegistrationConfiguration);
 			this.taskExecutorAddress = checkNotNull(taskExecutorAddress);
 			this.resourceID = checkNotNull(resourceID);
 			this.dataPort = dataPort;
 			this.hardwareDescription = checkNotNull(hardwareDescription);
+			this.defaultSlotResourceProfile = checkNotNull(defaultSlotResourceProfile);
 		}
 
 		@Override
@@ -150,7 +160,8 @@ public class TaskExecutorToResourceManagerConnection
 
 			Time timeout = Time.milliseconds(timeoutMillis);
 			return resourceManager.registerTaskExecutor(
-				new ResourceManagerGatewayRegisterTaskExecutorParams(taskExecutorAddress, resourceID, dataPort, hardwareDescription),
+				new ResourceManagerGatewayRegisterTaskExecutorParams(
+					taskExecutorAddress, resourceID, dataPort, hardwareDescription, defaultSlotResourceProfile),
 				timeout);
 		}
 	}
