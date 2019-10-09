@@ -336,21 +336,13 @@ public class MesosTaskManagerParameters {
 	public static MesosTaskManagerParameters create(Configuration flinkConfig) {
 
 		List<ConstraintEvaluator> constraints = parseConstraints(flinkConfig.getString(MESOS_CONSTRAINTS_HARD_HOSTATTR));
-		MemorySize totalProcessMemory = MemorySize.parse(flinkConfig.getInteger(MESOS_RM_TASKS_MEMORY_MB) + "m");
-		TaskExecutorResourceSpec taskExecutorResourceSpec = TaskExecutorResourceSpecBuilder
-			.newBuilder(flinkConfig)
-			.withTotalProcessMemory(totalProcessMemory)
-			.build();
+
+		TaskExecutorResourceSpec taskExecutorResourceSpec = createTaskExecutorResourceSpec(flinkConfig);
 
 		// parse the common parameters
 		ContaineredTaskManagerParameters containeredParameters = ContaineredTaskManagerParameters.create(
 			flinkConfig,
 			taskExecutorResourceSpec);
-
-		double cpus = flinkConfig.getDouble(MESOS_RM_TASKS_CPUS);
-		if (cpus <= 0.0) {
-			cpus = Math.max(flinkConfig.getInteger(MESOS_RM_TASKS_SLOTS), 1.0);
-		}
 
 		int gpus = flinkConfig.getInteger(MESOS_RM_TASKS_GPUS);
 
@@ -403,7 +395,7 @@ public class MesosTaskManagerParameters {
 		Option<String> tmBootstrapCommand = Option.apply(flinkConfig.getString(MESOS_TM_BOOTSTRAP_CMD));
 
 		return new MesosTaskManagerParameters(
-			cpus,
+			taskExecutorResourceSpec.getCpuCores().get().getValue().doubleValue(),
 			gpus,
 			disk,
 			containerType,
@@ -417,6 +409,25 @@ public class MesosTaskManagerParameters {
 			tmBootstrapCommand,
 			taskManagerHostname,
 			uris);
+	}
+
+	private static TaskExecutorResourceSpec createTaskExecutorResourceSpec(final Configuration flinkConfig) {
+		int numberOfSlot = flinkConfig.getInteger(MESOS_RM_TASKS_SLOTS);
+
+		double cpus = flinkConfig.getDouble(TaskManagerOptions.CPU_CORES);
+		if (cpus <= 0.0) {
+			flinkConfig.getDouble(MESOS_RM_TASKS_CPUS);
+		}
+		if (cpus <= 0.0) {
+			cpus = Math.max(numberOfSlot, 1.0);
+		}
+
+		MemorySize totalProcessMemory = MemorySize.parse(flinkConfig.getInteger(MESOS_RM_TASKS_MEMORY_MB) + "m");
+		return TaskExecutorResourceSpecBuilder
+			.newBuilder(flinkConfig)
+			.withCpuCores(cpus)
+			.withTotalProcessMemory(totalProcessMemory)
+			.build();
 	}
 
 	private static List<ConstraintEvaluator> parseConstraints(String mesosConstraints) {

@@ -217,8 +217,21 @@ public class TaskManagerOptions {
 				.build());
 
 	// ------------------------------------------------------------------------
-	//  Memory Options
+	//  Resource Options
 	// ------------------------------------------------------------------------
+
+	/**
+	 * This config key is used for passing cpu cores into TaskExecutors.
+	 * There're YarnConfigOptions#VCORES and MesosTaskManagerParameters#MESOS_RM_TASKS_CPUS for configuring TM container
+	 * CPU on Yarn and Mesos respectively.
+	 */
+	public static final ConfigOption<Double> CPU_CORES =
+		key("taskmanager.cpu.cores")
+			.doubleType()
+			.defaultValue(-1.0)
+			.withDescription("CPU cores for the TaskExecutors. If not explicitly configured, legacy config "
+				+ "options 'yarn.containers.vcores' and 'mesos.resourcemanager.tasks.cpus' will be used for Yarn / Mesos "
+				+ "setups, and an unlimited number of cpu cores will be set for standalone setups.");
 
 	/**
 	 * Total Process Memory size for the TaskExecutors.

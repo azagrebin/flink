@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.clusterframework;
 
+import org.apache.flink.api.common.resources.CPUResource;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -31,6 +32,8 @@ public class TaskExecutorResourceSpecBuilder {
 
 	private final Configuration configuration;
 
+	private CPUResource cpuCores = null;
+
 	private MemorySize totalProcessMemory = null;
 
 	private TaskExecutorResourceSpecBuilder(final Configuration configuration) {
@@ -41,12 +44,24 @@ public class TaskExecutorResourceSpecBuilder {
 		return new TaskExecutorResourceSpecBuilder(configuration);
 	}
 
+	public TaskExecutorResourceSpecBuilder withCpuCores(double cpuCores) {
+		return withCpuCores(new CPUResource(cpuCores));
+	}
+
+	public TaskExecutorResourceSpecBuilder withCpuCores(CPUResource cpuCores) {
+		this.cpuCores = cpuCores;
+		return this;
+	}
+
 	public TaskExecutorResourceSpecBuilder withTotalProcessMemory(MemorySize totalProcessMemory) {
 		this.totalProcessMemory = totalProcessMemory;
 		return this;
 	}
 
 	public TaskExecutorResourceSpec build() {
+		if (cpuCores != null) {
+			configuration.setDouble(TaskManagerOptions.CPU_CORES, cpuCores.getValue().doubleValue());
+		}
 		if (totalProcessMemory != null) {
 			configuration.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY, totalProcessMemory.toString());
 		}

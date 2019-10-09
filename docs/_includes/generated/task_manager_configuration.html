@@ -33,6 +33,12 @@
             <td>The maximum number of bytes that a checkpoint alignment may buffer. If the checkpoint alignment buffers more than the configured amount of data, the checkpoint is aborted (skipped). A value of -1 indicates that there is no limit.</td>
         </tr>
         <tr>
+            <td><h5>taskmanager.cpu.cores</h5></td>
+            <td style="word-wrap: break-word;">-1.0</td>
+            <td>Double</td>
+            <td>CPU cores for the TaskExecutors. If not explicitly configured, legacy config options 'yarn.containers.vcores' and 'mesos.resourcemanager.tasks.cpus' will be used for Yarn / Mesos setups, and an unlimited number of cpu cores will be set for standalone setups.</td>
+        </tr>
+        <tr>
             <td><h5>taskmanager.debug.memory.log</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>

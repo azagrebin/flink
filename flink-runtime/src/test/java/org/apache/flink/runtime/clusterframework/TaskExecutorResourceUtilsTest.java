@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.clusterframework;
 
+import org.apache.flink.api.common.resources.CPUResource;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
@@ -30,6 +31,7 @@ import org.apache.flink.util.TestLogger;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -49,6 +51,7 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 	private static final MemorySize TOTAL_PROCESS_MEM_SIZE = MemorySize.parse("1536m");
 
 	private static final TaskExecutorResourceSpec TM_RESOURCE_SPEC = new TaskExecutorResourceSpec(
+		new CPUResource(1.0),
 		MemorySize.parse("1m"),
 		MemorySize.parse("2m"),
 		MemorySize.parse("3m"),
@@ -64,6 +67,7 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		String dynamicConfigsStr = TaskExecutorResourceUtils.generateDynamicConfigsStr(TM_RESOURCE_SPEC);
 		Map<String, String> configs = ConfigurationUtils.parseTmResourceDynamicConfigs(dynamicConfigsStr);
 
+		assertThat(new CPUResource(Double.valueOf(configs.get(TaskManagerOptions.CPU_CORES.key()))), is(TM_RESOURCE_SPEC.getCpuCores().get()));
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key())), is(TM_RESOURCE_SPEC.getFrameworkHeapSize()));
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.FRAMEWORK_OFF_HEAP_MEMORY.key())), is(TM_RESOURCE_SPEC.getFrameworkOffHeapMemorySize()));
 		assertThat(MemorySize.parse(configs.get(TaskManagerOptions.TASK_HEAP_MEMORY.key())), is(TM_RESOURCE_SPEC.getTaskHeapSize()));
@@ -83,6 +87,29 @@ public class TaskExecutorResourceUtilsTest extends TestLogger {
 		assertThat(MemorySize.parse(configs.get("-Xms")), is(TM_RESOURCE_SPEC.getFrameworkHeapSize().add(TM_RESOURCE_SPEC.getTaskHeapSize()).add(TM_RESOURCE_SPEC.getOnHeapManagedMemorySize())));
 		assertThat(MemorySize.parse(configs.get("-XX:MaxDirectMemorySize=")), is(TM_RESOURCE_SPEC.getFrameworkOffHeapMemorySize().add(TM_RESOURCE_SPEC.getTaskOffHeapSize()).add(TM_RESOURCE_SPEC.getShuffleMemSize())));
 		assertThat(MemorySize.parse(configs.get("-XX:MaxMetaspaceSize=")), is(TM_RESOURCE_SPEC.getJvmMetaspaceSize()));
+	}
+
+	@Test
+	public void testConfigCpuCores() {
+		final double cpuCores = 1.0;
+
+		Configuration conf = new Configuration();
+		conf.setDouble(TaskManagerOptions.CPU_CORES, cpuCores);
+
+		validateInAllConfigurations(conf, taskExecutorResourceSpec -> assertThat(taskExecutorResourceSpec.getCpuCores(), is(Optional.of(new CPUResource(cpuCores)))));
+	}
+
+	@Test
+	public void testConfigNoCpuCores() {
+		Configuration conf = new Configuration();
+		validateInAllConfigurations(conf, taskExecutorResourceSpec -> assertThat(taskExecutorResourceSpec.getCpuCores(), is(Optional.empty())));
+	}
+
+	@Test
+	public void testConfigNegativeCpuCores() {
+		Configuration conf = new Configuration();
+		conf.setDouble(TaskManagerOptions.CPU_CORES, -0.1f);
+		validateInAllConfigurations(conf, taskExecutorResourceSpec -> assertThat(taskExecutorResourceSpec.getCpuCores(), is(Optional.empty())));
 	}
 
 	@Test
