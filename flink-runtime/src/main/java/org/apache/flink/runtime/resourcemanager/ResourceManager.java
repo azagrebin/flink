@@ -377,7 +377,8 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 							params.getTaskExecutorAddress(),
 							params.getResourceId(),
 							params.getDataPort(),
-							params.getHardwareDescription());
+							params.getHardwareDescription(),
+							params.getDefaultSlotResourceProfile());
 					}
 				} else {
 					log.info("Ignoring outdated TaskExecutorGateway connection.");
@@ -684,7 +685,8 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 			String taskExecutorAddress,
 			ResourceID taskExecutorResourceId,
 			int dataPort,
-			HardwareDescription hardwareDescription) {
+			HardwareDescription hardwareDescription,
+			ResourceProfile defaultResourceProfile) {
 		WorkerRegistration<WorkerType> oldRegistration = taskExecutors.remove(taskExecutorResourceId);
 		if (oldRegistration != null) {
 			// TODO :: suggest old taskExecutor to stop itself
@@ -704,7 +706,7 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 			return new RegistrationResponse.Decline("unrecognized TaskExecutor");
 		} else {
 			WorkerRegistration<WorkerType> registration =
-				new WorkerRegistration<>(taskExecutorGateway, newWorker, dataPort, hardwareDescription);
+				new WorkerRegistration<>(taskExecutorGateway, newWorker, dataPort, hardwareDescription, defaultResourceProfile);
 
 			log.info("Registering TaskManager with ResourceID {} ({}) at ResourceManager", taskExecutorResourceId, taskExecutorAddress);
 			taskExecutors.put(taskExecutorResourceId, registration);

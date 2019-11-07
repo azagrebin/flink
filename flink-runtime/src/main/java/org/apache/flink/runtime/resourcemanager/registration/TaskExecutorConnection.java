@@ -18,7 +18,9 @@
 
 package org.apache.flink.runtime.resourcemanager.registration;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
 
@@ -36,10 +38,21 @@ public class TaskExecutorConnection {
 
 	private final TaskExecutorGateway taskExecutorGateway;
 
+	private final ResourceProfile defaultResourceProfile;
+
+	@VisibleForTesting
 	public TaskExecutorConnection(ResourceID resourceID, TaskExecutorGateway taskExecutorGateway) {
+		this(resourceID, taskExecutorGateway, ResourceProfile.ZERO);
+	}
+
+	public TaskExecutorConnection(
+			ResourceID resourceID,
+			TaskExecutorGateway taskExecutorGateway,
+			ResourceProfile defaultResourceProfile) {
 		this.resourceID = checkNotNull(resourceID);
 		this.instanceID = new InstanceID();
 		this.taskExecutorGateway = checkNotNull(taskExecutorGateway);
+		this.defaultResourceProfile = checkNotNull(defaultResourceProfile);
 	}
 
 	public ResourceID getResourceID() {
@@ -52,5 +65,9 @@ public class TaskExecutorConnection {
 
 	public TaskExecutorGateway getTaskExecutorGateway() {
 		return taskExecutorGateway;
+	}
+
+	public ResourceProfile getDefaultResourceProfile() {
+		return defaultResourceProfile;
 	}
 }

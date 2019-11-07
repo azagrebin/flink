@@ -19,6 +19,7 @@
 package org.apache.flink.runtime.resourcemanager.registration;
 
 import org.apache.flink.runtime.clusterframework.types.ResourceIDRetrievable;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorGateway;
 import org.apache.flink.util.Preconditions;
@@ -38,9 +39,10 @@ public class WorkerRegistration<WorkerType extends ResourceIDRetrievable> extend
 			TaskExecutorGateway taskExecutorGateway,
 			WorkerType worker,
 			int dataPort,
-			HardwareDescription hardwareDescription) {
+			HardwareDescription hardwareDescription,
+			ResourceProfile defaultResourceProfile) {
 
-		super(worker.getResourceID(), taskExecutorGateway);
+		super(worker.getResourceID(), taskExecutorGateway, defaultResourceProfile);
 
 		this.worker = Preconditions.checkNotNull(worker);
 		this.dataPort = dataPort;

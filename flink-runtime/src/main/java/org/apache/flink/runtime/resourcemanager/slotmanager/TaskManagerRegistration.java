@@ -18,6 +18,7 @@
 
 package org.apache.flink.runtime.resourcemanager.slotmanager;
 
+import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.resourcemanager.registration.TaskExecutorConnection;
@@ -26,11 +27,15 @@ import org.apache.flink.util.Preconditions;
 import java.util.Collection;
 import java.util.HashSet;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 public class TaskManagerRegistration {
 
 	private final TaskExecutorConnection taskManagerConnection;
 
 	private final HashSet<SlotID> slots;
+
+	private final TaskManagerAvailableResource availableResource;
 
 	private int numberFreeSlots;
 
@@ -38,17 +43,30 @@ public class TaskManagerRegistration {
 	private long idleSince;
 
 	public TaskManagerRegistration(
-		TaskExecutorConnection taskManagerConnection,
-		Collection<SlotID> slots) {
+			TaskExecutorConnection taskManagerConnection,
+			Collection<SlotID> slots) {
+		this(taskManagerConnection, slots, null);
+	}
 
-		this.taskManagerConnection = Preconditions.checkNotNull(taskManagerConnection, "taskManagerConnection");
-		Preconditions.checkNotNull(slots, "slots");
+	public TaskManagerRegistration(
+		TaskExecutorConnection taskManagerConnection,
+		Collection<SlotID> slots,
+		TaskManagerAvailableResource availableResource) {
+
+		this.taskManagerConnection = checkNotNull(taskManagerConnection, "taskManagerConnection");
+		checkNotNull(slots, "slots");
 
 		this.slots = new HashSet<>(slots);
 
 		this.numberFreeSlots = slots.size();
 
 		idleSince = System.currentTimeMillis();
+
+		this.availableResource = checkNotNull(availableResource);
+	}
+
+	public ResourceID getResourceID() {
+		return taskManagerConnection.getResourceID();
 	}
 
 	public TaskExecutorConnection getTaskManagerConnection() {
@@ -105,5 +123,9 @@ public class TaskManagerRegistration {
 
 	public boolean containsSlot(SlotID slotId) {
 		return slots.contains(slotId);
+	}
+
+	public TaskManagerAvailableResource getAvailableResource() {
+		return availableResource;
 	}
 }

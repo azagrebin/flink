@@ -28,6 +28,7 @@ import org.apache.flink.util.Preconditions;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -43,6 +44,9 @@ public class PendingSlotRequest {
 	@Nullable
 	private PendingTaskManagerSlot pendingTaskManagerSlot;
 
+	@Nullable
+	private AbstractTaskManagerResource taskManagerPendingResource;
+
 	/** Timestamp when this pending slot request has been created. */
 	private final long creationTimestamp;
 
@@ -50,6 +54,7 @@ public class PendingSlotRequest {
 		this.slotRequest = Preconditions.checkNotNull(slotRequest);
 		this.requestFuture = null;
 		this.pendingTaskManagerSlot = null;
+		taskManagerPendingResource = null;
 		creationTimestamp = System.currentTimeMillis();
 	}
 
@@ -100,5 +105,22 @@ public class PendingSlotRequest {
 
 	public void unassignPendingTaskManagerSlot() {
 		this.pendingTaskManagerSlot = null;
+	}
+
+	public Optional<AbstractTaskManagerResource> getAssignedTaskManagerPendingResource() {
+		return Optional.ofNullable(taskManagerPendingResource);
+	}
+
+	public void assignTaskManagerPendingResource(AbstractTaskManagerResource taskManagerPendingResource) {
+		Preconditions.checkNotNull(taskManagerPendingResource);
+		unassignTaskManagerPendingResource();
+		this.taskManagerPendingResource = taskManagerPendingResource;
+	}
+
+	public void unassignTaskManagerPendingResource() {
+		if (taskManagerPendingResource != null) {
+			taskManagerPendingResource.unassignPendingSlotRequest(this);
+			taskManagerPendingResource = null;
+		}
 	}
 }
