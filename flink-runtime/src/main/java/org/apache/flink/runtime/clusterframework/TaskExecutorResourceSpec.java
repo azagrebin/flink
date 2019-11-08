@@ -163,4 +163,27 @@ public class TaskExecutorResourceSpec {
 	public MemorySize getTotalProcessMemorySize() {
 		return getTotalFlinkMemorySize().add(jvmMetaspaceSize).add(jvmOverheadSize);
 	}
+
+	public MemorySize getJvmHeapMemorySize() {
+		return frameworkHeapSize.add(taskHeapSize).add(onHeapManagedMemorySize);
+	}
+
+	public MemorySize getJvmDirectMemorySize() {
+		return taskOffHeapSize.add(shuffleMemSize);
+	}
+
+	@Override
+	public String toString() {
+		return "TaskExecutorResourceSpec {"
+			+ "frameworkHeapSize=" + frameworkHeapSize.toString()
+			+ ", frameworkOffHeapSize=" + frameworkOffHeapMemorySize.toString()
+			+ ", taskHeapSize=" + taskHeapSize.toString()
+			+ ", taskOffHeapSize=" + taskOffHeapSize.toString()
+			+ ", shuffleMemSize=" + shuffleMemSize.toString()
+			+ ", onHeapManagedMemorySize=" + onHeapManagedMemorySize.toString()
+			+ ", offHeapManagedMemorySize=" + offHeapManagedMemorySize.toString()
+			+ ", jvmMetaspaceSize=" + jvmMetaspaceSize.toString()
+			+ ", jvmOverheadSize=" + jvmOverheadSize.toString()
+			+ "}";
+	}
 }
