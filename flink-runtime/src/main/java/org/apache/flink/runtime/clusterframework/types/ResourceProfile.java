@@ -75,23 +75,23 @@ public class ResourceProfile implements Serializable, Comparable<ResourceProfile
 	/** How many cpu cores are needed, use double so we can specify cpu like 0.1. */
 	private final double cpuCores;
 
-	/** How much task heap memory are needed. */
+	/** How much task heap memory is needed. */
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize taskHeapMemory;
 
-	/** How much task off-heap memory are needed. */
+	/** How much task off-heap memory is needed. */
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize taskOffHeapMemory;
 
-	/** How much on-heap managed memory are needed. */
+	/** How much on-heap managed memory is needed. */
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize onHeapManagedMemory;
 
-	/** How much off-heap managed memory are needed. */
+	/** How much off-heap managed memory is needed. */
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize offHeapManagedMemory;
 
-	/** How much shuffle memory are needed. */
+	/** How much shuffle memory is needed. */
 	@Nullable // can be null only for UNKNOWN
 	private final MemorySize shuffleMemory;
 
@@ -358,11 +358,11 @@ public class ResourceProfile implements Serializable, Comparable<ResourceProfile
 	public int hashCode() {
 		final long cpuBits =  Double.doubleToLongBits(cpuCores);
 		int result = (int) (cpuBits ^ (cpuBits >>> 32));
-		result = 31 * result + (taskHeapMemory != null ? taskHeapMemory.hashCode() : 0);
-		result = 31 * result + (taskOffHeapMemory != null ? taskOffHeapMemory.hashCode() : 0);
-		result = 31 * result + (onHeapManagedMemory != null ? onHeapManagedMemory.hashCode() : 0);
-		result = 31 * result + (offHeapManagedMemory != null ? offHeapManagedMemory.hashCode() : 0);
-		result = 31 * result + (shuffleMemory != null ? shuffleMemory.hashCode() : 0);
+		result = 31 * result + Objects.hashCode(taskHeapMemory);
+		result = 31 * result + Objects.hashCode(taskOffHeapMemory);
+		result = 31 * result + Objects.hashCode(onHeapManagedMemory);
+		result = 31 * result + Objects.hashCode(offHeapManagedMemory);
+		result = 31 * result + Objects.hashCode(shuffleMemory);
 		result = 31 * result + extendedResources.hashCode();
 		return result;
 	}
@@ -520,7 +520,12 @@ public class ResourceProfile implements Serializable, Comparable<ResourceProfile
 	//  factories
 	// ------------------------------------------------------------------------
 
-	public static ResourceProfile fromResourceSpec(ResourceSpec resourceSpec, int networkMemory) {
+	@VisibleForTesting
+	static ResourceProfile fromResourceSpec(ResourceSpec resourceSpec) {
+		return fromResourceSpec(resourceSpec, MemorySize.ZERO);
+	}
+
+	public static ResourceProfile fromResourceSpec(ResourceSpec resourceSpec, MemorySize networkMemory) {
 		if (ResourceSpec.UNKNOWN.equals(resourceSpec)) {
 			return UNKNOWN;
 		}
@@ -533,7 +538,7 @@ public class ResourceProfile implements Serializable, Comparable<ResourceProfile
 			resourceSpec.getTaskOffHeapMemory(),
 			resourceSpec.getOnHeapManagedMemory(),
 			resourceSpec.getOffHeapManagedMemory(),
-			MemorySize.parse(networkMemory + "m"),
+			networkMemory,
 			copiedExtendedResources);
 	}
 }
