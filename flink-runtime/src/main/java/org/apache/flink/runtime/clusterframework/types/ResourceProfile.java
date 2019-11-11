@@ -57,13 +57,13 @@ public class ResourceProfile implements Serializable, Comparable<ResourceProfile
 	 * A ResourceProfile that indicates an unknown resource requirement.
 	 * This is mainly used for describing resource requirements that the exact amount of resource needed is not specified.
 	 * It can also be used for describing remaining resource of a multi task slot that contains tasks with unknown resource requirements.
-	 * It should not used for describing total resource of a task executor / slot, which should always be specific.
-	 * */
+	 * It should not be used for describing total resource of a task executor / slot, which should always be specific.
+	 */
 	public static final ResourceProfile UNKNOWN = new ResourceProfile();
 
 	/**
 	 * A ResourceProfile that indicates infinite resource that matches any resource requirement, for testability purpose only.
-	 * */
+	 */
 	@VisibleForTesting
 	public static final ResourceProfile ANY = new ResourceProfile(Double.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, MemorySize.MAX_VALUE, Collections.emptyMap());
 
