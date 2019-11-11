@@ -262,10 +262,10 @@ public final class ResourceSpec implements Serializable {
 	public int hashCode() {
 		final long cpuBits =  Double.doubleToLongBits(cpuCores);
 		int result = (int) (cpuBits ^ (cpuBits >>> 32));
-		result = 31 * result + (taskHeapMemory != null ? taskHeapMemory.hashCode() : 0);
-		result = 31 * result + (taskOffHeapMemory != null ? taskOffHeapMemory.hashCode() : 0);
-		result = 31 * result + (onHeapManagedMemory != null ? onHeapManagedMemory.hashCode() : 0);
-		result = 31 * result + (offHeapManagedMemory != null ? offHeapManagedMemory.hashCode() : 0);
+		result = 31 * result + Objects.hashCode(taskHeapMemory);
+		result = 31 * result + Objects.hashCode(taskOffHeapMemory);
+		result = 31 * result + Objects.hashCode(onHeapManagedMemory);
+		result = 31 * result + Objects.hashCode(offHeapManagedMemory);
 		result = 31 * result + extendedResources.hashCode();
 		return result;
 	}
