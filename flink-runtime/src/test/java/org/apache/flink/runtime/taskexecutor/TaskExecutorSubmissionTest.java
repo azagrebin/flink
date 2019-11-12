@@ -29,6 +29,7 @@ import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
+import org.apache.flink.runtime.deployment.PartitionDescriptorBuilder;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.deployment.TaskDeploymentDescriptor;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -697,12 +698,10 @@ public class TaskExecutorSubmissionTest extends TestLogger {
 	private TaskDeploymentDescriptor createSender(
 			NettyShuffleDescriptor shuffleDescriptor,
 			Class<? extends AbstractInvokable> abstractInvokable) throws IOException {
-		PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
-			new IntermediateDataSetID(),
-			shuffleDescriptor.getResultPartitionID().getPartitionId(),
-			ResultPartitionType.PIPELINED,
-			1,
-			0);
+		PartitionDescriptor partitionDescriptor = PartitionDescriptorBuilder
+			.newBuilder()
+			.setPartitionId(shuffleDescriptor.getResultPartitionID().getPartitionId())
+			.build();
 		ResultPartitionDeploymentDescriptor resultPartitionDeploymentDescriptor = new ResultPartitionDeploymentDescriptor(
 			partitionDescriptor,
 			shuffleDescriptor,

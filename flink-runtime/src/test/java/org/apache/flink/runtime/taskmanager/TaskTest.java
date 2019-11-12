@@ -29,6 +29,7 @@ import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.VoidBlobStore;
 import org.apache.flink.runtime.concurrent.Executors;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
+import org.apache.flink.runtime.deployment.PartitionDescriptorBuilder;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
 import org.apache.flink.runtime.execution.CancelTaskException;
 import org.apache.flink.runtime.execution.Environment;
@@ -245,12 +246,7 @@ public class TaskTest extends TestLogger {
 
 	@Test
 	public void testExecutionFailsInNetworkRegistrationForPartitions() throws Exception {
-		final PartitionDescriptor partitionDescriptor = new PartitionDescriptor(
-			new IntermediateDataSetID(),
-			new IntermediateResultPartitionID(),
-			ResultPartitionType.PIPELINED,
-			1,
-			1);
+		final PartitionDescriptor partitionDescriptor = PartitionDescriptorBuilder.newBuilder().build();
 		final ShuffleDescriptor shuffleDescriptor = NettyShuffleDescriptorBuilder.newBuilder().buildLocal();
 		final ResultPartitionDeploymentDescriptor dummyPartition = new ResultPartitionDeploymentDescriptor(
 			partitionDescriptor,
