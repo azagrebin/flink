@@ -329,6 +329,7 @@ public class TaskSlot implements AutoCloseable {
 	}
 
 	private void verifyMemoryFreed() {
+		Preconditions.checkArgument(memoryManager.verifyEmpty());
 		if (!memoryManager.verifyEmpty()) {
 			LOG.warn("Not all slot memory is freed, potential memory leak at {}", this);
 		}
