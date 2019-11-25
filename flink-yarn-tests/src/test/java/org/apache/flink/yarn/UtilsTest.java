@@ -25,7 +25,7 @@ import org.apache.flink.configuration.ResourceManagerOptions;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.runtime.clusterframework.ContaineredTaskManagerParameters;
 import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpecBuilder;
 import org.apache.flink.util.TestLogger;
 
 import org.apache.hadoop.io.Text;
@@ -190,7 +190,10 @@ public class UtilsTest extends TestLogger {
 			hdfsDelegationTokenKind, service));
 		amCredentials.writeTokenStorageFile(new org.apache.hadoop.fs.Path(credentialFile.getAbsolutePath()), yarnConf);
 
-		TaskExecutorResourceSpec spec = TaskExecutorResourceUtils.resourceSpecFromConfig(flinkConf, MemorySize.parse("1g"));
+		TaskExecutorResourceSpec spec = TaskExecutorResourceSpecBuilder
+			.newBuilder(flinkConf)
+			.withTotalProcessMemory(MemorySize.parse("1g"))
+			.build();
 		ContaineredTaskManagerParameters tmParams = new ContaineredTaskManagerParameters(spec, new HashMap<>(1));
 		Configuration taskManagerConf = new Configuration();
 

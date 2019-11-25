@@ -42,7 +42,7 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.core.plugin.PluginConfig;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.runtime.clusterframework.BootstrapTools;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpecBuilder;
 import org.apache.flink.runtime.entrypoint.ClusterEntrypoint;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -468,7 +468,10 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 	private void validateClusterSpecification(ClusterSpecification clusterSpecification) throws FlinkException {
 		MemorySize totalProcessMemory = MemorySize.parse(clusterSpecification.getTaskManagerMemoryMB() + "m");
 		try {
-			TaskExecutorResourceUtils.resourceSpecFromConfig(flinkConfiguration, totalProcessMemory);
+			TaskExecutorResourceSpecBuilder
+				.newBuilder(flinkConfiguration)
+				.withTotalProcessMemory(totalProcessMemory)
+				.build();
 		} catch (IllegalArgumentException iae) {
 			throw new FlinkException("Inconsistent cluster specification.", iae);
 		}

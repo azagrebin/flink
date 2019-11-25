@@ -26,7 +26,7 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.description.Description;
 import org.apache.flink.runtime.clusterframework.ContaineredTaskManagerParameters;
 import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpecBuilder;
 import org.apache.flink.util.Preconditions;
 
 import com.netflix.fenzo.ConstraintEvaluator;
@@ -337,8 +337,10 @@ public class MesosTaskManagerParameters {
 
 		List<ConstraintEvaluator> constraints = parseConstraints(flinkConfig.getString(MESOS_CONSTRAINTS_HARD_HOSTATTR));
 		MemorySize totalProcessMemory = MemorySize.parse(flinkConfig.getInteger(MESOS_RM_TASKS_MEMORY_MB) + "m");
-		TaskExecutorResourceSpec taskExecutorResourceSpec =
-			TaskExecutorResourceUtils.resourceSpecFromConfig(flinkConfig, totalProcessMemory);
+		TaskExecutorResourceSpec taskExecutorResourceSpec = TaskExecutorResourceSpecBuilder
+			.newBuilder(flinkConfig)
+			.withTotalProcessMemory(totalProcessMemory)
+			.build();
 
 		// parse the common parameters
 		ContaineredTaskManagerParameters containeredParameters = ContaineredTaskManagerParameters.create(
