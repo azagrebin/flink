@@ -107,8 +107,6 @@ public class MesosUtils {
 		final MesosTaskManagerParameters taskManagerParameters = MesosTaskManagerParameters.create(configuration);
 		final TaskExecutorResourceSpec taskExecutorResourceSpec = taskManagerParameters.containeredParameters().getTaskExecutorResourceSpec();
 
-		log.info("TaskManagers will be created with {} task slots",
-			taskManagerParameters.containeredParameters().numSlots());
 		log.info("TaskManagers will be started with container size {} MB, JVM heap size {} MB, " +
 				"JVM direct memory limit {} MB, {} cpus, {} gpus, disk space {} MB",
 			taskExecutorResourceSpec.getTotalProcessMemorySize().getMebiBytes(),
