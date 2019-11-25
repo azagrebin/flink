@@ -27,9 +27,6 @@ import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.testingUtils.TestingUtils;
 
 import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /** Testing utility and factory methods for {@link TaskSlotTable} and {@link TaskSlot}s. */
 public enum TaskSlotUtils {
@@ -62,17 +59,21 @@ public enum TaskSlotUtils {
 	private static TaskSlotTable createTaskSlotTable(
 			int numberOfSlots,
 			TimerService<AllocationID> timerService) {
-		return new TaskSlotTable(createDefaultSlots(numberOfSlots), timerService);
+		return new TaskSlotTable(numberOfSlots,
+			createDefaultSlotResourceProfile(),
+			createDefaultMemoryPageSize(),
+			timerService);
+	}
+
+	public static ResourceProfile createDefaultSlotResourceProfile() {
+		return DEFAULT_RESOURCE_PROFILE;
+	}
+
+	public static int createDefaultMemoryPageSize() {
+		return MemoryManager.MIN_PAGE_SIZE;
 	}
 
 	public static TimerService<AllocationID> createDefaultTimerService(long shutdownTimeout) {
 		return new TimerService<>(TestingUtils.defaultExecutor(), shutdownTimeout);
-	}
-
-	public static List<TaskSlot> createDefaultSlots(int numberOfSlots) {
-		return IntStream
-			.range(0, numberOfSlots)
-			.mapToObj(index -> new TaskSlot(index, DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE))
-			.collect(Collectors.toList());
 	}
 }

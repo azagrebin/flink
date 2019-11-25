@@ -34,7 +34,6 @@ import org.apache.flink.runtime.shuffle.ShuffleEnvironment;
 import org.apache.flink.runtime.shuffle.ShuffleEnvironmentContext;
 import org.apache.flink.runtime.shuffle.ShuffleServiceLoader;
 import org.apache.flink.runtime.state.TaskExecutorLocalStateStoresManager;
-import org.apache.flink.runtime.taskexecutor.slot.TaskSlot;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
@@ -47,14 +46,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Container for {@link TaskExecutor} services such as the {@link MemoryManager}, {@link IOManager},
@@ -296,22 +291,11 @@ public class TaskManagerServices {
 		final long timerServiceShutdownTimeout,
 		final int pageSize) {
 		final int numberOfSlots = (int) (1.0 / taskExecutorResourceSpec.getDefaultSlotFraction());
-		final List<ResourceProfile> resourceProfiles =
-			Collections.nCopies(numberOfSlots,
-				TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec));
+		final ResourceProfile resourceProfile = TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec);
 		final TimerService<AllocationID> timerService = new TimerService<>(
 			new ScheduledThreadPoolExecutor(1),
 			timerServiceShutdownTimeout);
-		return new TaskSlotTable(createTaskSlotsFromResources(resourceProfiles, pageSize), timerService);
-	}
-
-	private static List<TaskSlot> createTaskSlotsFromResources(
-		List<ResourceProfile> resourceProfiles,
-		int memoryPageSize) {
-		return IntStream
-			.range(0, resourceProfiles.size())
-			.mapToObj(index -> new TaskSlot(index, resourceProfiles.get(index), memoryPageSize))
-			.collect(Collectors.toList());
+		return new TaskSlotTable(numberOfSlots, resourceProfile, pageSize, timerService);
 	}
 
 	private static ShuffleEnvironment<?, ?> createShuffleEnvironment(
