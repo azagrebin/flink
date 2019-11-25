@@ -32,6 +32,13 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
  */
 public class SlotID implements ResourceIDRetrievable, Serializable {
 
+	/**
+	 * Generate a SlotID without actual slot index for dynamic slot allocation.
+	 */
+	public static SlotID generateDynamicSlotID(ResourceID resourceID) {
+		return new SlotID(resourceID);
+	}
+
 	private static final long serialVersionUID = -6399206032549807771L;
 
 	/** The resource id which this slot located */
@@ -44,6 +51,11 @@ public class SlotID implements ResourceIDRetrievable, Serializable {
 		checkArgument(0 <= slotNumber, "Slot number must be positive.");
 		this.resourceId = checkNotNull(resourceId, "ResourceID must not be null");
 		this.slotNumber = slotNumber;
+	}
+
+	private SlotID(ResourceID resourceID) {
+		this.resourceId = checkNotNull(resourceID, "ResourceID must not be null");
+		this.slotNumber = -1;
 	}
 
 	// ------------------------------------------------------------------------
