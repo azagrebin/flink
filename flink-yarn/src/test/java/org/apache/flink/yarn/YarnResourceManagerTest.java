@@ -39,6 +39,7 @@ import org.apache.flink.runtime.metrics.groups.UnregisteredMetricGroups;
 import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.resourcemanager.JobLeaderIdService;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGatewayRegisterTaskExecutorParams;
 import org.apache.flink.runtime.resourcemanager.SlotRequest;
 import org.apache.flink.runtime.resourcemanager.exceptions.ResourceManagerException;
 import org.apache.flink.runtime.resourcemanager.slotmanager.SlotManager;
@@ -403,10 +404,7 @@ public class YarnResourceManagerTest extends TestLogger {
 
 				CompletableFuture<Integer> numberRegisteredSlotsFuture = rmGateway
 					.registerTaskExecutor(
-						taskHost,
-						taskManagerResourceId,
-						dataPort,
-						hardwareDescription,
+						new ResourceManagerGatewayRegisterTaskExecutorParams(taskHost, taskManagerResourceId, dataPort, hardwareDescription),
 						Time.seconds(10L))
 					.thenCompose(
 						(RegistrationResponse response) -> {

@@ -21,7 +21,6 @@ package org.apache.flink.runtime.taskexecutor;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
@@ -49,7 +48,6 @@ import org.apache.flink.runtime.heartbeat.HeartbeatServices;
 import org.apache.flink.runtime.heartbeat.HeartbeatTarget;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServices;
 import org.apache.flink.runtime.highavailability.TestingHighAvailabilityServices;
-import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.instance.InstanceID;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
@@ -77,6 +75,7 @@ import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.registration.RegistrationResponse.Decline;
 import org.apache.flink.runtime.registration.RetryingRegistrationConfiguration;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerGateway;
+import org.apache.flink.runtime.resourcemanager.ResourceManagerGatewayRegisterTaskExecutorParams;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
 import org.apache.flink.runtime.resourcemanager.utils.TestingResourceManagerGateway;
 import org.apache.flink.runtime.rpc.RpcService;
@@ -159,8 +158,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -394,7 +393,7 @@ public class TaskExecutorTest extends TestLogger {
 		final CountDownLatch registrationAttempts = new CountDownLatch(2);
 		rmGateway.setRegisterTaskExecutorFunction(
 			registration -> {
-				taskExecutorRegistrationFuture.complete(registration.f1);
+				taskExecutorRegistrationFuture.complete(registration.getResourceId());
 				registrationAttempts.countDown();
 				return CompletableFuture.completedFuture(registrationResponse);
 			});
@@ -459,8 +458,8 @@ public class TaskExecutorTest extends TestLogger {
 				rmResourceId,
 				new ClusterInformation("localhost", 1234)));
 
-		rmGateway.setRegisterTaskExecutorFunction(stringResourceIDIntegerHardwareDescriptionTuple4 -> {
-			taskExecutorRegistrationFuture.complete(stringResourceIDIntegerHardwareDescriptionTuple4.f1);
+		rmGateway.setRegisterTaskExecutorFunction(params -> {
+			taskExecutorRegistrationFuture.complete(params.getResourceId());
 			return registrationResponse;
 		});
 
@@ -575,11 +574,11 @@ public class TaskExecutorTest extends TestLogger {
 		ResourceManagerGateway rmGateway2 = mock(ResourceManagerGateway.class);
 
 		when(rmGateway1.registerTaskExecutor(
-					anyString(), any(ResourceID.class), anyInt(), any(HardwareDescription.class), any(Time.class)))
+					any(ResourceManagerGatewayRegisterTaskExecutorParams.class), any(Time.class)))
 			.thenReturn(CompletableFuture.completedFuture(
 				new TaskExecutorRegistrationSuccess(new InstanceID(), rmResourceId1, new ClusterInformation("localhost", 1234))));
 		when(rmGateway2.registerTaskExecutor(
-					anyString(), any(ResourceID.class), anyInt(), any(HardwareDescription.class), any(Time.class)))
+					any(ResourceManagerGatewayRegisterTaskExecutorParams.class), any(Time.class)))
 			.thenReturn(CompletableFuture.completedFuture(
 				new TaskExecutorRegistrationSuccess(new InstanceID(), rmResourceId2, new ClusterInformation("localhost", 1234))));
 
@@ -609,9 +608,11 @@ public class TaskExecutorTest extends TestLogger {
 
 			// define a leader and see that a registration happens
 			resourceManagerLeaderRetriever.notifyListener(address1, leaderId1);
-
 			verify(rmGateway1, Mockito.timeout(timeout.toMilliseconds())).registerTaskExecutor(
-					eq(taskManagerAddress), eq(taskManagerLocation.getResourceID()), anyInt(), any(HardwareDescription.class), any(Time.class));
+				argThat(params ->
+					params.getTaskExecutorAddress().equals(taskManagerAddress) &&
+					params.getResourceId().equals(taskManagerLocation.getResourceID())),
+				any(Time.class));
 			assertNotNull(taskManager.getResourceManagerConnection());
 
 			// cancel the leader
@@ -621,7 +622,10 @@ public class TaskExecutorTest extends TestLogger {
 			resourceManagerLeaderRetriever.notifyListener(address2, leaderId2);
 
 			verify(rmGateway2, Mockito.timeout(timeout.toMilliseconds())).registerTaskExecutor(
-					eq(taskManagerAddress), eq(taskManagerLocation.getResourceID()), anyInt(), any(HardwareDescription.class), any(Time.class));
+				argThat(params ->
+					params.getTaskExecutorAddress().equals(taskManagerAddress) &&
+					params.getResourceId().equals(taskManagerLocation.getResourceID())),
+				any(Time.class));
 			assertNotNull(taskManager.getResourceManagerConnection());
 		}
 		finally {
@@ -910,8 +914,8 @@ public class TaskExecutorTest extends TestLogger {
 
 		final CompletableFuture<ResourceID> registrationFuture = new CompletableFuture<>();
 		resourceManagerGateway.setRegisterTaskExecutorFunction(
-			stringResourceIDIntegerHardwareDescriptionTuple4 -> {
-				registrationFuture.complete(stringResourceIDIntegerHardwareDescriptionTuple4.f1);
+			params -> {
+				registrationFuture.complete(params.getResourceId());
 				return CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(registrationId, resourceManagerResourceId, new ClusterInformation("localhost", 1234)));
 			});
 
@@ -1294,8 +1298,8 @@ public class TaskExecutorTest extends TestLogger {
 		try {
 			final TestingResourceManagerGateway testingResourceManagerGateway = new TestingResourceManagerGateway();
 			testingResourceManagerGateway.setRegisterTaskExecutorFunction(
-				tuple -> {
-					if (registrationFuture.complete(tuple.f1)) {
+				params -> {
+					if (registrationFuture.complete(params.getResourceId())) {
 						return CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(
 							new InstanceID(),
 							testingResourceManagerGateway.getOwnResourceId(),
@@ -1345,8 +1349,8 @@ public class TaskExecutorTest extends TestLogger {
 			final CompletableFuture<RegistrationResponse> registrationFuture = new CompletableFuture<>();
 			final CompletableFuture<ResourceID> taskExecutorResourceIdFuture = new CompletableFuture<>();
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(stringResourceIDSlotReportIntegerHardwareDescriptionTuple5 -> {
-				taskExecutorResourceIdFuture.complete(stringResourceIDSlotReportIntegerHardwareDescriptionTuple5.f1);
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
+				taskExecutorResourceIdFuture.complete(params.getResourceId());
 				return registrationFuture;
 			});
 
@@ -1392,8 +1396,8 @@ public class TaskExecutorTest extends TestLogger {
 			final CompletableFuture<RegistrationResponse> registrationResponseFuture = CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(new InstanceID(), ResourceID.generate(), clusterInformation));
 			final BlockingQueue<ResourceID> registrationQueue = new ArrayBlockingQueue<>(1);
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(stringResourceIDSlotReportIntegerHardwareDescriptionTuple5 -> {
-				registrationQueue.offer(stringResourceIDSlotReportIntegerHardwareDescriptionTuple5.f1);
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
+				registrationQueue.offer(params.getResourceId());
 				return registrationResponseFuture;
 			});
 			rpc.registerGateway(testingResourceManagerGateway.getAddress(), testingResourceManagerGateway);
@@ -1491,9 +1495,9 @@ public class TaskExecutorTest extends TestLogger {
 
 			final CountDownLatch numberRegistrations = new CountDownLatch(2);
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(new Function<Tuple4<String, ResourceID, Integer, HardwareDescription>, CompletableFuture<RegistrationResponse>>() {
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(new Function<ResourceManagerGatewayRegisterTaskExecutorParams, CompletableFuture<RegistrationResponse>>() {
 				@Override
-				public CompletableFuture<RegistrationResponse> apply(Tuple4<String, ResourceID, Integer, HardwareDescription> stringResourceIDIntegerHardwareDescriptionTuple4) {
+				public CompletableFuture<RegistrationResponse> apply(ResourceManagerGatewayRegisterTaskExecutorParams params) {
 					numberRegistrations.countDown();
 					return registrationResponse;
 				}
