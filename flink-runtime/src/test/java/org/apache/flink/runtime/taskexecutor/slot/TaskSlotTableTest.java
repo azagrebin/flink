@@ -137,6 +137,51 @@ public class TaskSlotTableTest extends TestLogger {
 	}
 
 	@Test
+	public void testSlotAllocationWithResourceProfile() {
+		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(2);
+
+		try {
+			taskSlotTable.start(new TestingSlotActionsBuilder().build());
+
+			final JobID jobId = new JobID();
+			final AllocationID allocationId = new AllocationID();
+			final ResourceProfile resourceProfile = TaskSlotUtils.DEFAULT_RESOURCE_PROFILE
+				.merge(ResourceProfile.newBuilder().setCpuCores(0.1).build());
+
+			assertThat(taskSlotTable.allocateSlot(-1, jobId, allocationId, resourceProfile, SLOT_TIMEOUT), is(true));
+
+			Iterator<TaskSlot> allocatedSlots = taskSlotTable.getAllocatedSlots(jobId);
+			TaskSlot allocatedSlot = allocatedSlots.next();
+			assertThat(allocatedSlot.getIndex(), is(2));
+			assertThat(allocatedSlot.getResourceProfile(), is(resourceProfile));
+			assertThat(allocatedSlots.hasNext(), is(false));
+		} finally {
+			taskSlotTable.stop();
+		}
+	}
+
+	@Test
+	public void testSlotAllocationWithResourceProfileFailure() {
+		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(2);
+
+		try {
+			taskSlotTable.start(new TestingSlotActionsBuilder().build());
+
+			final JobID jobId = new JobID();
+			final AllocationID allocationId = new AllocationID();
+			ResourceProfile resourceProfile = TaskSlotUtils.DEFAULT_RESOURCE_PROFILE;
+			resourceProfile = resourceProfile.merge(resourceProfile).merge(resourceProfile);
+
+			assertThat(taskSlotTable.allocateSlot(-1, jobId, allocationId, resourceProfile, SLOT_TIMEOUT), is(false));
+
+			Iterator<TaskSlot> allocatedSlots = taskSlotTable.getAllocatedSlots(jobId);
+			assertThat(allocatedSlots.hasNext(), is(false));
+		} finally {
+			taskSlotTable.stop();
+		}
+	}
+
+	@Test
 	public void testGenerateSlotReport() throws SlotNotFoundException {
 		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(3);
 
@@ -161,10 +206,10 @@ public class TaskSlotTableTest extends TestLogger {
 
 			assertThat(slotStatuses.size(), is(4));
 			assertThat(slotStatuses, containsInAnyOrder(
-				is(new SlotStatus(new SlotID(resourceId, 0), TaskSlotUtils.createDefaultSlotResourceProfile(), jobId, allocationId1)),
-				is(new SlotStatus(new SlotID(resourceId, 1), TaskSlotUtils.createDefaultSlotResourceProfile(), null, null)),
-				is(new SlotStatus(new SlotID(resourceId, 2), TaskSlotUtils.createDefaultSlotResourceProfile(), null, null)),
-				is(new SlotStatus(new SlotID(resourceId, 4), TaskSlotUtils.createDefaultSlotResourceProfile(), jobId, allocationId3))));
+				is(new SlotStatus(new SlotID(resourceId, 0), TaskSlotUtils.DEFAULT_RESOURCE_PROFILE, jobId, allocationId1)),
+				is(new SlotStatus(new SlotID(resourceId, 1), TaskSlotUtils.DEFAULT_RESOURCE_PROFILE, null, null)),
+				is(new SlotStatus(new SlotID(resourceId, 2), TaskSlotUtils.DEFAULT_RESOURCE_PROFILE, null, null)),
+				is(new SlotStatus(new SlotID(resourceId, 4), TaskSlotUtils.DEFAULT_RESOURCE_PROFILE, jobId, allocationId3))));
 		} finally {
 			taskSlotTable.stop();
 		}
@@ -183,7 +228,7 @@ public class TaskSlotTableTest extends TestLogger {
 
 			SlotReport slotReport = taskSlotTable.createSlotReport(ResourceID.generate());
 			ResourceProfile expectedAvailableResource = TaskSlotUtils.createTotalResourceProfile(3)
-				.subtract(TaskSlotUtils.createDefaultSlotResourceProfile());
+				.subtract(TaskSlotUtils.DEFAULT_RESOURCE_PROFILE);
 			assertThat(slotReport.getAvailableResource(), is(expectedAvailableResource));
 		} finally {
 			taskSlotTable.stop();
