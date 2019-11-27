@@ -356,29 +356,25 @@ public abstract class ResourceManager<WorkerType extends ResourceIDRetrievable>
 
 	@Override
 	public CompletableFuture<RegistrationResponse> registerTaskExecutor(
-			final String taskExecutorAddress,
-			final ResourceID taskExecutorResourceId,
-			final int dataPort,
-			final HardwareDescription hardwareDescription,
-			final ResourceProfile defaultResourceProfile,
+			final TaskExecutorRegistration taskExecutorRegistration,
 			final Time timeout) {
 
-		CompletableFuture<TaskExecutorGateway> taskExecutorGatewayFuture = getRpcService().connect(taskExecutorAddress, TaskExecutorGateway.class);
-		taskExecutorGatewayFutures.put(taskExecutorResourceId, taskExecutorGatewayFuture);
+		CompletableFuture<TaskExecutorGateway> taskExecutorGatewayFuture = getRpcService().connect(taskExecutorRegistration.getTaskExecutorAddress(), TaskExecutorGateway.class);
+		taskExecutorGatewayFutures.put(taskExecutorRegistration.getResourceId(), taskExecutorGatewayFuture);
 
 		return taskExecutorGatewayFuture.handleAsync(
 			(TaskExecutorGateway taskExecutorGateway, Throwable throwable) -> {
-				if (taskExecutorGatewayFuture == taskExecutorGatewayFutures.get(taskExecutorResourceId)) {
-					taskExecutorGatewayFutures.remove(taskExecutorResourceId);
+				if (taskExecutorGatewayFuture == taskExecutorGatewayFutures.get(taskExecutorRegistration.getResourceId())) {
+					taskExecutorGatewayFutures.remove(taskExecutorRegistration.getResourceId());
 					if (throwable != null) {
 						return new RegistrationResponse.Decline(throwable.getMessage());
 					} else {
 						return registerTaskExecutorInternal(
 							taskExecutorGateway,
-							taskExecutorAddress,
-							taskExecutorResourceId,
-							dataPort,
-							hardwareDescription);
+							taskExecutorRegistration.getTaskExecutorAddress(),
+							taskExecutorRegistration.getResourceId(),
+							taskExecutorRegistration.getDataPort(),
+							taskExecutorRegistration.getHardwareDescription());
 					}
 				} else {
 					log.info("Ignoring outdated TaskExecutorGateway connection.");
