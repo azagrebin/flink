@@ -253,6 +253,22 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	 * @return True if the task slot could be allocated; otherwise false
 	 */
 	public boolean allocateSlot(int index, JobID jobId, AllocationID allocationId, Time slotTimeout) {
+		return allocateSlot(index, jobId, allocationId, defaultSlotResourceProfile, slotTimeout);
+	}
+
+	/**
+	 * Allocate the slot with the given index for the given job and allocation id. If negative index is
+	 * given, a new auto increasing index will be generated. Returns true if the slot could be allocated.
+	 * Otherwise it returns false.
+	 *
+	 * @param index of the task slot to allocate, use negative value for dynamic slot allocation
+	 * @param jobId to allocate the task slot for
+	 * @param allocationId identifying the allocation
+	 * @param resourceProfile of the requested slot, used only for dynamic slot allocation and will be ignored otherwise
+	 * @param slotTimeout until the slot times out
+	 * @return True if the task slot could be allocated; otherwise false
+	 */
+	public boolean allocateSlot(int index, JobID jobId, AllocationID allocationId, ResourceProfile resourceProfile, Time slotTimeout) {
 		checkInit();
 
 		Preconditions.checkArgument(index < numberSlots);
@@ -263,15 +279,18 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 			return false;
 		}
 
-		ResourceProfile slotResourceProfile = defaultSlotResourceProfile;
-		if (!resourceProfileBookkeeper.reserve(slotResourceProfile)) {
+		if (index >= 0) {
+			resourceProfile = defaultSlotResourceProfile;
+		}
+
+		if (!resourceProfileBookkeeper.reserve(resourceProfile)) {
 			return false;
 		}
 
 		if (index < 0) {
 			index = nextSlotIndex++;
 		}
-		taskSlot = new TaskSlot(index, slotResourceProfile, memoryPageSize);
+		taskSlot = new TaskSlot(index, resourceProfile, memoryPageSize);
 
 		boolean result = taskSlot.allocate(jobId, allocationId);
 
@@ -294,7 +313,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 			slots.add(allocationId);
 		} else {
-			resourceProfileBookkeeper.release(slotResourceProfile);
+			resourceProfileBookkeeper.release(resourceProfile);
 		}
 
 		return result;

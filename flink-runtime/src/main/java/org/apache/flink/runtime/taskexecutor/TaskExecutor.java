@@ -32,6 +32,7 @@ import org.apache.flink.runtime.checkpoint.CheckpointType;
 import org.apache.flink.runtime.checkpoint.JobManagerTaskRestore;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.concurrent.FutureUtils;
 import org.apache.flink.runtime.deployment.ResultPartitionDeploymentDescriptor;
@@ -813,6 +814,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 		final SlotID slotId,
 		final JobID jobId,
 		final AllocationID allocationId,
+		final ResourceProfile resourceProfile,
 		final String targetAddress,
 		final ResourceManagerId resourceManagerId,
 		final Time timeout) {
@@ -829,7 +831,7 @@ public class TaskExecutor extends RpcEndpoint implements TaskExecutorGateway {
 			}
 
 			if (taskSlotTable.isSlotFree(slotId.getSlotNumber())) {
-				if (taskSlotTable.allocateSlot(slotId.getSlotNumber(), jobId, allocationId, taskManagerConfiguration.getTimeout())) {
+				if (taskSlotTable.allocateSlot(slotId.getSlotNumber(), jobId, allocationId, resourceProfile, taskManagerConfiguration.getTimeout())) {
 					log.info("Allocated slot for {}.", allocationId);
 				} else {
 					log.info("Could not allocate slot for {}.", allocationId);

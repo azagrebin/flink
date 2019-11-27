@@ -854,6 +854,7 @@ public class SlotManagerImpl implements SlotManager {
 			slotId,
 			pendingSlotRequest.getJobId(),
 			allocationId,
+			ResourceProfile.ZERO,
 			pendingSlotRequest.getTargetAddress(),
 			resourceManagerId,
 			taskManagerRequestTimeout);
