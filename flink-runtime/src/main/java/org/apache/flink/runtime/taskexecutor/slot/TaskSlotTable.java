@@ -21,9 +21,12 @@ package org.apache.flink.runtime.taskexecutor.slot;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfileBudgetManager;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -98,8 +101,25 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	/** Index of next allocated slot, for dynamic slot allocation. */
 	private int nextSlotIndex;
 
+	private final ResourceProfileBudgetManager budgetManager;
+
 	public TaskSlotTable(
 		final int numberSlots,
+		final TaskExecutorResourceSpec taskExecutorResourceSpec,
+		final int memoryPageSize,
+		final TimerService<AllocationID> timerService) {
+
+		this(
+			numberSlots,
+			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(taskExecutorResourceSpec),
+			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec, numberSlots),
+			memoryPageSize,
+			timerService);
+	}
+
+	public TaskSlotTable(
+		final int numberSlots,
+		final ResourceProfile totalAvailableResourceProfile,
 		final ResourceProfile defaultSlotResourceProfile,
 		final int memoryPageSize,
 		final TimerService<AllocationID> timerService) {
@@ -113,6 +133,8 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 		this.taskSlots = new HashMap<>(numberSlots);
 
 		this.timerService = Preconditions.checkNotNull(timerService);
+
+		budgetManager = new ResourceProfileBudgetManager(Preconditions.checkNotNull(totalAvailableResourceProfile));
 
 		allocationIDTaskSlotMap = new HashMap<>(numberSlots);
 
@@ -256,6 +278,14 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 			return false;
 		}
 
+		if (!budgetManager.reserve(defaultSlotResourceProfile)) {
+			LOG.info("Cannot allocate the requested resources. Trying to allocate {}, "
+					+ "while the current remaining available resources are {}.",
+				defaultSlotResourceProfile,
+				budgetManager.getAvailableBudget());
+			return false;
+		}
+
 		taskSlot = new TaskSlot(index, defaultSlotResourceProfile, memoryPageSize, jobId, allocationId);
 		taskSlots.put(index, taskSlot);
 
@@ -394,6 +424,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 				taskSlot.close();
 				taskSlots.remove(taskSlot.getIndex());
+				budgetManager.release(taskSlot.getResourceProfile());
 
 				return taskSlot.getIndex();
 			} else {

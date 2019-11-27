@@ -152,6 +152,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.runtime.taskexecutor.slot.TaskSlotUtils.DEFAULT_RESOURCE_PROFILE;
 import static org.apache.flink.runtime.taskexecutor.slot.TaskSlotUtils.createDefaultTimerService;
+import static org.apache.flink.runtime.taskexecutor.slot.TaskSlotUtils.createTotalResourceProfile;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
@@ -1967,8 +1968,8 @@ public class TaskExecutorTest extends TestLogger {
 
 			ResourceID resourceId = ResourceID.generate();
 			assertThat(taskSlotTable.createSlotReport(resourceId), containsInAnyOrder(
-					new SlotStatus(new SlotID(resourceId, 0), TaskSlotUtils.createDefaultSlotResourceProfile()),
-					new SlotStatus(new SlotID(resourceId, 1), TaskSlotUtils.createDefaultSlotResourceProfile(), jobId, allocationId)));
+					new SlotStatus(new SlotID(resourceId, 0), DEFAULT_RESOURCE_PROFILE),
+					new SlotStatus(new SlotID(resourceId, 1), DEFAULT_RESOURCE_PROFILE, jobId, allocationId)));
 		} finally {
 			RpcUtils.terminateRpcEndpoint(taskExecutor, timeout);
 		}
@@ -2133,7 +2134,7 @@ public class TaskExecutorTest extends TestLogger {
 		private final Queue<SlotReport> slotReports;
 
 		private TestingTaskSlotTable(Queue<SlotReport> slotReports) {
-			super(1, DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
+			super(1, createTotalResourceProfile(1), DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
 			this.slotReports = slotReports;
 		}
 
@@ -2148,7 +2149,7 @@ public class TaskExecutorTest extends TestLogger {
 		private final OneShotLatch allocateSlotLatch;
 
 		private AllocateSlotNotifyingTaskSlotTable(OneShotLatch allocateSlotLatch) {
-			super(1, DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
+			super(1, createTotalResourceProfile(1), DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
 			this.allocateSlotLatch = allocateSlotLatch;
 		}
 
@@ -2166,7 +2167,7 @@ public class TaskExecutorTest extends TestLogger {
 		private final CountDownLatch slotsToActivate;
 
 		private ActivateSlotNotifyingTaskSlotTable(int numberOfDefaultSlots, CountDownLatch slotsToActivate) {
-			super(numberOfDefaultSlots, DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
+			super(numberOfDefaultSlots, createTotalResourceProfile(numberOfDefaultSlots), DEFAULT_RESOURCE_PROFILE, MemoryManager.MIN_PAGE_SIZE, createDefaultTimerService(timeout.toMilliseconds()));
 			this.slotsToActivate = slotsToActivate;
 		}
 
