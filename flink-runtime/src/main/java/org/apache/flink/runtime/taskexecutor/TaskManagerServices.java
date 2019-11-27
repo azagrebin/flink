@@ -23,9 +23,7 @@ import org.apache.flink.core.memory.MemoryType;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
-import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.io.network.TaskEventDispatcher;
@@ -290,12 +288,10 @@ public class TaskManagerServices {
 		final TaskExecutorResourceSpec taskExecutorResourceSpec,
 		final long timerServiceShutdownTimeout,
 		final int pageSize) {
-		final int numberOfSlots = (int) (1.0 / taskExecutorResourceSpec.getDefaultSlotFraction());
-		final ResourceProfile resourceProfile = TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec);
 		final TimerService<AllocationID> timerService = new TimerService<>(
 			new ScheduledThreadPoolExecutor(1),
 			timerServiceShutdownTimeout);
-		return new TaskSlotTable(numberOfSlots, resourceProfile, pageSize, timerService);
+		return new TaskSlotTable(taskExecutorResourceSpec, pageSize, timerService);
 	}
 
 	private static ShuffleEnvironment<?, ?> createShuffleEnvironment(

@@ -104,7 +104,7 @@ public class TaskExecutorResourceUtils {
 	}
 
 	// ------------------------------------------------------------------------
-	//  Generating Default Slot Resource Profiles
+	//  Generating Slot Resource Profiles
 	// ------------------------------------------------------------------------
 
 	public static ResourceProfile generateDefaultSlotResourceProfile(TaskExecutorResourceSpec taskExecutorResourceSpec) {
@@ -118,6 +118,19 @@ public class TaskExecutorResourceUtils {
 			taskExecutorResourceSpec.getOnHeapManagedMemorySize().multiply(defaultSlotFraction),
 			taskExecutorResourceSpec.getOffHeapManagedMemorySize().multiply(defaultSlotFraction),
 			taskExecutorResourceSpec.getShuffleMemSize().multiply(defaultSlotFraction),
+			Collections.emptyMap());
+	}
+
+	public static ResourceProfile generateTotalAvailableResourceProfile(TaskExecutorResourceSpec taskExecutorResourceSpec) {
+		return new ResourceProfile(
+			taskExecutorResourceSpec.getCpuCores().isPresent() ?
+				taskExecutorResourceSpec.getCpuCores().get() :
+				CPUResource.MAX_VALUE,
+			taskExecutorResourceSpec.getTaskHeapSize(),
+			taskExecutorResourceSpec.getTaskOffHeapSize(),
+			taskExecutorResourceSpec.getOnHeapManagedMemorySize(),
+			taskExecutorResourceSpec.getOffHeapManagedMemorySize(),
+			taskExecutorResourceSpec.getShuffleMemSize(),
 			Collections.emptyMap());
 	}
 

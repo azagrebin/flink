@@ -21,9 +21,12 @@ package org.apache.flink.runtime.taskexecutor.slot;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfileBookkeeper;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -98,8 +101,24 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	/** Index of next allocated slot, for dynamic slot allocation. */
 	private int nextSlotIndex;
 
+	private final ResourceProfileBookkeeper resourceProfileBookkeeper;
+
+	public TaskSlotTable(
+		final TaskExecutorResourceSpec taskExecutorResourceSpec,
+		final int memoryPageSize,
+		final TimerService<AllocationID> timerService) {
+
+		this(
+			(int) (1.0 / taskExecutorResourceSpec.getDefaultSlotFraction()),
+			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(taskExecutorResourceSpec),
+			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec),
+			memoryPageSize,
+			timerService);
+	}
+
 	public TaskSlotTable(
 		final int numberSlots,
+		final ResourceProfile totalAvailableResourceProfile,
 		final ResourceProfile defaultSlotResourceProfile,
 		final int memoryPageSize,
 		final TimerService<AllocationID> timerService) {
@@ -113,6 +132,8 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 		this.taskSlots = new HashMap<>(numberSlots);
 
 		this.timerService = Preconditions.checkNotNull(timerService);
+
+		resourceProfileBookkeeper = new ResourceProfileBookkeeper(Preconditions.checkNotNull(totalAvailableResourceProfile));
 
 		allocationIDTaskSlotMap = new HashMap<>(numberSlots);
 
@@ -242,10 +263,15 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 			return false;
 		}
 
+		ResourceProfile slotResourceProfile = defaultSlotResourceProfile;
+		if (!resourceProfileBookkeeper.reserve(slotResourceProfile)) {
+			return false;
+		}
+
 		if (index < 0) {
 			index = nextSlotIndex++;
 		}
-		taskSlot = new TaskSlot(index, defaultSlotResourceProfile, memoryPageSize);
+		taskSlot = new TaskSlot(index, slotResourceProfile, memoryPageSize);
 
 		boolean result = taskSlot.allocate(jobId, allocationId);
 
@@ -267,6 +293,8 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 			}
 
 			slots.add(allocationId);
+		} else {
+			resourceProfileBookkeeper.release(slotResourceProfile);
 		}
 
 		return result;
@@ -388,6 +416,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 				taskSlot.close();
 				taskSlots.remove(taskSlot.getIndex());
+				resourceProfileBookkeeper.release(taskSlot.getResourceProfile());
 
 				return taskSlot.getIndex();
 			} else {

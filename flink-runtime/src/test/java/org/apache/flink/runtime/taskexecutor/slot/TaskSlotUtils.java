@@ -60,6 +60,7 @@ public enum TaskSlotUtils {
 			int numberOfSlots,
 			TimerService<AllocationID> timerService) {
 		return new TaskSlotTable(numberOfSlots,
+			createTotalResourceProfile(numberOfSlots),
 			createDefaultSlotResourceProfile(),
 			createDefaultMemoryPageSize(),
 			timerService);
@@ -67,6 +68,22 @@ public enum TaskSlotUtils {
 
 	public static ResourceProfile createDefaultSlotResourceProfile() {
 		return DEFAULT_RESOURCE_PROFILE;
+	}
+
+	public static ResourceProfile createTotalResourceProfile(int numberOfSlots) {
+		return createTotalResourceProfile(numberOfSlots, DEFAULT_RESOURCE_PROFILE);
+	}
+
+	public static ResourceProfile createTotalResourceProfile(int numberOfSlots, ResourceProfile defaultResourceProfile) {
+		ResourceProfile result = defaultResourceProfile;
+		while (numberOfSlots > 1) {
+			result = result.merge(result);
+			if (numberOfSlots % 2 != 0) {
+				result = result.merge(defaultResourceProfile);
+			}
+			numberOfSlots = numberOfSlots / 2;
+		}
+		return result;
 	}
 
 	public static int createDefaultMemoryPageSize() {
