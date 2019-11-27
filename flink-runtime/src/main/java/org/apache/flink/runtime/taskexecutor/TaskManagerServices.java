@@ -19,11 +19,11 @@
 package org.apache.flink.runtime.taskexecutor;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.resources.CPUResource;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.core.memory.MemoryType;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
+import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
@@ -67,7 +67,9 @@ public class TaskManagerServices {
 	@VisibleForTesting
 	public static final String LOCAL_STATE_SUB_DIRECTORY_ROOT = "localState";
 
-	/** TaskManager services. */
+	/**
+	 * TaskManager services.
+	 */
 	private final TaskManagerLocation taskManagerLocation;
 	private final long managedMemorySize;
 	private final IOManager ioManager;
@@ -216,15 +218,15 @@ public class TaskManagerServices {
 	 * Creates and returns the task manager services.
 	 *
 	 * @param taskManagerServicesConfiguration task manager configuration
-	 * @param taskManagerMetricGroup metric group of the task manager
-	 * @param taskIOExecutor executor for async IO operations
+	 * @param taskManagerMetricGroup           metric group of the task manager
+	 * @param taskIOExecutor                   executor for async IO operations
 	 * @return task manager components
 	 * @throws Exception
 	 */
 	public static TaskManagerServices fromConfiguration(
-			TaskManagerServicesConfiguration taskManagerServicesConfiguration,
-			MetricGroup taskManagerMetricGroup,
-			Executor taskIOExecutor) throws Exception {
+		TaskManagerServicesConfiguration taskManagerServicesConfiguration,
+		MetricGroup taskManagerMetricGroup,
+		Executor taskIOExecutor) throws Exception {
 
 		// pre-start checks
 		checkTempDirs(taskManagerServicesConfiguration.getTmpDirPaths());
@@ -252,16 +254,17 @@ public class TaskManagerServices {
 
 		Map<MemoryType, Long> memorySizeByType = calculateMemorySizeByType(taskManagerServicesConfiguration);
 		final TaskSlotTable taskSlotTable = createTaskSlotTable(
-			taskManagerServicesConfiguration.getNumberOfSlots(),
-			memorySizeByType,
+			taskManagerServicesConfiguration.getTaskExecutorResourceSpec(),
 			taskManagerServicesConfiguration.getTimerServiceShutdownTimeout(),
 			taskManagerServicesConfiguration.getPageSize());
 
 		final JobManagerTable jobManagerTable = new JobManagerTable();
 
-		final JobLeaderService jobLeaderService = new JobLeaderService(taskManagerLocation, taskManagerServicesConfiguration.getRetryingRegistrationConfiguration());
+		final JobLeaderService jobLeaderService = new JobLeaderService(taskManagerLocation,
+			taskManagerServicesConfiguration.getRetryingRegistrationConfiguration());
 
-		final String[] stateRootDirectoryStrings = taskManagerServicesConfiguration.getLocalRecoveryStateRootDirectories();
+		final String[] stateRootDirectoryStrings = taskManagerServicesConfiguration
+			.getLocalRecoveryStateRootDirectories();
 
 		final File[] stateRootDirectoryFiles = new File[stateRootDirectoryStrings.length];
 
@@ -289,12 +292,13 @@ public class TaskManagerServices {
 	}
 
 	private static TaskSlotTable createTaskSlotTable(
-			final int numberOfSlots,
-			final Map<MemoryType, Long> memorySizeByType,
-			final long timerServiceShutdownTimeout,
-			final int pageSize) {
+		final TaskExecutorResourceSpec taskExecutorResourceSpec,
+		final long timerServiceShutdownTimeout,
+		final int pageSize) {
+		final int numberOfSlots = (int) (1.0 / taskExecutorResourceSpec.getDefaultSlotFraction());
 		final List<ResourceProfile> resourceProfiles =
-			Collections.nCopies(numberOfSlots, computeSlotResourceProfile(numberOfSlots, memorySizeByType));
+			Collections.nCopies(numberOfSlots,
+				TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec));
 		final TimerService<AllocationID> timerService = new TimerService<>(
 			new ScheduledThreadPoolExecutor(1),
 			timerServiceShutdownTimeout);
@@ -302,8 +306,8 @@ public class TaskManagerServices {
 	}
 
 	private static List<TaskSlot> createTaskSlotsFromResources(
-			List<ResourceProfile> resourceProfiles,
-			int memoryPageSize) {
+		List<ResourceProfile> resourceProfiles,
+		int memoryPageSize) {
 		return IntStream
 			.range(0, resourceProfiles.size())
 			.mapToObj(index -> new TaskSlot(index, resourceProfiles.get(index), memoryPageSize))
@@ -311,9 +315,9 @@ public class TaskManagerServices {
 	}
 
 	private static ShuffleEnvironment<?, ?> createShuffleEnvironment(
-			TaskManagerServicesConfiguration taskManagerServicesConfiguration,
-			TaskEventDispatcher taskEventDispatcher,
-			MetricGroup taskManagerMetricGroup) throws FlinkException {
+		TaskManagerServicesConfiguration taskManagerServicesConfiguration,
+		TaskEventDispatcher taskEventDispatcher,
+		MetricGroup taskManagerMetricGroup) throws FlinkException {
 
 		final ShuffleEnvironmentContext shuffleEnvironmentContext = new ShuffleEnvironmentContext(
 			taskManagerServicesConfiguration.getConfiguration(),
@@ -336,10 +340,11 @@ public class TaskManagerServices {
 	 * @return map of {@link MemoryType} (heap/off-heap) to its size
 	 */
 	private static Map<MemoryType, Long> calculateMemorySizeByType(
-			TaskManagerServicesConfiguration taskManagerServicesConfiguration) {
+		TaskManagerServicesConfiguration taskManagerServicesConfiguration) {
 		final Map<MemoryType, Long> memorySizeByType = new HashMap<>();
 		memorySizeByType.put(MemoryType.HEAP, taskManagerServicesConfiguration.getOnHeapManagedMemorySize().getBytes());
-		memorySizeByType.put(MemoryType.OFF_HEAP, taskManagerServicesConfiguration.getOffHeapManagedMemorySize().getBytes());
+		memorySizeByType.put(MemoryType.OFF_HEAP,
+			taskManagerServicesConfiguration.getOffHeapManagedMemorySize().getBytes());
 
 		return memorySizeByType;
 	}
@@ -349,8 +354,8 @@ public class TaskManagerServices {
 	 * directories (not files), and are writable.
 	 *
 	 * @param tmpDirs The array of directory paths to check.
-	 * @throws IOException Thrown if any of the directories does not exist and cannot be created or is not writable
-	 *                     or is a file, rather than a directory.
+	 * @throws IOException Thrown if any of the directories does not exist and cannot be created or is not writable or
+	 *                     is a file, rather than a directory.
 	 */
 	private static void checkTempDirs(String[] tmpDirs) throws IOException {
 		for (String dir : tmpDirs) {
@@ -358,11 +363,13 @@ public class TaskManagerServices {
 				File file = new File(dir);
 				if (!file.exists()) {
 					if (!file.mkdirs()) {
-						throw new IOException("Temporary file directory " + file.getAbsolutePath() + " does not exist and could not be created.");
+						throw new IOException("Temporary file directory " + file.getAbsolutePath()
+							+ " does not exist and could not be created.");
 					}
 				}
 				if (!file.isDirectory()) {
-					throw new IOException("Temporary file directory " + file.getAbsolutePath() + " is not a directory.");
+					throw new IOException(
+						"Temporary file directory " + file.getAbsolutePath() + " is not a directory.");
 				}
 				if (!file.canWrite()) {
 					throw new IOException("Temporary file directory " + file.getAbsolutePath() + " is not writable.");
@@ -373,32 +380,13 @@ public class TaskManagerServices {
 					long usableSpaceGb = file.getUsableSpace() >> 30;
 					double usablePercentage = (double) usableSpaceGb / totalSpaceGb * 100;
 					String path = file.getAbsolutePath();
-					LOG.info(String.format("Temporary file directory '%s': total %d GB, " + "usable %d GB (%.2f%% usable)",
-						path, totalSpaceGb, usableSpaceGb, usablePercentage));
+					LOG.info(
+						String.format("Temporary file directory '%s': total %d GB, " + "usable %d GB (%.2f%% usable)",
+							path, totalSpaceGb, usableSpaceGb, usablePercentage));
 				}
 			} else {
 				throw new IllegalArgumentException("Temporary file directory #$id is null.");
 			}
 		}
-	}
-
-	public static ResourceProfile computeSlotResourceProfile(int numOfSlots, long managedMemorySize) {
-		// TODO: before operators separate on-heap/off-heap managed memory, we use on-heap managed memory to denote total managed memory
-		return computeSlotResourceProfile(numOfSlots, Collections.singletonMap(MemoryType.HEAP, managedMemorySize));
-	}
-
-	private static ResourceProfile computeSlotResourceProfile(int numOfSlots, Map<MemoryType, Long> memorySizeByType) {
-		return new ResourceProfile(
-			new CPUResource(Double.MAX_VALUE),
-			MemorySize.MAX_VALUE,
-			MemorySize.MAX_VALUE,
-			new MemorySize(memorySizeByType.getOrDefault(MemoryType.HEAP, 0L) / numOfSlots),
-			new MemorySize(memorySizeByType.getOrDefault(MemoryType.OFF_HEAP, 0L) / numOfSlots),
-			MemorySize.MAX_VALUE,
-			Collections.emptyMap());
-	}
-
-	private static long bytesToMegabytes(long bytes) {
-		return bytes >> 20;
 	}
 }

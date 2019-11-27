@@ -193,7 +193,7 @@ public class MesosResourceManager extends ResourceManager<RegisteredMesosWorkerN
 		this.workersInLaunch = new HashMap<>(8);
 		this.workersBeingReturned = new HashMap<>(8);
 
-		this.slotsPerWorker = createWorkerSlotProfiles(flinkConfig);
+		this.slotsPerWorker = createWorkerSlotProfiles(taskManagerParameters.containeredParameters().getTaskExecutorResourceSpec());
 	}
 
 	protected ActorRef createSelfActor() {
