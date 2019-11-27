@@ -36,12 +36,12 @@ public enum TaskSlotUtils {
 
 	private static final ResourceProfile DEFAULT_RESOURCE_PROFILE =
 		new ResourceProfile(
-			new CPUResource(Double.MAX_VALUE),
-			MemorySize.MAX_VALUE,
-			MemorySize.MAX_VALUE,
+			new CPUResource(1.0),
+			new MemorySize(100 * 1024),
+			new MemorySize(0),
 			new MemorySize(10 * MemoryManager.MIN_PAGE_SIZE),
 			new MemorySize(0),
-			MemorySize.MAX_VALUE,
+			new MemorySize(100 * 1024),
 			Collections.emptyMap());
 
 	public static TaskSlotTable createTaskSlotTable(int numberOfSlots) {

@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.taskexecutor;
 
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
@@ -37,6 +39,8 @@ public class SlotReport implements Serializable, Iterable<SlotStatus> {
 	/** The slots status of the TaskManager. */
 	private final Collection<SlotStatus> slotsStatus;
 
+	private final ResourceProfile availableResource;
+
 	public SlotReport() {
 		this(Collections.<SlotStatus>emptyList());
 	}
@@ -46,7 +50,17 @@ public class SlotReport implements Serializable, Iterable<SlotStatus> {
 	}
 
 	public SlotReport(final Collection<SlotStatus> slotsStatus) {
+		this(slotsStatus,
+			slotsStatus.stream()
+				.filter(status -> status.getAllocationID() == null)
+				.map(SlotStatus::getResourceProfile)
+				.reduce((acc, rp) -> acc.merge(rp))
+				.orElse(ResourceProfile.ZERO));
+	}
+
+	public SlotReport(final Collection<SlotStatus> slotsStatus, final ResourceProfile availableResource) {
 		this.slotsStatus = checkNotNull(slotsStatus);
+		this.availableResource = checkNotNull(availableResource);
 	}
 
 	@Override
@@ -54,10 +68,15 @@ public class SlotReport implements Serializable, Iterable<SlotStatus> {
 		return slotsStatus.iterator();
 	}
 
+	public ResourceProfile getAvailableResource() {
+		return availableResource;
+	}
+
 	@Override
 	public String toString() {
 		return "SlotReport{" +
 			"slotsStatus=" + slotsStatus +
+			", availableResource" + availableResource +
 			'}';
 	}
 }

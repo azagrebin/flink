@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.taskexecutor.SlotReport;
 import org.apache.flink.runtime.taskexecutor.SlotStatus;
@@ -164,6 +165,26 @@ public class TaskSlotTableTest extends TestLogger {
 				is(new SlotStatus(new SlotID(resourceId, 1), TaskSlotUtils.createDefaultSlotResourceProfile(), null, null)),
 				is(new SlotStatus(new SlotID(resourceId, 2), TaskSlotUtils.createDefaultSlotResourceProfile(), null, null)),
 				is(new SlotStatus(new SlotID(resourceId, 4), TaskSlotUtils.createDefaultSlotResourceProfile(), jobId, allocationId3))));
+		} finally {
+			taskSlotTable.stop();
+		}
+	}
+
+	@Test
+	public void testGenerateSlotReportWithAvailableResource() {
+		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(3);
+
+		try {
+			taskSlotTable.start(new TestingSlotActionsBuilder().build());
+
+			final JobID jobId = new JobID();
+			final AllocationID allocationId = new AllocationID();
+			assertThat(taskSlotTable.allocateSlot(-1, jobId, allocationId, SLOT_TIMEOUT), is(true));
+
+			SlotReport slotReport = taskSlotTable.createSlotReport(ResourceID.generate());
+			ResourceProfile expectedAvailableResource = TaskSlotUtils.createTotalResourceProfile(3)
+				.subtract(TaskSlotUtils.createDefaultSlotResourceProfile());
+			assertThat(slotReport.getAvailableResource(), is(expectedAvailableResource));
 		} finally {
 			taskSlotTable.stop();
 		}

@@ -232,7 +232,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 			}
 		}
 
-		final SlotReport slotReport = new SlotReport(slotStatuses);
+		final SlotReport slotReport = new SlotReport(slotStatuses, resourceProfileBookkeeper.getAvailableBudget());
 
 		return slotReport;
 	}
