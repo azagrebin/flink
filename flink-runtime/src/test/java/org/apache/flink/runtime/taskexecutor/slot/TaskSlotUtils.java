@@ -32,11 +32,11 @@ public enum TaskSlotUtils {
 	private static final long DEFAULT_SLOT_TIMEOUT = 10000L;
 
 	public static final ResourceProfile DEFAULT_RESOURCE_PROFILE = ResourceProfile.newBuilder()
-		.setCpuCores(Double.MAX_VALUE)
-		.setTaskHeapMemory(MemorySize.MAX_VALUE)
-		.setTaskOffHeapMemory(MemorySize.MAX_VALUE)
+		.setCpuCores(1.0)
+		.setTaskHeapMemory(new MemorySize(100 * 1024))
+		.setTaskOffHeapMemory(MemorySize.ZERO)
 		.setManagedMemory(new MemorySize(10 * MemoryManager.MIN_PAGE_SIZE))
-		.setShuffleMemory(MemorySize.MAX_VALUE)
+		.setShuffleMemory(new MemorySize(100 * 1024))
 		.build();
 
 	public static TaskSlotTable createTaskSlotTable(int numberOfSlots) {
