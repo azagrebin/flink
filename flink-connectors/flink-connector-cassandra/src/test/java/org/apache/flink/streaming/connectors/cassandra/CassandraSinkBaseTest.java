@@ -28,7 +28,6 @@ import org.apache.flink.util.Preconditions;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.Session;
-import com.datastax.driver.core.exceptions.InvalidQueryException;
 import com.datastax.driver.core.exceptions.NoHostAvailableException;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.Assert;
@@ -281,27 +280,16 @@ public class CassandraSinkBaseTest {
 	}
 
 	@Test(timeout = DEFAULT_TEST_TIMEOUT)
-	public void testReleaseOnSendThrowingRuntimeException() throws Exception {
-		testReleaseOnThrowingSend(
-			ignoredMessage -> {
-				throw new InvalidQueryException("expected");
-			},
-			InvalidQueryException.class);
-	}
-
-	@Test(timeout = DEFAULT_TEST_TIMEOUT)
-	public void testReleaseOnSendThrowingError() throws Exception {
-		testReleaseOnThrowingSend(ignoredMessage -> {
-			throw new Error("expected");
-		}, Error.class);
-	}
-
-	private static <E extends Throwable> void testReleaseOnThrowingSend(
-			Function<String, ListenableFuture<ResultSet>> failingSendFunction,
-			Class<E> throwableType) throws Exception {
+	public void testReleaseOnThrowingSend() throws Exception {
 		final CassandraSinkBaseConfig config = CassandraSinkBaseConfig.newBuilder()
 			.setMaxConcurrentRequests(1)
 			.build();
+
+		Function<String, ListenableFuture<ResultSet>> failingSendFunction = ignoredMessage -> {
+			throwCheckedAsUnchecked(new Throwable("expected"));
+			//noinspection ReturnOfNull
+			return null;
+		};
 
 		try (TestCassandraSink testCassandraSink = new MockCassandraSink(config, failingSendFunction)) {
 			testCassandraSink.open(new Configuration());
@@ -312,7 +300,7 @@ public class CassandraSinkBaseTest {
 			try {
 				testCassandraSink.invoke("none");
 			} catch (Throwable e) {
-				assertThat(e, instanceOf(throwableType));
+				assertThat(e, instanceOf(Throwable.class));
 				assertThat(testCassandraSink.getAvailablePermits(), is(1));
 				assertThat(testCassandraSink.getAcquiredPermits(), is(0));
 			}
@@ -376,6 +364,11 @@ public class CassandraSinkBaseTest {
 			new OneInputStreamOperatorTestHarness<>(testStreamSink);
 		testHarness.open();
 		return testHarness;
+	}
+
+	private static <T extends Throwable> void throwCheckedAsUnchecked(Throwable ex) throws T {
+		//noinspection unchecked
+		throw (T) ex;
 	}
 
 	private static class TestCassandraSink extends CassandraSinkBase<String, ResultSet> implements AutoCloseable {
