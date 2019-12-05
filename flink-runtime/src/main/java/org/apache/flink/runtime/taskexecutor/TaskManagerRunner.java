@@ -381,7 +381,8 @@ public class TaskManagerRunner implements FatalErrorHandler, AutoCloseableAsync 
 		ResourceProfile defaultSlotResourceProfile = TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(
 			taskExecutorResourceSpec,
 			taskManagerServicesConfiguration.getNumberOfSlots());
-		TaskManagerConfiguration taskManagerConfiguration = TaskManagerConfiguration.fromConfiguration(configuration, defaultSlotResourceProfile);
+		ResourceProfile totalResourceProfile = TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(taskExecutorResourceSpec);
+		TaskManagerConfiguration taskManagerConfiguration = TaskManagerConfiguration.fromConfiguration(configuration, defaultSlotResourceProfile, totalResourceProfile);
 
 		String metricQueryServiceAddress = metricRegistry.getMetricQueryServiceGatewayRpcAddress();
 

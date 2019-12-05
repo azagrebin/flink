@@ -173,8 +173,11 @@ public class JvmExitOnFatalErrorTest {
 				copiedConf.setString(TaskManagerOptions.TOTAL_FLINK_MEMORY, "1024m");
 				final ResourceProfile defaultSlotResourceProfile =
 					TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(copiedConf);
+				final ResourceProfile totalResourceProfile =
+					TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(copiedConf);
 
-				final TaskManagerRuntimeInfo tmInfo = TaskManagerConfiguration.fromConfiguration(taskManagerConfig, defaultSlotResourceProfile);
+				final TaskManagerRuntimeInfo tmInfo =
+					TaskManagerConfiguration.fromConfiguration(taskManagerConfig, defaultSlotResourceProfile, totalResourceProfile);
 
 				final Executor executor = Executors.newCachedThreadPool();
 

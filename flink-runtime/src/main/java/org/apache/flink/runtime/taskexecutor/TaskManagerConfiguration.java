@@ -52,6 +52,8 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 
 	private final ResourceProfile defaultSlotResourceProfile;
 
+	private final ResourceProfile totalResourceProfile;
+
 	private final String[] tmpDirectories;
 
 	private final Time timeout;
@@ -83,6 +85,7 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 	public TaskManagerConfiguration(
 			int numberSlots,
 			ResourceProfile defaultSlotResourceProfile,
+			ResourceProfile totalResourceProfile,
 			String[] tmpDirectories,
 			Time timeout,
 			@Nullable Time maxRegistrationDuration,
@@ -99,6 +102,7 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 
 		this.numberSlots = numberSlots;
 		this.defaultSlotResourceProfile = defaultSlotResourceProfile;
+		this.totalResourceProfile = totalResourceProfile;
 		this.tmpDirectories = Preconditions.checkNotNull(tmpDirectories);
 		this.timeout = Preconditions.checkNotNull(timeout);
 		this.maxRegistrationDuration = maxRegistrationDuration;
@@ -120,6 +124,10 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 
 	public ResourceProfile getDefaultSlotResourceProfile() {
 		return defaultSlotResourceProfile;
+	}
+
+	public ResourceProfile getTotalResourceProfile() {
+		return totalResourceProfile;
 	}
 
 	public Time getTimeout() {
@@ -185,7 +193,10 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 	//  Static factory methods
 	// --------------------------------------------------------------------------------------------
 
-	public static TaskManagerConfiguration fromConfiguration(Configuration configuration, ResourceProfile defaultSlotResourceProfile) {
+	public static TaskManagerConfiguration fromConfiguration(
+		Configuration configuration,
+		ResourceProfile defaultSlotResourceProfile,
+		ResourceProfile totalResourceProfile) {
 		int numberSlots = configuration.getInteger(TaskManagerOptions.NUM_TASK_SLOTS, 1);
 
 		if (numberSlots == -1) {
@@ -269,6 +280,7 @@ public class TaskManagerConfiguration implements TaskManagerRuntimeInfo {
 		return new TaskManagerConfiguration(
 			numberSlots,
 			defaultSlotResourceProfile,
+			totalResourceProfile,
 			tmpDirPaths,
 			timeout,
 			finiteRegistrationDuration,

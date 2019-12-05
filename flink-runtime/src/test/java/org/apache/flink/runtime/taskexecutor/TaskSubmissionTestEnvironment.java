@@ -196,10 +196,12 @@ class TaskSubmissionTestEnvironment implements AutoCloseable {
 		copiedConf.setString(TaskManagerOptions.TOTAL_FLINK_MEMORY, "1g");
 		final ResourceProfile defaultSlotResourceProfile =
 			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(copiedConf);
+		final ResourceProfile totalResourceProfile =
+			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(copiedConf);
 
 		return new TestingTaskExecutor(
 			testingRpcService,
-			TaskManagerConfiguration.fromConfiguration(copiedConf, defaultSlotResourceProfile),
+			TaskManagerConfiguration.fromConfiguration(copiedConf, defaultSlotResourceProfile, totalResourceProfile),
 			haServices,
 			taskManagerServices,
 			heartbeatServices,

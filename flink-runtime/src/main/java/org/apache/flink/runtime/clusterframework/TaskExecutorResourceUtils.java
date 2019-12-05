@@ -119,6 +119,11 @@ public class TaskExecutorResourceUtils {
 			.build();
 	}
 
+	@VisibleForTesting
+	public static ResourceProfile generateTotalAvailableResourceProfile(Configuration configuration) {
+		return generateTotalAvailableResourceProfile(resourceSpecFromConfig(configuration));
+	}
+
 	public static ResourceProfile generateTotalAvailableResourceProfile(TaskExecutorResourceSpec taskExecutorResourceSpec) {
 		return ResourceProfile.newBuilder()
 			.setCpuCores(taskExecutorResourceSpec.getCpuCores())

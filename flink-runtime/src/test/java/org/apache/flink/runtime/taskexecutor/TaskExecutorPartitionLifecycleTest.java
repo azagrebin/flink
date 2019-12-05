@@ -429,10 +429,12 @@ public class TaskExecutorPartitionLifecycleTest extends TestLogger {
 		configuration.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY, "1g");
 		final ResourceProfile defaultSlotResourceProfile =
 			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(configuration);
+		final ResourceProfile totalResourceProfile =
+			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(configuration);
 
 		return new TestingTaskExecutor(
 			RPC,
-			TaskManagerConfiguration.fromConfiguration(configuration, defaultSlotResourceProfile),
+			TaskManagerConfiguration.fromConfiguration(configuration, defaultSlotResourceProfile, totalResourceProfile),
 			haServices,
 			taskManagerServices,
 			new HeartbeatServices(10_000L, 30_000L),
