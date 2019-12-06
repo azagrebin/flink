@@ -283,9 +283,6 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 		if (index >= 0) {
 			resourceProfile = defaultSlotResourceProfile;
 		}
-		if (index < 0) {
-			index = nextSlotIndex++;
-		}
 
 		if (taskSlots.containsKey(index)) {
 			TaskSlot duplicatedTaskSlot = taskSlots.get(index);
@@ -294,7 +291,12 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 				duplicatedTaskSlot.getResourceProfile(),
 				duplicatedTaskSlot.getJobId(),
 				duplicatedTaskSlot.getAllocationId());
-			return false;
+			return duplicatedTaskSlot.getJobId().equals(jobId) &&
+				duplicatedTaskSlot.getAllocationId().equals(allocationId);
+		}
+
+		if (index < 0) {
+			index = nextSlotIndex++;
 		}
 
 		if (!budgetManager.reserve(resourceProfile)) {
