@@ -59,6 +59,8 @@ public class TaskExecutorToResourceManagerConnection
 
 	private final RegistrationConnectionListener<TaskExecutorToResourceManagerConnection, TaskExecutorRegistrationSuccess> registrationListener;
 
+	private final ResourceProfile totalResourceProfile;
+
 	private final ResourceProfile defaultSlotResourceProfile;
 
 	public TaskExecutorToResourceManagerConnection(
@@ -73,6 +75,7 @@ public class TaskExecutorToResourceManagerConnection
 			ResourceManagerId resourceManagerId,
 			Executor executor,
 			RegistrationConnectionListener<TaskExecutorToResourceManagerConnection, TaskExecutorRegistrationSuccess> registrationListener,
+			ResourceProfile totalResourceProfile,
 			ResourceProfile defaultSlotResourceProfile) {
 
 		super(log, resourceManagerAddress, resourceManagerId, executor);
@@ -84,6 +87,7 @@ public class TaskExecutorToResourceManagerConnection
 		this.dataPort = dataPort;
 		this.hardwareDescription = checkNotNull(hardwareDescription);
 		this.registrationListener = checkNotNull(registrationListener);
+		this.totalResourceProfile = totalResourceProfile;
 		this.defaultSlotResourceProfile = checkNotNull(defaultSlotResourceProfile);
 	}
 
@@ -99,6 +103,7 @@ public class TaskExecutorToResourceManagerConnection
 			taskManagerResourceId,
 			dataPort,
 			hardwareDescription,
+			totalResourceProfile,
 			defaultSlotResourceProfile);
 	}
 
@@ -132,6 +137,8 @@ public class TaskExecutorToResourceManagerConnection
 
 		private final HardwareDescription hardwareDescription;
 
+		private final ResourceProfile totalResourceProfile;
+
 		private final ResourceProfile defaultSlotResourceProfile;
 
 		ResourceManagerRegistration(
@@ -144,6 +151,7 @@ public class TaskExecutorToResourceManagerConnection
 				ResourceID resourceID,
 				int dataPort,
 				HardwareDescription hardwareDescription,
+				ResourceProfile totalResourceProfile,
 				ResourceProfile defaultSlotResourceProfile) {
 
 			super(log, rpcService, "ResourceManager", ResourceManagerGateway.class, targetAddress, resourceManagerId, retryingRegistrationConfiguration);
@@ -151,6 +159,7 @@ public class TaskExecutorToResourceManagerConnection
 			this.resourceID = checkNotNull(resourceID);
 			this.dataPort = dataPort;
 			this.hardwareDescription = checkNotNull(hardwareDescription);
+			this.totalResourceProfile = totalResourceProfile;
 			this.defaultSlotResourceProfile = checkNotNull(defaultSlotResourceProfile);
 		}
 
@@ -160,7 +169,13 @@ public class TaskExecutorToResourceManagerConnection
 
 			Time timeout = Time.milliseconds(timeoutMillis);
 			return resourceManager.registerTaskExecutor(
-				new TaskExecutorRegistration(taskExecutorAddress, resourceID, dataPort, hardwareDescription, defaultSlotResourceProfile),
+				new TaskExecutorRegistration(
+						taskExecutorAddress,
+						resourceID,
+						dataPort,
+						hardwareDescription,
+						totalResourceProfile,
+						defaultSlotResourceProfile),
 				timeout);
 		}
 	}

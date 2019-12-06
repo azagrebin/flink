@@ -665,7 +665,7 @@ public class MesosResourceManagerTest extends TestLogger {
 			// send registration message
 			CompletableFuture<RegistrationResponse> successfulFuture =
 				resourceManager.registerTaskExecutor(
-					new TaskExecutorRegistration(task1Executor.address, task1Executor.resourceID, dataPort, hardwareDescription, ResourceProfile.ZERO),
+					new TaskExecutorRegistration(task1Executor.address, task1Executor.resourceID, dataPort, hardwareDescription, totalResourceProfile, ResourceProfile.ZERO),
 					timeout);
 			RegistrationResponse response = successfulFuture.get(timeout.toMilliseconds(), TimeUnit.MILLISECONDS);
 			assertTrue(response instanceof TaskExecutorRegistrationSuccess);

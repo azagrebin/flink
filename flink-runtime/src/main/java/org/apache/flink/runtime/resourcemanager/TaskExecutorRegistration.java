@@ -49,6 +49,11 @@ public class TaskExecutorRegistration implements Serializable {
 	private final HardwareDescription hardwareDescription;
 
 	/**
+	 * The total resource profile of the task executor.
+	 */
+	private final ResourceProfile totalResourceProfile;
+
+	/**
 	 * The default resource profile for slots requested with unknown resource requirements.
 	 */
 	private final ResourceProfile defaultSlotResourceProfile;
@@ -58,11 +63,13 @@ public class TaskExecutorRegistration implements Serializable {
 		final ResourceID resourceId,
 		final int dataPort,
 		final HardwareDescription hardwareDescription,
+		final ResourceProfile totalResourceProfile,
 		final ResourceProfile defaultSlotResourceProfile) {
 		this.taskExecutorAddress = taskExecutorAddress;
 		this.resourceId = resourceId;
 		this.dataPort = dataPort;
 		this.hardwareDescription = hardwareDescription;
+		this.totalResourceProfile = totalResourceProfile;
 		this.defaultSlotResourceProfile = defaultSlotResourceProfile;
 	}
 
@@ -80,6 +87,10 @@ public class TaskExecutorRegistration implements Serializable {
 
 	public HardwareDescription getHardwareDescription() {
 		return hardwareDescription;
+	}
+
+	public ResourceProfile getTotalResourceProfile() {
+		return totalResourceProfile;
 	}
 
 	public ResourceProfile getDefaultSlotResourceProfile() {

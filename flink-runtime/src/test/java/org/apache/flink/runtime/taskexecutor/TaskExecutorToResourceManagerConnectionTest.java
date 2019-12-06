@@ -109,7 +109,7 @@ public class TaskExecutorToResourceManagerConnectionTest extends TestLogger {
 			RESOURCE_MANAGER_ID,
 			Executors.directExecutor(),
 			new TestRegistrationConnectionListener<>(),
-			ResourceProfile.ZERO);
+			totalResourceProfile, ResourceProfile.ZERO);
 	}
 
 	private static TaskExecutorRegistrationSuccess successfulRegistration() {
