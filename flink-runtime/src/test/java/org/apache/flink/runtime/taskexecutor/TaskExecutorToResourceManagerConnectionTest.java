@@ -30,6 +30,7 @@ import org.apache.flink.runtime.registration.RegistrationConnectionListener;
 import org.apache.flink.runtime.registration.RegistrationResponse;
 import org.apache.flink.runtime.registration.RetryingRegistrationConfiguration;
 import org.apache.flink.runtime.resourcemanager.ResourceManagerId;
+import org.apache.flink.runtime.resourcemanager.TaskExecutorRegistration;
 import org.apache.flink.runtime.resourcemanager.utils.TestingResourceManagerGateway;
 import org.apache.flink.runtime.rpc.TestingRpcService;
 import org.apache.flink.util.TestLogger;
@@ -78,11 +79,11 @@ public class TaskExecutorToResourceManagerConnectionTest extends TestLogger {
 	public void testResourceManagerRegistration() throws Exception {
 		final TaskExecutorToResourceManagerConnection resourceManagerRegistration = createTaskExecutorToResourceManagerConnection();
 
-		testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
-			final String actualAddress = params.getTaskExecutorAddress();
-			final ResourceID actualResourceId = params.getResourceId();
-			final Integer actualDataPort = params.getDataPort();
-			final HardwareDescription actualHardwareDescription = params.getHardwareDescription();
+		testingResourceManagerGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
+			final String actualAddress = taskExecutorRegistration.getTaskExecutorAddress();
+			final ResourceID actualResourceId = taskExecutorRegistration.getResourceId();
+			final Integer actualDataPort = taskExecutorRegistration.getDataPort();
+			final HardwareDescription actualHardwareDescription = taskExecutorRegistration.getHardwareDescription();
 
 			assertThat(actualAddress, is(equalTo(TASK_MANAGER_ADDRESS)));
 			assertThat(actualResourceId, is(equalTo(TASK_MANAGER_RESOURCE_ID)));
@@ -97,19 +98,22 @@ public class TaskExecutorToResourceManagerConnectionTest extends TestLogger {
 	}
 
 	private TaskExecutorToResourceManagerConnection createTaskExecutorToResourceManagerConnection() {
+		final TaskExecutorRegistration taskExecutorRegistration = new TaskExecutorRegistration(
+			TASK_MANAGER_ADDRESS,
+			TASK_MANAGER_RESOURCE_ID,
+			TASK_MANAGER_DATA_PORT,
+			TASK_MANAGER_HARDWARE_DESCRIPTION,
+			ResourceProfile.ZERO
+		);
 		return new TaskExecutorToResourceManagerConnection(
 			LOGGER,
 			rpcService,
-			TASK_MANAGER_ADDRESS,
-			TASK_MANAGER_RESOURCE_ID,
 			RetryingRegistrationConfiguration.defaultConfiguration(),
-			TASK_MANAGER_DATA_PORT,
-			TASK_MANAGER_HARDWARE_DESCRIPTION,
 			RESOURCE_MANAGER_ADDRESS,
 			RESOURCE_MANAGER_ID,
 			Executors.directExecutor(),
 			new TestRegistrationConnectionListener<>(),
-			ResourceProfile.ZERO);
+			taskExecutorRegistration);
 	}
 
 	private static TaskExecutorRegistrationSuccess successfulRegistration() {

@@ -407,10 +407,14 @@ public class YarnResourceManagerTest extends TestLogger {
 				final SlotReport slotReport = new SlotReport(
 					new SlotStatus(new SlotID(taskManagerResourceId, 1), resourceProfile));
 
+				TaskExecutorRegistration taskExecutorRegistration = new TaskExecutorRegistration(
+					taskHost,
+					taskManagerResourceId,
+					dataPort,
+					hardwareDescription,
+					ResourceProfile.ZERO);
 				CompletableFuture<Integer> numberRegisteredSlotsFuture = rmGateway
-					.registerTaskExecutor(
-						new TaskExecutorRegistration(taskHost, taskManagerResourceId, dataPort, hardwareDescription, ResourceProfile.ZERO),
-						Time.seconds(10L))
+					.registerTaskExecutor(taskExecutorRegistration, Time.seconds(10L))
 					.thenCompose(
 						(RegistrationResponse response) -> {
 							assertThat(response, instanceOf(TaskExecutorRegistrationSuccess.class));

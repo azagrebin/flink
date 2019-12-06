@@ -96,7 +96,6 @@ import org.apache.flink.runtime.taskexecutor.exceptions.TaskManagerException;
 import org.apache.flink.runtime.taskexecutor.partition.ClusterPartitionReport;
 import org.apache.flink.runtime.taskexecutor.slot.SlotNotFoundException;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
-import org.apache.flink.runtime.taskexecutor.slot.TaskSlot;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotTable;
 import org.apache.flink.runtime.taskexecutor.slot.TaskSlotUtils;
 import org.apache.flink.runtime.taskexecutor.slot.TimerService;
@@ -485,8 +484,8 @@ public class TaskExecutorTest extends TestLogger {
 				rmResourceId,
 				new ClusterInformation("localhost", 1234)));
 
-		rmGateway.setRegisterTaskExecutorFunction(params -> {
-			taskExecutorRegistrationFuture.complete(params.getResourceId());
+		rmGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
+			taskExecutorRegistrationFuture.complete(taskExecutorRegistration.getResourceId());
 			return registrationResponse;
 		});
 
@@ -658,9 +657,9 @@ public class TaskExecutorTest extends TestLogger {
 			// define a leader and see that a registration happens
 			resourceManagerLeaderRetriever.notifyListener(address1, leaderId1);
 			verify(rmGateway1, Mockito.timeout(timeout.toMilliseconds())).registerTaskExecutor(
-				argThat(params ->
-					params.getTaskExecutorAddress().equals(taskManagerAddress) &&
-					params.getResourceId().equals(taskManagerLocation.getResourceID())),
+				argThat(taskExecutorRegistration ->
+					taskExecutorRegistration.getTaskExecutorAddress().equals(taskManagerAddress) &&
+					taskExecutorRegistration.getResourceId().equals(taskManagerLocation.getResourceID())),
 				any(Time.class));
 			assertNotNull(taskManager.getResourceManagerConnection());
 
@@ -671,9 +670,9 @@ public class TaskExecutorTest extends TestLogger {
 			resourceManagerLeaderRetriever.notifyListener(address2, leaderId2);
 
 			verify(rmGateway2, Mockito.timeout(timeout.toMilliseconds())).registerTaskExecutor(
-				argThat(params ->
-					params.getTaskExecutorAddress().equals(taskManagerAddress) &&
-					params.getResourceId().equals(taskManagerLocation.getResourceID())),
+				argThat(taskExecutorRegistration ->
+					taskExecutorRegistration.getTaskExecutorAddress().equals(taskManagerAddress) &&
+					taskExecutorRegistration.getResourceId().equals(taskManagerLocation.getResourceID())),
 				any(Time.class));
 			assertNotNull(taskManager.getResourceManagerConnection());
 		}
@@ -963,8 +962,8 @@ public class TaskExecutorTest extends TestLogger {
 
 		final CompletableFuture<ResourceID> registrationFuture = new CompletableFuture<>();
 		resourceManagerGateway.setRegisterTaskExecutorFunction(
-			params -> {
-				registrationFuture.complete(params.getResourceId());
+			taskExecutorRegistration -> {
+				registrationFuture.complete(taskExecutorRegistration.getResourceId());
 				return CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(registrationId, resourceManagerResourceId, new ClusterInformation("localhost", 1234)));
 			});
 
@@ -1347,8 +1346,8 @@ public class TaskExecutorTest extends TestLogger {
 		try {
 			final TestingResourceManagerGateway testingResourceManagerGateway = new TestingResourceManagerGateway();
 			testingResourceManagerGateway.setRegisterTaskExecutorFunction(
-				params -> {
-					if (registrationFuture.complete(params.getResourceId())) {
+				taskExecutorRegistration -> {
+					if (registrationFuture.complete(taskExecutorRegistration.getResourceId())) {
 						return CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(
 							new InstanceID(),
 							testingResourceManagerGateway.getOwnResourceId(),
@@ -1395,8 +1394,8 @@ public class TaskExecutorTest extends TestLogger {
 			final CompletableFuture<RegistrationResponse> registrationFuture = new CompletableFuture<>();
 			final CompletableFuture<ResourceID> taskExecutorResourceIdFuture = new CompletableFuture<>();
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
-				taskExecutorResourceIdFuture.complete(params.getResourceId());
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
+				taskExecutorResourceIdFuture.complete(taskExecutorRegistration.getResourceId());
 				return registrationFuture;
 			});
 
@@ -1442,8 +1441,8 @@ public class TaskExecutorTest extends TestLogger {
 			final CompletableFuture<RegistrationResponse> registrationResponseFuture = CompletableFuture.completedFuture(new TaskExecutorRegistrationSuccess(new InstanceID(), ResourceID.generate(), clusterInformation));
 			final BlockingQueue<ResourceID> registrationQueue = new ArrayBlockingQueue<>(1);
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
-				registrationQueue.offer(params.getResourceId());
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
+				registrationQueue.offer(taskExecutorRegistration.getResourceId());
 				return registrationResponseFuture;
 			});
 			rpc.registerGateway(testingResourceManagerGateway.getAddress(), testingResourceManagerGateway);
@@ -1509,8 +1508,8 @@ public class TaskExecutorTest extends TestLogger {
 			final CompletableFuture<ResourceProfile> registeredDefaultSlotResourceProfileFuture = new CompletableFuture<>();
 
 			final ResourceID ownResourceId = testingResourceManagerGateway.getOwnResourceId();
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
-				registeredDefaultSlotResourceProfileFuture.complete(params.getDefaultSlotResourceProfile());
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
+				registeredDefaultSlotResourceProfileFuture.complete(taskExecutorRegistration.getDefaultSlotResourceProfile());
 				return CompletableFuture.completedFuture(
 					new TaskExecutorRegistrationSuccess(
 						new InstanceID(),
@@ -1565,7 +1564,7 @@ public class TaskExecutorTest extends TestLogger {
 
 			final CountDownLatch numberRegistrations = new CountDownLatch(2);
 
-			testingResourceManagerGateway.setRegisterTaskExecutorFunction(params -> {
+			testingResourceManagerGateway.setRegisterTaskExecutorFunction(taskExecutorRegistration -> {
 					numberRegistrations.countDown();
 					return registrationResponse;
 			});

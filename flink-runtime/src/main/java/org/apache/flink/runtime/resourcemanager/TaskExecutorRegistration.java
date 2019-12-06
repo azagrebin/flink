@@ -24,10 +24,14 @@ import org.apache.flink.runtime.instance.HardwareDescription;
 
 import java.io.Serializable;
 
+import static org.apache.flink.util.Preconditions.checkNotNull;
+
 /**
- * Information provided by the TaskExecutor when it register to the ResourceManager.
+ * Information provided by the TaskExecutor when it registers to the ResourceManager.
  */
 public class TaskExecutorRegistration implements Serializable {
+	private static final long serialVersionUID = -5727832919954047964L;
+
 	/**
 	 * The address of the TaskExecutor that registers.
 	 */
@@ -54,16 +58,16 @@ public class TaskExecutorRegistration implements Serializable {
 	private final ResourceProfile defaultSlotResourceProfile;
 
 	public TaskExecutorRegistration(
-		final String taskExecutorAddress,
-		final ResourceID resourceId,
-		final int dataPort,
-		final HardwareDescription hardwareDescription,
-		final ResourceProfile defaultSlotResourceProfile) {
-		this.taskExecutorAddress = taskExecutorAddress;
-		this.resourceId = resourceId;
+			final String taskExecutorAddress,
+			final ResourceID resourceId,
+			final int dataPort,
+			final HardwareDescription hardwareDescription,
+			final ResourceProfile defaultSlotResourceProfile) {
+		this.taskExecutorAddress = checkNotNull(taskExecutorAddress);
+		this.resourceId = checkNotNull(resourceId);
 		this.dataPort = dataPort;
-		this.hardwareDescription = hardwareDescription;
-		this.defaultSlotResourceProfile = defaultSlotResourceProfile;
+		this.hardwareDescription = checkNotNull(hardwareDescription);
+		this.defaultSlotResourceProfile = checkNotNull(defaultSlotResourceProfile);
 	}
 
 	public String getTaskExecutorAddress() {
