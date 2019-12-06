@@ -577,7 +577,9 @@ public class TaskExecutorResourceUtils {
 	}
 
 	private static TaskExecutorResourceSpec createTaskExecutorResourceSpec(
-		final Configuration config, final FlinkInternalMemory flinkInternalMemory, final JvmMetaspaceAndOverhead jvmMetaspaceAndOverhead) {
+			final Configuration config,
+			final FlinkInternalMemory flinkInternalMemory,
+			final JvmMetaspaceAndOverhead jvmMetaspaceAndOverhead) {
 		return new TaskExecutorResourceSpec(
 			getCpuCores(config),
 			flinkInternalMemory.frameworkHeap,
