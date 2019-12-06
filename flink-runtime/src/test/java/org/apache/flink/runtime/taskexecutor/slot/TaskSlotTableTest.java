@@ -157,6 +157,7 @@ public class TaskSlotTableTest extends TestLogger {
 			Iterator<TaskSlot> allocatedSlots = taskSlotTable.getAllocatedSlots(jobId);
 			assertThat(allocatedSlots.next().getIndex(), is(2));
 			assertThat(allocatedSlots.hasNext(), is(false));
+			assertThat(taskSlotTable.isAllocated(2, jobId, allocationId), is(true));
 		} finally {
 			taskSlotTable.stop();
 		}
@@ -228,7 +229,7 @@ public class TaskSlotTableTest extends TestLogger {
 			ResourceID resourceId = ResourceID.generate();
 			SlotReport slotReport = taskSlotTable.createSlotReport(resourceId);
 			List<SlotStatus> slotStatuses = new ArrayList<>();
-			slotReport.iterator().forEachRemaining(slotStatus -> slotStatuses.add(slotStatus));
+			slotReport.iterator().forEachRemaining(slotStatuses::add);
 
 			assertThat(slotStatuses.size(), is(4));
 			assertThat(slotStatuses, containsInAnyOrder(
