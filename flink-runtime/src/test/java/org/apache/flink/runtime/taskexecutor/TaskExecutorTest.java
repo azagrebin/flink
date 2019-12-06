@@ -1504,7 +1504,8 @@ public class TaskExecutorTest extends TestLogger {
 
 	@Test
 	public void testRegisterWithDefaultSlotResourceProfile() throws Exception {
-		final TaskExecutor taskExecutor = createTaskExecutor(1);
+		final int numberOfSlots = 2;
+		final TaskExecutor taskExecutor = createTaskExecutor(numberOfSlots);
 
 		taskExecutor.start();
 
@@ -1526,7 +1527,7 @@ public class TaskExecutorTest extends TestLogger {
 			resourceManagerLeaderRetriever.notifyListener(testingResourceManagerGateway.getAddress(), testingResourceManagerGateway.getFencingToken().toUUID());
 
 			assertThat(registeredDefaultSlotResourceProfileFuture.get(),
-				equalTo(TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(TM_RESOURCE_SPEC, 2)));
+				equalTo(TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(TM_RESOURCE_SPEC, numberOfSlots)));
 		} finally {
 			RpcUtils.terminateRpcEndpoint(taskExecutor, timeout);
 		}
@@ -2001,6 +2002,7 @@ public class TaskExecutorTest extends TestLogger {
 			.setTaskSlotTable(taskSlotTable)
 			.setTaskManagerLocation(taskManagerLocation)
 			.build();
+		configuration.setInteger(TaskManagerOptions.NUM_TASK_SLOTS, numberOFSlots);
 		return createTaskExecutor(taskManagerServices);
 	}
 
@@ -2016,10 +2018,7 @@ public class TaskExecutorTest extends TestLogger {
 	private TaskExecutor createTaskExecutor(TaskManagerServices taskManagerServices, HeartbeatServices heartbeatServices, String metricQueryServiceAddress, TaskExecutorPartitionTracker taskExecutorPartitionTracker) {
 		return new TaskExecutor(
 			rpc,
-			TaskManagerConfiguration.fromConfiguration(
-				configuration,
-				TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(TM_RESOURCE_SPEC, 2),
-				TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(TM_RESOURCE_SPEC)),
+			TaskManagerConfiguration.fromConfiguration(configuration, TM_RESOURCE_SPEC),
 			haServices,
 			taskManagerServices,
 			heartbeatServices,
@@ -2038,10 +2037,7 @@ public class TaskExecutorTest extends TestLogger {
 	private TestingTaskExecutor createTestingTaskExecutor(TaskManagerServices taskManagerServices, HeartbeatServices heartbeatServices, String metricQueryServiceAddress) {
 		return new TestingTaskExecutor(
 			rpc,
-			TaskManagerConfiguration.fromConfiguration(
-				configuration,
-				TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(TM_RESOURCE_SPEC, 2),
-				TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(TM_RESOURCE_SPEC)),
+			TaskManagerConfiguration.fromConfiguration(configuration, TM_RESOURCE_SPEC),
 			haServices,
 			taskManagerServices,
 			heartbeatServices,

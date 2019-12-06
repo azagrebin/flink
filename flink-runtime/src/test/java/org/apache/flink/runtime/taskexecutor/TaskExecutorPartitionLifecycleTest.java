@@ -427,14 +427,10 @@ public class TaskExecutorPartitionLifecycleTest extends TestLogger {
 	private TestingTaskExecutor createTestingTaskExecutor(TaskManagerServices taskManagerServices, TaskExecutorPartitionTracker partitionTracker, String metricQueryServiceAddress) throws IOException {
 		final Configuration configuration = new Configuration();
 		configuration.setString(TaskManagerOptions.TOTAL_PROCESS_MEMORY, "1g");
-		final ResourceProfile defaultSlotResourceProfile =
-			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(configuration);
-		final ResourceProfile totalResourceProfile =
-			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(configuration);
 
 		return new TestingTaskExecutor(
 			RPC,
-			TaskManagerConfiguration.fromConfiguration(configuration, defaultSlotResourceProfile, totalResourceProfile),
+			TaskManagerConfiguration.fromConfiguration(configuration, TaskExecutorResourceUtils.resourceSpecFromConfig(configuration)),
 			haServices,
 			taskManagerServices,
 			new HeartbeatServices(10_000L, 30_000L),
