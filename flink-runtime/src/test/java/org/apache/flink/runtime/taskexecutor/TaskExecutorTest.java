@@ -1385,10 +1385,7 @@ public class TaskExecutorTest extends TestLogger {
 	 */
 	@Test
 	public void testIgnoringSlotRequestsIfNotRegistered() throws Exception {
-		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(1);
-		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder().setTaskSlotTable(taskSlotTable).build();
-
-		final TaskExecutor taskExecutor = createTaskExecutor(taskManagerServices);
+		final TaskExecutor taskExecutor = createTaskExecutor(1);
 
 		taskExecutor.start();
 
@@ -1478,13 +1475,7 @@ public class TaskExecutorTest extends TestLogger {
 	 */
 	@Test
 	public void testInitialSlotReport() throws Exception {
-		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(1);
-		final TaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
-		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
-			.setTaskSlotTable(taskSlotTable)
-			.setTaskManagerLocation(taskManagerLocation)
-			.build();
-		final TaskExecutor taskExecutor = createTaskExecutor(taskManagerServices);
+		final TaskExecutor taskExecutor = createTaskExecutor(1);
 
 		taskExecutor.start();
 
@@ -1501,7 +1492,7 @@ public class TaskExecutorTest extends TestLogger {
 			rpc.registerGateway(testingResourceManagerGateway.getAddress(), testingResourceManagerGateway);
 			resourceManagerLeaderRetriever.notifyListener(testingResourceManagerGateway.getAddress(), testingResourceManagerGateway.getFencingToken().toUUID());
 
-			assertThat(initialSlotReportFuture.get(), equalTo(taskManagerLocation.getResourceID()));
+			assertThat(initialSlotReportFuture.get(), equalTo(taskExecutor.getResourceID()));
 		} finally {
 			RpcUtils.terminateRpcEndpoint(taskExecutor, timeout);
 		}
@@ -1509,15 +1500,7 @@ public class TaskExecutorTest extends TestLogger {
 
 	@Test
 	public void testRegisterWithDefaultSlotResourceProfile() throws Exception {
-		final TaskSlotTable taskSlotTable = new TaskSlotTable(
-			Lists.newArrayList(new TaskSlot(0, ResourceProfile.ZERO, 32 * 1024)),
-			timerService);
-		final TaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
-		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
-			.setTaskSlotTable(taskSlotTable)
-			.setTaskManagerLocation(taskManagerLocation)
-			.build();
-		final TaskExecutor taskExecutor = createTaskExecutor(taskManagerServices);
+		final TaskExecutor taskExecutor = createTaskExecutor(1);
 
 		taskExecutor.start();
 
@@ -1953,6 +1936,16 @@ public class TaskExecutorTest extends TestLogger {
 			false,
 			new File[]{tmp.newFolder()},
 			Executors.directExecutor());
+	}
+
+	private TaskExecutor createTaskExecutor(int numberOFSlots) {
+		final TaskSlotTable taskSlotTable = TaskSlotUtils.createTaskSlotTable(numberOFSlots);
+		final TaskManagerLocation taskManagerLocation = new LocalTaskManagerLocation();
+		final TaskManagerServices taskManagerServices = new TaskManagerServicesBuilder()
+			.setTaskSlotTable(taskSlotTable)
+			.setTaskManagerLocation(taskManagerLocation)
+			.build();
+		return createTaskExecutor(taskManagerServices);
 	}
 
 	@Nonnull
