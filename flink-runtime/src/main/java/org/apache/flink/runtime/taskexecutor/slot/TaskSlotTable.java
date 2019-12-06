@@ -26,7 +26,7 @@ import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
-import org.apache.flink.runtime.clusterframework.types.ResourceProfileBudgetManager;
+import org.apache.flink.runtime.clusterframework.types.ResourceBudgetManager;
 import org.apache.flink.runtime.clusterframework.types.SlotID;
 import org.apache.flink.runtime.executiongraph.ExecutionAttemptID;
 import org.apache.flink.runtime.memory.MemoryManager;
@@ -101,7 +101,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	/** Index of next allocated slot, for dynamic slot allocation. */
 	private int nextSlotIndex;
 
-	private final ResourceProfileBudgetManager budgetManager;
+	private final ResourceBudgetManager budgetManager;
 
 	public TaskSlotTable(
 		final int numberSlots,
@@ -134,7 +134,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 		this.timerService = Preconditions.checkNotNull(timerService);
 
-		budgetManager = new ResourceProfileBudgetManager(Preconditions.checkNotNull(totalAvailableResourceProfile));
+		budgetManager = new ResourceBudgetManager(Preconditions.checkNotNull(totalAvailableResourceProfile));
 
 		allocationIDTaskSlotMap = new HashMap<>(numberSlots);
 
@@ -299,9 +299,10 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 
 		if (!budgetManager.reserve(resourceProfile)) {
 			LOG.info("Cannot allocate the requested resources. Trying to allocate {}, "
-					+ "while the current remaining available resources are {}.",
+					+ "while the currently remaining available resources are {}, total is {}.",
 				resourceProfile,
-				budgetManager.getAvailableBudget());
+				budgetManager.getAvailableBudget(),
+				budgetManager.getTotalBudget());
 			return false;
 		}
 
