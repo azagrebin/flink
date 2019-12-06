@@ -28,13 +28,13 @@ import org.apache.flink.util.Preconditions;
  *
  * <p>Both the total budget and the reservations are in the form of {@link ResourceProfile}.
  */
-public class ResourceProfileBudgetManager {
+public class ResourceBudgetManager {
 
 	private final ResourceProfile totalBudget;
 
 	private ResourceProfile availableBudget;
 
-	public ResourceProfileBudgetManager(final ResourceProfile totalBudget) {
+	public ResourceBudgetManager(final ResourceProfile totalBudget) {
 		checkResourceProfileNotNullOrUnknown(totalBudget);
 		this.totalBudget = totalBudget;
 		this.availableBudget = totalBudget;

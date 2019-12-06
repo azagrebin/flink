@@ -28,13 +28,13 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Tests for {@link ResourceProfileBudgetManager}.
+ * Tests for {@link ResourceBudgetManager}.
  */
-public class ResourceProfileBudgetManagerTest {
+public class ResourceBudgetManagerTest {
 
 	@Test
 	public void testReserve() {
-		ResourceProfileBudgetManager budgetManager = new ResourceProfileBudgetManager(
+		ResourceBudgetManager budgetManager = new ResourceBudgetManager(
 			ResourceProfile.newBuilder().setCpuCores(1.0).setTaskHeapMemory(MemorySize.parse(100 + "m")).build());
 
 		assertTrue(budgetManager.reserve(
@@ -45,7 +45,7 @@ public class ResourceProfileBudgetManagerTest {
 
 	@Test
 	public void testReserveFail() {
-		ResourceProfileBudgetManager budgetManager = new ResourceProfileBudgetManager(
+		ResourceBudgetManager budgetManager = new ResourceBudgetManager(
 			ResourceProfile.newBuilder().setCpuCores(1.0).setTaskHeapMemory(MemorySize.parse(100 + "m")).build());
 
 		assertFalse(budgetManager.reserve(
@@ -56,7 +56,7 @@ public class ResourceProfileBudgetManagerTest {
 
 	@Test
 	public void testRelease() {
-		ResourceProfileBudgetManager budgetManager = new ResourceProfileBudgetManager(
+		ResourceBudgetManager budgetManager = new ResourceBudgetManager(
 			ResourceProfile.newBuilder().setCpuCores(1.0).setTaskHeapMemory(MemorySize.parse(100 + "m")).build());
 
 		assertTrue(budgetManager.reserve(
@@ -69,7 +69,7 @@ public class ResourceProfileBudgetManagerTest {
 
 	@Test
 	public void testReleaseFail() {
-		ResourceProfileBudgetManager budgetManager = new ResourceProfileBudgetManager(
+		ResourceBudgetManager budgetManager = new ResourceBudgetManager(
 			ResourceProfile.newBuilder().setCpuCores(1.0).setTaskHeapMemory(MemorySize.parse(100 + "m")).build());
 
 		assertTrue(budgetManager.reserve(
