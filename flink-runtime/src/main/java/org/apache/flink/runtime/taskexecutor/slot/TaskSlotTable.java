@@ -21,8 +21,6 @@ package org.apache.flink.runtime.taskexecutor.slot;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.time.Time;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceSpec;
-import org.apache.flink.runtime.clusterframework.TaskExecutorResourceUtils;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceBudgetManager;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
@@ -102,20 +100,6 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	private int nextSlotIndex;
 
 	private final ResourceBudgetManager budgetManager;
-
-	public TaskSlotTable(
-		final int numberSlots,
-		final TaskExecutorResourceSpec taskExecutorResourceSpec,
-		final int memoryPageSize,
-		final TimerService<AllocationID> timerService) {
-
-		this(
-			numberSlots,
-			TaskExecutorResourceUtils.generateTotalAvailableResourceProfile(taskExecutorResourceSpec),
-			TaskExecutorResourceUtils.generateDefaultSlotResourceProfile(taskExecutorResourceSpec, numberSlots),
-			memoryPageSize,
-			timerService);
-	}
 
 	public TaskSlotTable(
 		final int numberSlots,

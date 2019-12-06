@@ -63,13 +63,9 @@ public enum TaskSlotUtils {
 	}
 
 	public static ResourceProfile createTotalResourceProfile(int numberOfSlots) {
-		return createTotalResourceProfile(numberOfSlots, DEFAULT_RESOURCE_PROFILE);
-	}
-
-	public static ResourceProfile createTotalResourceProfile(int numberOfSlots, ResourceProfile defaultResourceProfile) {
-		ResourceProfile result = defaultResourceProfile;
+		ResourceProfile result = DEFAULT_RESOURCE_PROFILE;
 		for (int i = 0; i < numberOfSlots - 1; ++i) {
-			result = result.merge(defaultResourceProfile);
+			result = result.merge(DEFAULT_RESOURCE_PROFILE);
 		}
 		return result;
 	}
