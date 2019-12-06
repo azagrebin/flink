@@ -237,6 +237,7 @@ public class TaskSlotTable implements TimeoutListener<AllocationID> {
 	 * @param slotTimeout until the slot times out
 	 * @return True if the task slot could be allocated; otherwise false
 	 */
+	@VisibleForTesting
 	public boolean allocateSlot(int index, JobID jobId, AllocationID allocationId, Time slotTimeout) {
 		return allocateSlot(index, jobId, allocationId, defaultSlotResourceProfile, slotTimeout);
 	}
