@@ -530,29 +530,30 @@ public class TaskExecutorResourceUtils {
 	}
 
 	private static void sanityCheckShuffleMemory(final Configuration config, final MemorySize derivedShuffleMemorySize, final MemorySize totalFlinkMemorySize) {
-		if (isUsingLegacyShuffleConfigs(config)) {
-			final MemorySize configuredShuffleMemorySize = getShuffleMemorySizeWithLegacyConfig(config);
-			if (!configuredShuffleMemorySize.equals(derivedShuffleMemorySize)) {
-				throw new IllegalConfigurationException(
-					"Derived Shuffle Memory size (" + derivedShuffleMemorySize.toString()
-					+ ") does not match configured Shuffle Memory size (" + configuredShuffleMemorySize.toString() + ").");
-			}
-		} else {
-			final RangeFraction shuffleRangeFraction = getShuffleMemoryRangeFraction(config);
-			if (derivedShuffleMemorySize.getBytes() > shuffleRangeFraction.maxSize.getBytes() ||
-				derivedShuffleMemorySize.getBytes() < shuffleRangeFraction.minSize.getBytes()) {
-				throw new IllegalConfigurationException("Derived Shuffle Memory size ("
-					+ derivedShuffleMemorySize.toString() + ") is not in configured Shuffle Memory range ["
-					+ shuffleRangeFraction.minSize.toString() + ", "
-					+ shuffleRangeFraction.maxSize.toString() + "].");
-			}
-			if (isShuffleMemoryFractionExplicitlyConfigured(config) &&
-				!derivedShuffleMemorySize.equals(totalFlinkMemorySize.multiply(shuffleRangeFraction.fraction))) {
-				throw new IllegalConfigurationException("Derived Shuffle Memory size("
-					+ derivedShuffleMemorySize.toString() + ") does not match configured Shuffle Memory fraction ("
-					+ shuffleRangeFraction.fraction + ").");
-			}
-		}
+		return;
+//		if (isUsingLegacyShuffleConfigs(config)) {
+//			final MemorySize configuredShuffleMemorySize = getShuffleMemorySizeWithLegacyConfig(config);
+//			if (!configuredShuffleMemorySize.equals(derivedShuffleMemorySize)) {
+//				throw new IllegalConfigurationException(
+//					"Derived Shuffle Memory size (" + derivedShuffleMemorySize.toString()
+//					+ ") does not match configured Shuffle Memory size (" + configuredShuffleMemorySize.toString() + ").");
+//			}
+//		} else {
+//			final RangeFraction shuffleRangeFraction = getShuffleMemoryRangeFraction(config);
+//			if (derivedShuffleMemorySize.getBytes() > shuffleRangeFraction.maxSize.getBytes() ||
+//				derivedShuffleMemorySize.getBytes() < shuffleRangeFraction.minSize.getBytes()) {
+//				throw new IllegalConfigurationException("Derived Shuffle Memory size ("
+//					+ derivedShuffleMemorySize.toString() + ") is not in configured Shuffle Memory range ["
+//					+ shuffleRangeFraction.minSize.toString() + ", "
+//					+ shuffleRangeFraction.maxSize.toString() + "].");
+//			}
+//			if (isShuffleMemoryFractionExplicitlyConfigured(config) &&
+//				!derivedShuffleMemorySize.equals(totalFlinkMemorySize.multiply(shuffleRangeFraction.fraction))) {
+//				throw new IllegalConfigurationException("Derived Shuffle Memory size("
+//					+ derivedShuffleMemorySize.toString() + ") does not match configured Shuffle Memory fraction ("
+//					+ shuffleRangeFraction.fraction + ").");
+//			}
+//		}
 	}
 
 	public static CPUResource getCpuCoresWithFallback(final Configuration config, double fallback) {

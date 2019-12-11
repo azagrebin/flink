@@ -31,12 +31,12 @@ import java.util.List;
 /** TTL state verifier interface. */
 public interface TtlStateVerifier<UV, GV> {
 	List<TtlStateVerifier<?, ?>> VERIFIERS = Arrays.asList(
-		new TtlValueStateVerifier(),
-		new TtlListStateVerifier(),
-		new TtlMapStateVerifier(),
-		new TtlAggregatingStateVerifier(),
-		new TtlReducingStateVerifier(),
-		new TtlFoldingStateVerifier()
+		new TtlValueStateVerifier()
+//		new TtlListStateVerifier(),
+//		new TtlMapStateVerifier(),
+//		new TtlAggregatingStateVerifier(),
+//		new TtlReducingStateVerifier(),
+//		new TtlFoldingStateVerifier()
 	);
 
 	@Nonnull

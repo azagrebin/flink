@@ -117,6 +117,17 @@ public class MemorySize implements java.io.Serializable, Comparable<MemorySize> 
 
 	@Override
 	public String toString() {
+		if (bytes / 1024 > 0) {
+			if (bytes / 1024 / 1024 > 0) {
+				if (bytes / 1024 / 1024 / 1024 > 0) {
+					return (bytes / 1024 / 1024 / 1024) + " Gb (" + bytes + " bytes)";
+				} else {
+					return (bytes / 1024 / 1024) + " Mb (" + bytes + " bytes)";
+				}
+			} else {
+				return (bytes / 1024) + " Kb (" + bytes + " bytes)";
+			}
+		}
 		return bytes + " bytes";
 	}
 

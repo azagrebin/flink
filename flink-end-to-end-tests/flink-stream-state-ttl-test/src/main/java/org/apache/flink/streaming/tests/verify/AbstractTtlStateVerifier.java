@@ -46,7 +46,7 @@ abstract class AbstractTtlStateVerifier<D extends StateDescriptor<S, SV>, S exte
 
 	@Nonnull
 	static String randomString() {
-		return StringUtils.getRandomString(RANDOM, 2, 20);
+		return StringUtils.getRandomString(RANDOM, 51200, 51200);
 	}
 
 	@SuppressWarnings("unchecked")

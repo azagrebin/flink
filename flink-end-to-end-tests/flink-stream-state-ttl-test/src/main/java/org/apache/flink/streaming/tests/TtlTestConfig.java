@@ -26,7 +26,7 @@ import org.apache.flink.configuration.ConfigOptions;
 class TtlTestConfig {
 	private static final ConfigOption<Integer> UPDATE_GENERATOR_SRC_KEYSPACE = ConfigOptions
 		.key("update_generator_source.keyspace")
-		.defaultValue(100);
+		.defaultValue(640);
 
 	private static final ConfigOption<Long> UPDATE_GENERATOR_SRC_SLEEP_TIME = ConfigOptions
 		.key("update_generator_source.sleep_time")
