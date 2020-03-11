@@ -28,6 +28,7 @@ import org.apache.flink.runtime.blob.BlobUtils;
 import org.apache.flink.runtime.blob.PermanentBlobCache;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.util.ClassLoaderWithErrorHandler;
 import org.apache.flink.util.TestLogger;
 
 import org.junit.Rule;
@@ -79,7 +80,8 @@ public class BlobLibraryCacheRecoveryITCase extends TestLogger {
 
 			final BlobLibraryCacheManager.ClassLoaderFactory classLoaderFactory = BlobLibraryCacheManager.defaultClassLoaderFactory(
 				FlinkUserCodeClassLoaders.ResolveOrder.CHILD_FIRST,
-				new String[0]);
+				new String[0],
+				ClassLoaderWithErrorHandler.EMPTY_EXCEPTION_HANDLER);
 
 			for (int i = 0; i < server.length; i++) {
 				server[i] = new BlobServer(config, blobStoreService);

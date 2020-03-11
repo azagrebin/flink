@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -140,9 +141,18 @@ public class BlobLibraryCacheManager implements LibraryCacheManager {
 		 */
 		private final String[] alwaysParentFirstPatterns;
 
-		private DefaultClassLoaderFactory(FlinkUserCodeClassLoaders.ResolveOrder classLoaderResolveOrder, String[] alwaysParentFirstPatterns) {
+		/**
+		 * Class loading exception handler.
+		 */
+		private final Consumer<Throwable> classLoadingExceptionHandler;
+
+		private DefaultClassLoaderFactory(
+				FlinkUserCodeClassLoaders.ResolveOrder classLoaderResolveOrder,
+				String[] alwaysParentFirstPatterns,
+				Consumer<Throwable> classLoadingExceptionHandler) {
 			this.classLoaderResolveOrder = classLoaderResolveOrder;
 			this.alwaysParentFirstPatterns = alwaysParentFirstPatterns;
+			this.classLoadingExceptionHandler = classLoadingExceptionHandler;
 		}
 
 		@Override
@@ -151,12 +161,16 @@ public class BlobLibraryCacheManager implements LibraryCacheManager {
 				classLoaderResolveOrder,
 				libraryURLs,
 				FlinkUserCodeClassLoaders.class.getClassLoader(),
-				alwaysParentFirstPatterns);
+				alwaysParentFirstPatterns,
+				classLoadingExceptionHandler);
 		}
 	}
 
-	public static ClassLoaderFactory defaultClassLoaderFactory(FlinkUserCodeClassLoaders.ResolveOrder classLoaderResolveOrder, String[] alwaysParentFirstPatterns) {
-		return new DefaultClassLoaderFactory(classLoaderResolveOrder, alwaysParentFirstPatterns);
+	public static ClassLoaderFactory defaultClassLoaderFactory(
+			FlinkUserCodeClassLoaders.ResolveOrder classLoaderResolveOrder,
+			String[] alwaysParentFirstPatterns,
+			Consumer<Throwable> classLoadingExceptionHandler) {
+		return new DefaultClassLoaderFactory(classLoaderResolveOrder, alwaysParentFirstPatterns, classLoadingExceptionHandler);
 	}
 
 	// --------------------------------------------------------------------------------------------

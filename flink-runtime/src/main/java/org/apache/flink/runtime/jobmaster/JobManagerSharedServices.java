@@ -33,6 +33,7 @@ import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureSta
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTrackerImpl;
 import org.apache.flink.runtime.util.ExecutorThreadFactory;
 import org.apache.flink.runtime.util.Hardware;
+import org.apache.flink.util.ClassLoaderWithErrorHandler;
 import org.apache.flink.util.ExceptionUtils;
 
 import javax.annotation.Nonnull;
@@ -140,7 +141,8 @@ public class JobManagerSharedServices {
 				blobServer,
 				BlobLibraryCacheManager.defaultClassLoaderFactory(
 					FlinkUserCodeClassLoaders.ResolveOrder.fromString(classLoaderResolveOrder),
-					alwaysParentFirstLoaderPatterns));
+					alwaysParentFirstLoaderPatterns,
+					ClassLoaderWithErrorHandler.EMPTY_EXCEPTION_HANDLER));
 
 		final Duration akkaTimeout;
 		try {
