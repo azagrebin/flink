@@ -26,6 +26,7 @@ import org.apache.flink.runtime.blob.PermanentBlobCache;
 import org.apache.flink.runtime.blob.PermanentBlobKey;
 import org.apache.flink.runtime.blob.PermanentBlobService;
 import org.apache.flink.runtime.blob.VoidBlobStore;
+import org.apache.flink.util.ClassLoaderWithErrorHandler;
 import org.apache.flink.util.OperatingSystem;
 import org.apache.flink.util.TestLogger;
 
@@ -516,7 +517,11 @@ public class BlobLibraryCacheManagerTest extends TestLogger {
 
 	private final class TestingBlobLibraryCacheManagerBuilder {
 		private PermanentBlobService permanentBlobCache;
-		private BlobLibraryCacheManager.ClassLoaderFactory classLoaderFactory = BlobLibraryCacheManager.defaultClassLoaderFactory(FlinkUserCodeClassLoaders.ResolveOrder.CHILD_FIRST, new String[0]);
+		private BlobLibraryCacheManager.ClassLoaderFactory classLoaderFactory = BlobLibraryCacheManager
+			.defaultClassLoaderFactory(
+				FlinkUserCodeClassLoaders.ResolveOrder.CHILD_FIRST,
+				new String[0],
+				ClassLoaderWithErrorHandler.EMPTY_EXCEPTION_HANDLER);
 
 		private TestingBlobLibraryCacheManagerBuilder() throws IOException {
 			final Configuration blobClientConfig = new Configuration();
