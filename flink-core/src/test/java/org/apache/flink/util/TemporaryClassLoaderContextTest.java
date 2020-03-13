@@ -23,8 +23,6 @@ import org.junit.Test;
 
 import java.net.URL;
 
-import static org.apache.flink.util.ClassLoaderWithErrorHandler.EMPTY_EXCEPTION_HANDLER;
-
 /**
  * Test for {@link TemporaryClassLoaderContext}.
  */
@@ -35,7 +33,7 @@ public class TemporaryClassLoaderContextTest {
 		final ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
 
 		final ChildFirstClassLoader temporaryClassLoader =
-			new ChildFirstClassLoader(new URL[0], contextClassLoader, new String[0], EMPTY_EXCEPTION_HANDLER);
+			new ChildFirstClassLoader(new URL[0], contextClassLoader, new String[0]);
 
 		try (TemporaryClassLoaderContext ignored = TemporaryClassLoaderContext.of(temporaryClassLoader)) {
 			Assert.assertEquals(temporaryClassLoader, Thread.currentThread().getContextClassLoader());

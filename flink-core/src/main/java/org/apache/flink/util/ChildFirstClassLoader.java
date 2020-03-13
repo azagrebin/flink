@@ -20,11 +20,11 @@ package org.apache.flink.util;
 
 import java.io.IOException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * A variant of the URLClassLoader that first loads from the URLs and only after that from the parent.
@@ -32,7 +32,7 @@ import java.util.function.Consumer;
  * <p>{@link #getResourceAsStream(String)} uses {@link #getResource(String)} internally so we
  * don't override that.
  */
-public final class ChildFirstClassLoader extends ClassLoaderWithErrorHandler {
+public final class ChildFirstClassLoader extends URLClassLoader {
 
 	/**
 	 * The classes that should always go through the parent ClassLoader. This is relevant
@@ -41,19 +41,14 @@ public final class ChildFirstClassLoader extends ClassLoaderWithErrorHandler {
 	 */
 	private final String[] alwaysParentFirstPatterns;
 
-	public ChildFirstClassLoader(
-			URL[] urls,
-			ClassLoader parent,
-			String[] alwaysParentFirstPatterns,
-			Consumer<Throwable> classLoadingExceptionHandler) {
-		super(urls, parent, classLoadingExceptionHandler);
+	public ChildFirstClassLoader(URL[] urls, ClassLoader parent, String[] alwaysParentFirstPatterns) {
+		super(urls, parent);
 		this.alwaysParentFirstPatterns = alwaysParentFirstPatterns;
 	}
 
 	@Override
-	protected synchronized Class<?> loadClassWithoutExceptionHandling(
-			String name,
-			boolean resolve) throws ClassNotFoundException {
+	protected synchronized Class<?> loadClass(
+		String name, boolean resolve) throws ClassNotFoundException {
 
 		// First, check if the class has already been loaded
 		Class<?> c = findLoadedClass(name);
@@ -62,7 +57,7 @@ public final class ChildFirstClassLoader extends ClassLoaderWithErrorHandler {
 			// check whether the class should go parent-first
 			for (String alwaysParentFirstPattern : alwaysParentFirstPatterns) {
 				if (name.startsWith(alwaysParentFirstPattern)) {
-					return super.loadClassWithoutExceptionHandling(name, resolve);
+					return super.loadClass(name, resolve);
 				}
 			}
 
@@ -71,7 +66,7 @@ public final class ChildFirstClassLoader extends ClassLoaderWithErrorHandler {
 				c = findClass(name);
 			} catch (ClassNotFoundException e) {
 				// let URLClassLoader do it, which will eventually call the parent
-				c = super.loadClassWithoutExceptionHandling(name, resolve);
+				c = super.loadClass(name, resolve);
 			}
 		}
 
