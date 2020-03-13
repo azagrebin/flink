@@ -38,7 +38,7 @@ public class FlinkUserCodeClassLoaders {
 			URL[] urls,
 			ClassLoader parent,
 			Consumer<Throwable> classLoadingExceptionHandler) {
-		return new ParentFirstClassLoader(urls, parent, classLoadingExceptionHandler);
+		return new ClassLoaderWithErrorHandler(new ParentFirstClassLoader(urls, parent), classLoadingExceptionHandler);
 	}
 
 	public static URLClassLoader childFirst(
@@ -46,7 +46,9 @@ public class FlinkUserCodeClassLoaders {
 			ClassLoader parent,
 			String[] alwaysParentFirstPatterns,
 			Consumer<Throwable> classLoadingExceptionHandler) {
-		return new ChildFirstClassLoader(urls, parent, alwaysParentFirstPatterns, classLoadingExceptionHandler);
+		return new ClassLoaderWithErrorHandler(
+			new ChildFirstClassLoader(urls, parent, alwaysParentFirstPatterns),
+			classLoadingExceptionHandler);
 	}
 
 	public static URLClassLoader create(
@@ -86,10 +88,14 @@ public class FlinkUserCodeClassLoaders {
 	/**
 	 * Regular URLClassLoader that first loads from the parent and only after that from the URLs.
 	 */
-	static class ParentFirstClassLoader extends ClassLoaderWithErrorHandler {
+	static class ParentFirstClassLoader extends URLClassLoader {
 
-		ParentFirstClassLoader(URL[] urls, ClassLoader parent, Consumer<Throwable> classLoadingExceptionHandler) {
-			super(urls, parent, classLoadingExceptionHandler);
+		ParentFirstClassLoader(URL[] urls) {
+			this(urls, FlinkUserCodeClassLoaders.class.getClassLoader());
+		}
+
+		ParentFirstClassLoader(URL[] urls, ClassLoader parent) {
+			super(urls, parent);
 		}
 	}
 }

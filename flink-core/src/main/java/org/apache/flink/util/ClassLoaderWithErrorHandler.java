@@ -18,48 +18,76 @@
 
 package org.apache.flink.util;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.Enumeration;
 import java.util.function.Consumer;
 
 /**
- * This class loader accepts a custom handler if an exception occurs in {@link #loadClass(String, boolean)}.
+ * This {@link URLClassLoader} decorator accepts a custom exception handler.
+ *
+ * <p>The handler is called if an exception occurs in the {@link #loadClass(String, boolean)} of inner class loader.
  */
-public abstract class ClassLoaderWithErrorHandler extends URLClassLoader {
+public class ClassLoaderWithErrorHandler extends URLClassLoader {
 	public static final Consumer<Throwable> EMPTY_EXCEPTION_HANDLER = classLoadingException -> {};
+	private static final URL[] EMPTY_URL_ARRAY = {};
 
+	private final URLClassLoader inner;
 	private final Consumer<Throwable> classLoadingExceptionHandler;
 
-	public ClassLoaderWithErrorHandler(URL[] urls, ClassLoader parent) {
-		this(urls, parent, EMPTY_EXCEPTION_HANDLER);
-	}
-
 	public ClassLoaderWithErrorHandler(
-			URL[] urls,
-			ClassLoader parent,
+			URLClassLoader inner,
 			Consumer<Throwable> classLoadingExceptionHandler) {
-		super(urls, parent);
+		super(EMPTY_URL_ARRAY, inner.getParent());
+		this.inner = inner;
 		this.classLoadingExceptionHandler = classLoadingExceptionHandler;
 	}
 
-	@SuppressWarnings("FinalMethod")
 	@Override
-	protected final Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-		//noinspection OverlyBroadCatchBlock
-		try {
-			return loadClassWithoutExceptionHandling(name, resolve);
-		} catch (Throwable classLoadingException) {
-			classLoadingExceptionHandler.accept(classLoadingException);
-			throw classLoadingException;
+	protected Class<?> loadClass(final String name, final boolean resolve) throws ClassNotFoundException {
+		synchronized (getClassLoadingLock(name)) {
+			final Class<?> loadedClass = findLoadedClass(name);
+			if (loadedClass != null) {
+				return resolveIfNeeded(resolve, loadedClass);
+			}
+
+			try {
+				return resolveIfNeeded(resolve, inner.loadClass(name));
+			} catch (Throwable classLoadingException) {
+				classLoadingExceptionHandler.accept(classLoadingException);
+				throw classLoadingException;
+			}
 		}
 	}
 
-	/**
-	 * Same as {@link #loadClass(String, boolean)} but without exception handling.
-	 *
-	 * <p>Extending concrete class loaders should implement this instead of {@link #loadClass(String, boolean)}.
-	 */
-	protected Class<?> loadClassWithoutExceptionHandling(String name, boolean resolve) throws ClassNotFoundException {
-		return super.loadClass(name, resolve);
+	private Class<?> resolveIfNeeded(final boolean resolve, final Class<?> loadedClass) {
+		if (resolve) {
+			resolveClass(loadedClass);
+		}
+
+		return loadedClass;
+	}
+
+	@Override
+	public URL getResource(final String name) {
+		return inner.getResource(name);
+	}
+
+	@Override
+	public Enumeration<URL> getResources(final String name) throws IOException {
+		return inner.getResources(name);
+	}
+
+	@Override
+	public InputStream getResourceAsStream(String name) {
+		return inner.getResourceAsStream(name);
+	}
+
+	@Override
+	public void close() throws IOException {
+		super.close();
+		inner.close();
 	}
 }
