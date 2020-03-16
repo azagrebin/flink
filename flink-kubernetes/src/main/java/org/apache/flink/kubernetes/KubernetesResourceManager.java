@@ -27,6 +27,8 @@ import org.apache.flink.kubernetes.kubeclient.KubeClientFactory;
 import org.apache.flink.kubernetes.kubeclient.factory.KubernetesTaskManagerFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesTaskManagerParameters;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPod;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPodsWatcher;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesWatch;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.clusterframework.ApplicationStatus;
 import org.apache.flink.runtime.clusterframework.BootstrapTools;
@@ -88,6 +90,8 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	/** The number of pods requested, but not yet granted. */
 	private int numPendingPodRequests = 0;
 
+	private KubernetesWatch podsWatch;
+
 	public KubernetesResourceManager(
 			RpcService rpcService,
 			String resourceManagerEndpointId,
@@ -131,7 +135,7 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	protected void initialize() throws ResourceManagerException {
 		recoverWorkerNodesFromPreviousAttempts();
 
-		kubeClient.watchPodsAndDoCallback(KubernetesUtils.getTaskManagerLabels(clusterId), this);
+		podsWatch = startPodsWatch();
 	}
 
 	@Override
@@ -140,6 +144,7 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 		Throwable exception = null;
 
 		try {
+			podsWatch.close();
 			kubeClient.close();
 		} catch (Throwable t) {
 			exception = t;
@@ -297,5 +302,14 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 	@Override
 	protected double getCpuCores(Configuration configuration) {
 		return TaskExecutorProcessUtils.getCpuCoresWithFallbackConfigOption(configuration, KubernetesConfigOptions.TASK_MANAGER_CPU);
+	}
+
+	private KubernetesWatch startPodsWatch() {
+		final KubernetesPodsWatcher podsWatcher = new KubernetesPodsWatcher(this, e -> {
+			LOG.info("The current pods watcher is closing with exception {}, will start a new one.", e.getMessage());
+			podsWatch.close();
+			podsWatch = startPodsWatch();
+		});
+		return kubeClient.watchPodsAndDoCallback(KubernetesUtils.getTaskManagerLabels(clusterId), podsWatcher);
 	}
 }
