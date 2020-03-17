@@ -51,6 +51,8 @@ import org.apache.flink.util.FlinkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /**
@@ -85,18 +87,18 @@ public class KubernetesClusterDescriptor implements ClusterDescriptor<String> {
 		return () -> {
 			final Configuration configuration = new Configuration(flinkConfig);
 
-			final Endpoint restEndpoint = client.getRestEndpoint(clusterId);
-
-			if (restEndpoint != null) {
-				configuration.setString(RestOptions.ADDRESS, restEndpoint.getAddress());
-				configuration.setInteger(RestOptions.PORT, restEndpoint.getPort());
-			} else {
-				throw new RuntimeException(
-						new ClusterRetrieveException(
-								"Could not get the rest endpoint of " + clusterId));
-			}
-
 			try {
+				final Optional<Endpoint> restEndpoint = client.getRestEndpoint(clusterId).get();
+
+				if (restEndpoint.isPresent()) {
+					configuration.setString(RestOptions.ADDRESS, restEndpoint.get().getAddress());
+					configuration.setInteger(RestOptions.PORT, restEndpoint.get().getPort());
+				} else {
+					throw new RuntimeException(
+						new ClusterRetrieveException(
+							"Could not get the rest endpoint of " + clusterId));
+				}
+
 				// Flink client will always use Kubernetes service to contact with jobmanager. So we have a pre-configured web
 				// monitor address. Using StandaloneClientHAServices to create RestClusterClient is reasonable.
 				return new RestClusterClient<>(
@@ -181,7 +183,7 @@ public class KubernetesClusterDescriptor implements ClusterDescriptor<String> {
 			final KubernetesJobManagerSpecification kubernetesJobManagerSpec =
 				KubernetesJobManagerFactory.createJobManagerComponent(kubernetesJobManagerParameters);
 
-			client.createJobManagerComponent(kubernetesJobManagerSpec);
+			client.createJobManagerComponent(kubernetesJobManagerSpec).get();
 
 			return createClusterClientProvider(clusterId);
 		} catch (Exception e) {
@@ -193,7 +195,7 @@ public class KubernetesClusterDescriptor implements ClusterDescriptor<String> {
 	@Override
 	public void killCluster(String clusterId) throws FlinkException {
 		try {
-			client.stopAndCleanupCluster(clusterId);
+			client.stopAndCleanupCluster(clusterId).get();
 		} catch (Exception e) {
 			client.handleException(e);
 			throw new FlinkException("Could not kill Kubernetes cluster " + clusterId);

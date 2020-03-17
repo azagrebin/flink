@@ -67,6 +67,6 @@ public class KubeClientFactory {
 
 		final KubernetesClient client = new DefaultKubernetesClient(config);
 
-		return new Fabric8FlinkKubeClient(flinkConfig, client);
+		return new Fabric8FlinkKubeClient(flinkConfig, client, ExecutorWrapper.createExecutorWrapper(flinkConfig));
 	}
 }

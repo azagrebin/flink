@@ -183,6 +183,14 @@ public class KubernetesConfigOptions {
 		.withDescription("The user-specified annotations that are set to the TaskManager pod. The value could be " +
 			"in the form of a1:v1,a2:v2");
 
+	public static final ConfigOption<Integer> CLIENT_ASYNC_THREAD_POOL_SIZE =
+		key("kubernetes.client.async.thread-pool-size")
+			.intType()
+			.defaultValue(4)
+			.withDescription("Number of threads in FlinkKubeClient to process all asynchronous operations(e.g. allocating " +
+				"taskmanager pods from Kubernetes cluster). Please increase the number if you find it too slow to create " +
+				"many taskmanager pods.");
+
 	/**
 	 * The flink rest service exposed type.
 	 */

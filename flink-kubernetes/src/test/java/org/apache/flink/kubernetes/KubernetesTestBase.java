@@ -22,6 +22,7 @@ import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.testutils.CommonTestUtils;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.kubeclient.ExecutorWrapper;
 import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -84,7 +85,10 @@ public class KubernetesTestBase extends TestLogger {
 		TestBaseUtils.setEnv(map);
 
 		kubeClient = server.getClient().inNamespace(NAMESPACE);
-		flinkKubeClient = new Fabric8FlinkKubeClient(flinkConfig, kubeClient);
+		flinkKubeClient = new Fabric8FlinkKubeClient(
+			flinkConfig,
+			kubeClient,
+			ExecutorWrapper.createExecutorWrapper(Runnable::run));
 	}
 
 	@After

@@ -23,10 +23,10 @@ import org.apache.flink.kubernetes.kubeclient.resources.KubernetesPodsWatcher;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesService;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesWatch;
 
-import javax.annotation.Nullable;
-
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * The client to talk with kubernetes.
@@ -36,11 +36,15 @@ public interface FlinkKubeClient extends AutoCloseable {
 	/**
 	 * Create the Master components, this can include the Deployment, the ConfigMap(s), and the Service(s).
 	 *
+	 * @param kubernetesJMSpec jobmanager specification
+	 * @return  Return the jobmanager component creation future
 	 */
-	void createJobManagerComponent(KubernetesJobManagerSpecification kubernetesJMSpec);
+	CompletableFuture<Void> createJobManagerComponent(KubernetesJobManagerSpecification kubernetesJMSpec);
 
 	/**
 	 * Create task manager pod.
+	 *
+	 * @param kubernetesPod taskmanager pod
 	 */
 	void createTaskManagerPod(KubernetesPod kubernetesPod);
 
@@ -55,8 +59,9 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * Stop cluster and clean up all resources, include services, auxiliary services and all running pods.
 	 *
 	 * @param clusterId cluster id
+	 * @return Return cluster stop future
 	 */
-	void stopAndCleanupCluster(String clusterId);
+	CompletableFuture<Void> stopAndCleanupCluster(String clusterId);
 
 	/**
 	 * Get the kubernetes internal service of the given flink clusterId.
@@ -64,8 +69,7 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * @param clusterId cluster id
 	 * @return Return the internal service of the specified cluster id. Return null if the service does not exist.
 	 */
-	@Nullable
-	KubernetesService getInternalService(String clusterId);
+	CompletableFuture<Optional<KubernetesService>> getInternalService(String clusterId);
 
 	/**
 	 * Get the kubernetes rest service of the given flink clusterId.
@@ -73,8 +77,7 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * @param clusterId cluster id
 	 * @return Return the rest service of the specified cluster id. Return null if the service does not exist.
 	 */
-	@Nullable
-	KubernetesService getRestService(String clusterId);
+	CompletableFuture<Optional<KubernetesService>> getRestService(String clusterId);
 
 	/**
 	 * Get the rest endpoint for access outside cluster.
@@ -82,8 +85,7 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * @param clusterId cluster id
 	 * @return Return null if the service does not exist or could not extract the Endpoint from the service.
 	 */
-	@Nullable
-	Endpoint getRestEndpoint(String clusterId);
+	CompletableFuture<Optional<Endpoint>> getRestEndpoint(String clusterId);
 
 	/**
 	 * List the pods with specified labels.
@@ -91,7 +93,7 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * @param labels labels to filter the pods
 	 * @return pod list
 	 */
-	List<KubernetesPod> getPodsWithLabels(Map<String, String> labels);
+	CompletableFuture<List<KubernetesPod>> getPodsWithLabels(Map<String, String> labels);
 
 	/**
 	 * Log exceptions.
@@ -105,7 +107,7 @@ public interface FlinkKubeClient extends AutoCloseable {
 	 * @param podsWatcher watcher used to process the {@link PodCallbackHandler}
 	 * @return Return a watch for pods. It needs to be closed after use.
 	 */
-	KubernetesWatch watchPodsAndDoCallback(Map<String, String> labels, KubernetesPodsWatcher podsWatcher);
+	CompletableFuture<KubernetesWatch> watchPodsAndDoCallback(Map<String, String> labels, KubernetesPodsWatcher podsWatcher);
 
 	/**
 	 * Callback handler for kubernetes pods.

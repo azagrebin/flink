@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
 import org.apache.flink.kubernetes.kubeclient.KubeClientFactory;
 import org.apache.flink.runtime.security.SecurityUtils;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.commons.cli.CommandLine;
 import org.slf4j.Logger;
@@ -45,6 +46,7 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.concurrent.ExecutionException;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -94,14 +96,14 @@ public class KubernetesSessionCli {
 		final ClusterDescriptor<String> kubernetesClusterDescriptor =
 			kubernetesClusterClientFactory.createClusterDescriptor(configuration);
 
+		String clusterId = kubernetesClusterClientFactory.getClusterId(configuration);
 		try {
 			final ClusterClient<String> clusterClient;
-			String clusterId = kubernetesClusterClientFactory.getClusterId(configuration);
 			final boolean detached = !configuration.get(DeploymentOptions.ATTACHED);
 			final FlinkKubeClient kubeClient = KubeClientFactory.fromConfiguration(configuration);
 
 			// Retrieve or create a session cluster.
-			if (clusterId != null && kubeClient.getInternalService(clusterId) != null) {
+			if (clusterId != null && kubeClient.getInternalService(clusterId).get().isPresent()) {
 				clusterClient = kubernetesClusterDescriptor.retrieve(clusterId).getClusterClient();
 			} else {
 				clusterClient = kubernetesClusterDescriptor
@@ -130,6 +132,8 @@ public class KubernetesSessionCli {
 			} catch (Exception e) {
 				LOG.info("Could not properly shutdown cluster client.", e);
 			}
+		} catch (InterruptedException | ExecutionException e) {
+			throw new FlinkRuntimeException("Could not get service of " + clusterId, e);
 		} finally {
 			try {
 				kubernetesClusterDescriptor.close();

@@ -47,6 +47,7 @@ import org.apache.flink.runtime.resourcemanager.exceptions.ResourceManagerExcept
 import org.apache.flink.runtime.resourcemanager.slotmanager.SlotManager;
 import org.apache.flink.runtime.rpc.FatalErrorHandler;
 import org.apache.flink.runtime.rpc.RpcService;
+import org.apache.flink.util.function.FunctionUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,9 +134,12 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 
 	@Override
 	protected void initialize() throws ResourceManagerException {
-		recoverWorkerNodesFromPreviousAttempts();
-
-		podsWatch = startPodsWatch();
+		try {
+			recoverWorkerNodesFromPreviousAttempts();
+			podsWatch = startPodsWatch();
+		} catch (Exception e) {
+			throw new ResourceManagerException("Failed to initialize resource manager.", e);
+		}
 	}
 
 	@Override
@@ -159,7 +163,11 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 			"Stopping kubernetes cluster, clusterId: {}, diagnostics: {}",
 			clusterId,
 			diagnostics == null ? "" : diagnostics);
-		kubeClient.stopAndCleanupCluster(clusterId);
+		try {
+			kubeClient.stopAndCleanupCluster(clusterId).get();
+		} catch (Throwable throwable) {
+			LOG.error("Could not stop and clean up the cluster {}", clusterId);
+		}
 	}
 
 	@Override
@@ -226,8 +234,8 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 		return workerNodes;
 	}
 
-	private void recoverWorkerNodesFromPreviousAttempts() throws ResourceManagerException {
-		final List<KubernetesPod> podList = kubeClient.getPodsWithLabels(KubernetesUtils.getTaskManagerLabels(clusterId));
+	private void recoverWorkerNodesFromPreviousAttempts() throws Exception {
+		final List<KubernetesPod> podList = kubeClient.getPodsWithLabels(KubernetesUtils.getTaskManagerLabels(clusterId)).get();
 		for (KubernetesPod pod : podList) {
 			final KubernetesWorkerNode worker = new KubernetesWorkerNode(new ResourceID(pod.getName()));
 			workerNodes.put(worker.getResourceID(), worker);
@@ -304,12 +312,13 @@ public class KubernetesResourceManager extends ActiveResourceManager<KubernetesW
 		return TaskExecutorProcessUtils.getCpuCoresWithFallbackConfigOption(configuration, KubernetesConfigOptions.TASK_MANAGER_CPU);
 	}
 
-	private KubernetesWatch startPodsWatch() {
-		final KubernetesPodsWatcher podsWatcher = new KubernetesPodsWatcher(this, e -> {
-			LOG.info("The current pods watcher is closing with exception {}, will start a new one.", e.getMessage());
-			podsWatch.close();
-			podsWatch = startPodsWatch();
-		});
-		return kubeClient.watchPodsAndDoCallback(KubernetesUtils.getTaskManagerLabels(clusterId), podsWatcher);
+	private KubernetesWatch startPodsWatch() throws Exception {
+		final KubernetesPodsWatcher podsWatcher = new KubernetesPodsWatcher(this,
+			FunctionUtils.uncheckedConsumer(e -> {
+				LOG.info("The current pods watcher is closing with exception {}, will start a new one.", e.getMessage());
+				podsWatch.close();
+				podsWatch = startPodsWatch();
+			}));
+		return kubeClient.watchPodsAndDoCallback(KubernetesUtils.getTaskManagerLabels(clusterId), podsWatcher).get();
 	}
 }

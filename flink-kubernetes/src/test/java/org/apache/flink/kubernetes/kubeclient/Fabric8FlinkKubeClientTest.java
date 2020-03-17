@@ -50,8 +50,10 @@ import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -176,30 +178,31 @@ public class Fabric8FlinkKubeClientTest extends KubernetesTestBase {
 	}
 
 	@Test
-	public void testServiceLoadBalancerWithNoIP() {
+	public void testServiceLoadBalancerWithNoIP() throws Exception {
 		final String hostName = "test-host-name";
 		mockRestServiceWithLB(hostName, "");
 
-		final Endpoint resultEndpoint = flinkKubeClient.getRestEndpoint(CLUSTER_ID);
+		final Optional<Endpoint> resultEndpoint = flinkKubeClient.getRestEndpoint(CLUSTER_ID).get();
 
-		assertEquals(hostName, resultEndpoint.getAddress());
-		assertEquals(REST_PORT, resultEndpoint.getPort());
+		assertTrue(resultEndpoint.isPresent());
+		assertEquals(hostName, resultEndpoint.get().getAddress());
+		assertEquals(REST_PORT, resultEndpoint.get().getPort());
 	}
 
 	@Test
-	public void testServiceLoadBalancerEmptyHostAndIP() {
+	public void testServiceLoadBalancerEmptyHostAndIP() throws Exception {
 		mockRestServiceWithLB("", "");
 
-		final Endpoint resultEndpoint1 = flinkKubeClient.getRestEndpoint(CLUSTER_ID);
-		assertNull(resultEndpoint1);
+		final Optional<Endpoint> resultEndpoint = flinkKubeClient.getRestEndpoint(CLUSTER_ID).get();
+		assertFalse(resultEndpoint.isPresent());
 	}
 
 	@Test
-	public void testServiceLoadBalancerNullHostAndIP() {
+	public void testServiceLoadBalancerNullHostAndIP() throws Exception {
 		mockRestServiceWithLB(null, null);
 
-		final Endpoint resultEndpoint2 = flinkKubeClient.getRestEndpoint(CLUSTER_ID);
-		assertNull(resultEndpoint2);
+		final Optional<Endpoint> resultEndpoint = flinkKubeClient.getRestEndpoint(CLUSTER_ID).get();
+		assertFalse(resultEndpoint.isPresent());
 	}
 
 	@Test

@@ -9,6 +9,12 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.client.async.thread-pool-size</h5></td>
+            <td style="word-wrap: break-word;">4</td>
+            <td>Integer</td>
+            <td>Number of threads in FlinkKubeClient to process all asynchronous operations(e.g. allocating taskmanager pods from Kubernetes cluster). Please increase the number if you find it too slow to create many taskmanager pods.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.cluster-id</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>String</td>
