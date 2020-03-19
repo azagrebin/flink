@@ -89,6 +89,7 @@ under the License.
 		<module>flink-end-to-end-tests-common-kafka</module>
 		<module>flink-tpcds-test</module>
 		<module>flink-netty-shuffle-memory-control-test</module>
+		<module>oom-test</module>
 	</modules>
 
 	<profiles>
