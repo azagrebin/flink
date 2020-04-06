@@ -60,26 +60,37 @@ JOB_CMD=$(job_id)
 echo ${JOB_CMD}
 JOB=$(${JOB_CMD} | grep 'Job has been submitted with JobID' | sed 's/.* //g')
 wait_job_running ${JOB}
-wait_oper_metric_num_in_records TtlVerifyUpdateFunction.0 ${UPDATE_NUM} 'State TTL test job'
 
-SAVEPOINT_PATH=$(take_savepoint ${JOB} ${TEST_DATA_DIR} \
-  | grep "Savepoint completed. Path:" | sed 's/.* //g')
-
-cancel_job ${JOB}
-
-JOB_CMD=$(job_id ${SAVEPOINT_PATH})
-echo ${JOB_CMD}
-JOB=$(${JOB_CMD} | grep 'Job has been submitted with JobID' | sed 's/.* //g')
-wait_job_running ${JOB}
-wait_oper_metric_num_in_records TtlVerifyUpdateFunction.0 ${UPDATE_NUM} "State TTL test job"
-
-# if verification fails job produces failed TTL'ed state updates,
-# output would be non-empty and contains TTL verification failed:
-local EXIT_CODE=0
-check_logs_for_non_empty_out_files
-
-if [ $EXIT_CODE != 0 ]; then
-  echo "The TTL verification logic failed. See *.out file for more information."
+echo "Press any key to continue"
+while [ true ] ; do
+read -t 3 -n 1
+if [ $? = 0 ] ; then
+exit ;
+else
+echo "waiting for the keypress"
 fi
+done
 
-exit ${EXIT_CODE}
+#wait_oper_metric_num_in_records TtlVerifyUpdateFunction.0 ${UPDATE_NUM} 'State TTL test job'
+#
+#SAVEPOINT_PATH=$(take_savepoint ${JOB} ${TEST_DATA_DIR} \
+#  | grep "Savepoint completed. Path:" | sed 's/.* //g')
+#
+#cancel_job ${JOB}
+#
+#JOB_CMD=$(job_id ${SAVEPOINT_PATH})
+#echo ${JOB_CMD}
+#JOB=$(${JOB_CMD} | grep 'Job has been submitted with JobID' | sed 's/.* //g')
+#wait_job_running ${JOB}
+#wait_oper_metric_num_in_records TtlVerifyUpdateFunction.0 ${UPDATE_NUM} "State TTL test job"
+#
+## if verification fails job produces failed TTL'ed state updates,
+## output would be non-empty and contains TTL verification failed:
+#local EXIT_CODE=0
+#check_logs_for_non_empty_out_files
+#
+#if [ $EXIT_CODE != 0 ]; then
+#  echo "The TTL verification logic failed. See *.out file for more information."
+#fi
+#
+#exit ${EXIT_CODE}
