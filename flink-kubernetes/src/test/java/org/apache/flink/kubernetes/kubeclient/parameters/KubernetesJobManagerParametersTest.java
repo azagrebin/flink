@@ -27,6 +27,8 @@ import org.apache.flink.kubernetes.KubernetesTestBase;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessSpec;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.junit.Test;
@@ -47,11 +49,11 @@ import static org.junit.Assert.fail;
  */
 public class KubernetesJobManagerParametersTest extends KubernetesTestBase {
 
-	private static final int JOB_MANAGER_MEMORY = 768;
+	private static final JobManagerProcessSpec JOB_MANAGER_PROCESS_SPEC = JobManagerProcessUtils.createDefaultJobManagerProcessSpec(768);
 	private static final double JOB_MANAGER_CPU = 2.0;
 
 	private final ClusterSpecification clusterSpecification = new ClusterSpecification.ClusterSpecificationBuilder()
-		.setMasterMemoryMB(JOB_MANAGER_MEMORY)
+		.setMasterProcessSpec(JOB_MANAGER_PROCESS_SPEC)
 		.setTaskManagerMemoryMB(1024)
 		.setSlotsPerTaskManager(1)
 		.createClusterSpecification();
@@ -93,7 +95,7 @@ public class KubernetesJobManagerParametersTest extends KubernetesTestBase {
 
 	@Test
 	public void testGetJobManagerMemoryMB() {
-		assertEquals(JOB_MANAGER_MEMORY, kubernetesJobManagerParameters.getJobManagerMemoryMB());
+		assertThat(kubernetesJobManagerParameters.getJobManagerProcessSpec(), is(JOB_MANAGER_PROCESS_SPEC));
 	}
 
 	@Test

@@ -26,11 +26,14 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.KubernetesTestBase;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessSpec;
 
 import org.junit.Before;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.apache.flink.runtime.jobmanager.JobManagerProcessUtils.createDefaultJobManagerProcessSpec;
 
 /**
  * Base test class for the JobManager side.
@@ -39,6 +42,7 @@ public class KubernetesJobManagerTestBase extends KubernetesTestBase {
 
 	protected static final double JOB_MANAGER_CPU = 2.0;
 	protected static final int JOB_MANAGER_MEMORY = 768;
+	protected static final JobManagerProcessSpec JOB_MANAGER_PROCESS_SPEC = createDefaultJobManagerProcessSpec(JOB_MANAGER_MEMORY);
 
 	protected static final int REST_PORT = 9081;
 	protected static final int RPC_PORT = 7123;
@@ -83,7 +87,7 @@ public class KubernetesJobManagerTestBase extends KubernetesTestBase {
 		this.flinkConfig.set(KubernetesConfigOptions.JOB_MANAGER_NODE_SELECTOR, nodeSelector);
 
 		final ClusterSpecification clusterSpecification = new ClusterSpecification.ClusterSpecificationBuilder()
-			.setMasterMemoryMB(JOB_MANAGER_MEMORY)
+			.setMasterProcessSpec(JOB_MANAGER_PROCESS_SPEC)
 			.setTaskManagerMemoryMB(1024)
 			.setSlotsPerTaskManager(3)
 			.createClusterSpecification();

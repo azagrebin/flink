@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptionsInternal
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessSpec;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -81,6 +82,10 @@ public class KubernetesJobManagerParameters extends AbstractKubernetesParameters
 
 	public String getJobManagerMainContainerName() {
 		return JOB_MANAGER_MAIN_CONTAINER_NAME;
+	}
+
+	public JobManagerProcessSpec getJobManagerProcessSpec() {
+		return clusterSpecification.getMasterProcessSpec();
 	}
 
 	public int getJobManagerMemoryMB() {
