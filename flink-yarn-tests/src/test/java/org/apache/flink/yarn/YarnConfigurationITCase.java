@@ -90,7 +90,7 @@ public class YarnConfigurationITCase extends YarnTestBase {
 			configuration.set(TaskManagerOptions.NUM_TASK_SLOTS, slotsPerTaskManager);
 
 			final TaskExecutorProcessSpec tmResourceSpec = TaskExecutorProcessUtils.processSpecFromConfig(configuration);
-			final int masterMemory = 64;
+			final int masterMemory = 768;
 			final int taskManagerMemory = tmResourceSpec.getTotalProcessMemorySize().getMebiBytes();
 
 			final YarnConfiguration yarnConfiguration = getYarnConfiguration();

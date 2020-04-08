@@ -45,6 +45,8 @@ import org.apache.flink.runtime.entrypoint.ClusterEntrypoint;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.util.HadoopUtils;
+import org.apache.flink.runtime.util.config.memory.ProcessMemorySpec;
+import org.apache.flink.runtime.util.config.memory.ProcessMemoryUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.ShutdownHookUtil;
@@ -556,6 +558,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 		}
 
 		return new ClusterSpecification.ClusterSpecificationBuilder()
+				.setMasterProcessSpec(clusterSpecification.getMasterProcessSpec())
 				.setMasterMemoryMB(jobManagerMemoryMb)
 				.setTaskManagerMemoryMB(taskManagerMemoryMb)
 				.setSlotsPerTaskManager(clusterSpecification.getSlotsPerTaskManager())
@@ -932,7 +935,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 				hasLogback,
 				hasLog4j,
 				hasKrb5,
-				clusterSpecification.getMasterMemoryMB());
+				clusterSpecification.getMasterProcessSpec());
 
 		// setup security tokens
 		if (UserGroupInformation.isSecurityEnabled()) {
@@ -1570,7 +1573,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 			boolean hasLogback,
 			boolean hasLog4j,
 			boolean hasKrb5,
-			int jobManagerMemoryMb) {
+			ProcessMemorySpec processSpec) {
 		// ------------------ Prepare Application Master Container  ------------------------------
 
 		// respect custom JVM options in the YAML file
@@ -1590,8 +1593,7 @@ public class YarnClusterDescriptor implements ClusterDescriptor<ApplicationId> {
 		final  Map<String, String> startCommandValues = new HashMap<>();
 		startCommandValues.put("java", "$JAVA_HOME/bin/java");
 
-		int heapSize = BootstrapTools.calculateHeapSize(jobManagerMemoryMb, flinkConfiguration);
-		String jvmHeapMem = String.format("-Xms%sm -Xmx%sm", heapSize, heapSize);
+		String jvmHeapMem = ProcessMemoryUtils.generateJvmParametersStr(processSpec);
 		startCommandValues.put("jvmmem", jvmHeapMem);
 
 		startCommandValues.put("jvmopts", javaOpts);
