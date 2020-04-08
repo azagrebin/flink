@@ -18,18 +18,33 @@
 
 package org.apache.flink.client.deployment;
 
+import org.apache.flink.runtime.jobmanager.JobManagerProcessSpec;
+import org.apache.flink.util.Preconditions;
+
+import static org.apache.flink.runtime.jobmanager.JobManagerProcessUtils.createDefaultJobManagerProcessSpec;
+
 /**
  * Description of the cluster to start by the {@link ClusterDescriptor}.
  */
 public final class ClusterSpecification {
+	private final JobManagerProcessSpec masterProcessSpec;
 	private final int masterMemoryMB;
 	private final int taskManagerMemoryMB;
 	private final int slotsPerTaskManager;
 
-	private ClusterSpecification(int masterMemoryMB, int taskManagerMemoryMB, int slotsPerTaskManager) {
+	private ClusterSpecification(
+			JobManagerProcessSpec masterProcessSpec,
+			int masterMemoryMB,
+			int taskManagerMemoryMB,
+			int slotsPerTaskManager) {
+		this.masterProcessSpec = masterProcessSpec;
 		this.masterMemoryMB = masterMemoryMB;
 		this.taskManagerMemoryMB = taskManagerMemoryMB;
 		this.slotsPerTaskManager = slotsPerTaskManager;
+	}
+
+	public JobManagerProcessSpec getMasterProcessSpec() {
+		return masterProcessSpec;
 	}
 
 	public int getMasterMemoryMB() {
@@ -57,9 +72,17 @@ public final class ClusterSpecification {
 	 * Builder for the {@link ClusterSpecification} instance.
 	 */
 	public static class ClusterSpecificationBuilder {
-		private int masterMemoryMB = 768;
+		private static final JobManagerProcessSpec DEFAULT_MASTER_PROCESS_SPEC = createDefaultJobManagerProcessSpec(768);
+
+		private JobManagerProcessSpec masterProcessSpec;
+		private int masterMemoryMB = -1;
 		private int taskManagerMemoryMB = 1024;
 		private int slotsPerTaskManager = 1;
+
+		public ClusterSpecificationBuilder setMasterProcessSpec(JobManagerProcessSpec masterProcessSpec) {
+			this.masterProcessSpec = masterProcessSpec;
+			return this;
+		}
 
 		public ClusterSpecificationBuilder setMasterMemoryMB(int masterMemoryMB) {
 			this.masterMemoryMB = masterMemoryMB;
@@ -77,10 +100,29 @@ public final class ClusterSpecification {
 		}
 
 		public ClusterSpecification createClusterSpecification() {
+			deriveAndVerifyMasterSpec();
 			return new ClusterSpecification(
+				masterProcessSpec,
 				masterMemoryMB,
 				taskManagerMemoryMB,
 				slotsPerTaskManager);
+		}
+
+		private void deriveAndVerifyMasterSpec() {
+			if (masterProcessSpec == null) {
+				masterProcessSpec = masterMemoryMB <= 0 ?
+					DEFAULT_MASTER_PROCESS_SPEC : createDefaultJobManagerProcessSpec(masterMemoryMB);
+			}
+			if (masterMemoryMB <= 0) {
+				masterMemoryMB = masterProcessSpec.getTotalProcessMemorySize().getMebiBytes();
+			}
+			int jmTotalProcessSizeMb = masterProcessSpec.getTotalFlinkMemorySize().getMebiBytes();
+			Preconditions.checkArgument(
+				masterMemoryMB >= jmTotalProcessSizeMb,
+				"Total job manager memory size %dMb cannot be less than " +
+					"its configured or derived total process size %dMb",
+				masterMemoryMB,
+				jmTotalProcessSizeMb);
 		}
 	}
 }

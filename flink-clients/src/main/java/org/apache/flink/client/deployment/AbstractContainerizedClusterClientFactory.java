@@ -20,9 +20,11 @@ package org.apache.flink.client.deployment;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessSpec;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -36,9 +38,10 @@ public abstract class AbstractContainerizedClusterClientFactory<ClusterID> imple
 	public ClusterSpecification getClusterSpecification(Configuration configuration) {
 		checkNotNull(configuration);
 
-		final int jobManagerMemoryMB = ConfigurationUtils
-			.getJobManagerHeapMemory(configuration)
-			.getMebiBytes();
+		final JobManagerProcessSpec jobManagerProcessSpec = JobManagerProcessUtils.processSpecFromConfig(
+			JobManagerProcessUtils.getConfigurationWithLegacyHeapSizeMappedToNewConfigOption(
+				configuration,
+				JobManagerOptions.TOTAL_PROCESS_MEMORY));
 
 		final int taskManagerMemoryMB = TaskExecutorProcessUtils
 			.processSpecFromConfig(TaskExecutorProcessUtils.getConfigurationMapLegacyTaskManagerHeapSizeToConfigOption(
@@ -49,7 +52,7 @@ public abstract class AbstractContainerizedClusterClientFactory<ClusterID> imple
 		int slotsPerTaskManager = configuration.getInteger(TaskManagerOptions.NUM_TASK_SLOTS);
 
 		return new ClusterSpecification.ClusterSpecificationBuilder()
-			.setMasterMemoryMB(jobManagerMemoryMB)
+			.setMasterProcessSpec(jobManagerProcessSpec)
 			.setTaskManagerMemoryMB(taskManagerMemoryMB)
 			.setSlotsPerTaskManager(slotsPerTaskManager)
 			.createClusterSpecification();

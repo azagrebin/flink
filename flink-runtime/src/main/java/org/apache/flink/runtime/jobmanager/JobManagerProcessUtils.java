@@ -24,8 +24,8 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.util.config.memory.CommonProcessMemorySpec;
 import org.apache.flink.runtime.util.config.memory.JvmMetaspaceAndOverheadOptions;
-import org.apache.flink.runtime.util.config.memory.MemoryBackwardsCompatibilityUtils;
 import org.apache.flink.runtime.util.config.memory.LegacyMemoryOptions;
+import org.apache.flink.runtime.util.config.memory.MemoryBackwardsCompatibilityUtils;
 import org.apache.flink.runtime.util.config.memory.ProcessMemoryOptions;
 import org.apache.flink.runtime.util.config.memory.ProcessMemoryUtils;
 import org.apache.flink.runtime.util.config.memory.jobmanager.JobManagerFlinkMemory;
@@ -77,5 +77,11 @@ public class JobManagerProcessUtils {
 			Configuration configuration,
 			ConfigOption<MemorySize> configOption) {
 		return LEGACY_MEMORY_UTILS.getConfWithLegacyHeapSizeMappedToNewConfigOption(configuration, configOption);
+	}
+
+	public static JobManagerProcessSpec createDefaultJobManagerProcessSpec(int totalProcessMemoryMb) {
+		Configuration configuration = new Configuration();
+		configuration.set(JobManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.ofMebiBytes(totalProcessMemoryMb));
+		return processSpecFromConfig(configuration);
 	}
 }
