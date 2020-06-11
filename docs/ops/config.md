@@ -51,7 +51,7 @@ If you use Flink with [Yarn]({{site.baseurl}}/ops/deployment/yarn_setup.html), [
 
 The default memory sizes support simple streaming/batch applications, but are too low to yield good performance for more complex applications.
 
-  - `jobmanager.memory.process.size`: Total size of the *Flink Master* (JobManager / ResourceManager / Dispatcher) process.
+  - `master.memory.process.size`: Total size of the *Flink Master* (JobManager / ResourceManager / Dispatcher) process.
   - `taskmanager.memory.process.size`: Total size of the TaskManager process.
 
 The total sizes include everything. Flink will subtract some memory for the JVM's own memory requirements (metaspace and others), and divide and configure the rest automatically between its components (JVM Heap, Off-Heap, for Task Managers also network, managed memory etc.).
