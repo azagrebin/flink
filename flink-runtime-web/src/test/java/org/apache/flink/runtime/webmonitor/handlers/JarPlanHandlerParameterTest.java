@@ -65,10 +65,6 @@ public class JarPlanHandlerParameterTest extends JarHandlerParameterTest<JarPlan
 		final JarPlanMessageParameters parameters = getUnresolvedJarMessageParameters();
 		parameters.entryClassQueryParameter.resolve(Collections.singletonList(ParameterProgram.class.getCanonicalName()));
 		parameters.parallelismQueryParameter.resolve(Collections.singletonList(PARALLELISM));
-		if (programArgsParType == ProgramArgsParType.String ||
-			programArgsParType == ProgramArgsParType.Both) {
-			parameters.programArgsQueryParameter.resolve(Collections.singletonList(String.join(" ", PROG_ARGS)));
-		}
 		if (programArgsParType == ProgramArgsParType.List ||
 			programArgsParType == ProgramArgsParType.Both) {
 			parameters.programArgQueryParameter.resolve(Arrays.asList(PROG_ARGS));
@@ -79,13 +75,9 @@ public class JarPlanHandlerParameterTest extends JarHandlerParameterTest<JarPlan
 	@Override
 	JarPlanMessageParameters getWrongJarMessageParameters(ProgramArgsParType programArgsParType) {
 		List<String> wrongArgs = Arrays.stream(PROG_ARGS).map(a -> a + "wrong").collect(Collectors.toList());
-		String argsWrongStr = String.join(" ", wrongArgs);
 		final JarPlanMessageParameters parameters = getUnresolvedJarMessageParameters();
 		parameters.entryClassQueryParameter.resolve(Collections.singletonList("please.dont.run.me"));
 		parameters.parallelismQueryParameter.resolve(Collections.singletonList(64));
-		if (programArgsParType == ProgramArgsParType.String || programArgsParType == ProgramArgsParType.Both) {
-			parameters.programArgsQueryParameter.resolve(Collections.singletonList(argsWrongStr));
-		}
 		if (programArgsParType == ProgramArgsParType.List ||
 			programArgsParType == ProgramArgsParType.Both) {
 			parameters.programArgQueryParameter.resolve(wrongArgs);

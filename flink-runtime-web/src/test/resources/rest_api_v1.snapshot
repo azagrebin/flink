@@ -270,9 +270,6 @@
     },
     "query-parameters" : {
       "queryParameters" : [ {
-        "key" : "program-args",
-        "mandatory" : false
-      }, {
         "key" : "programArg",
         "mandatory" : false
       }, {
@@ -328,9 +325,6 @@
     },
     "query-parameters" : {
       "queryParameters" : [ {
-        "key" : "program-args",
-        "mandatory" : false
-      }, {
         "key" : "programArg",
         "mandatory" : false
       }, {
@@ -390,9 +384,6 @@
         "mandatory" : false
       }, {
         "key" : "savepointPath",
-        "mandatory" : false
-      }, {
-        "key" : "program-args",
         "mandatory" : false
       }, {
         "key" : "programArg",
