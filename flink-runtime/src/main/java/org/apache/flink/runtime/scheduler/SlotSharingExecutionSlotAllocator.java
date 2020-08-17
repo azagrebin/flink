@@ -18,6 +18,8 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import org.apache.flink.api.common.time.Time;
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.jobmanager.scheduler.Locality;
@@ -27,6 +29,8 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotProvider;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequest;
+import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequestBulk;
+import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequestBulkChecker;
 import org.apache.flink.runtime.jobmaster.slotpool.SingleLogicalSlot;
 import org.apache.flink.runtime.scheduler.SharedSlotProfileRetriever.SharedSlotProfileRetrieverFactory;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
@@ -38,10 +42,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -69,6 +75,10 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 
 	private final SharedSlotProfileRetrieverFactory sharedSlotProfileRetrieverFactory;
 
+	private final PhysicalSlotRequestBulkChecker bulkChecker;
+
+	private final Time allocationTimeout;
+
 	private final Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever;
 
 	SlotSharingExecutionSlotAllocator(
@@ -76,11 +86,15 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 			boolean slotWillBeOccupiedIndefinitely,
 			SlotSharingStrategy slotSharingStrategy,
 			SharedSlotProfileRetrieverFactory sharedSlotProfileRetrieverFactory,
+			PhysicalSlotRequestBulkChecker bulkChecker,
+			Time allocationTimeout,
 			Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever) {
 		this.slotProvider = slotProvider;
 		this.slotWillBeOccupiedIndefinitely = slotWillBeOccupiedIndefinitely;
 		this.slotSharingStrategy = slotSharingStrategy;
 		this.sharedSlotProfileRetrieverFactory = sharedSlotProfileRetrieverFactory;
+		this.bulkChecker = bulkChecker;
+		this.allocationTimeout = allocationTimeout;
 		this.resourceProfileRetriever = resourceProfileRetriever;
 		this.sharedSlots = new IdentityHashMap<>();
 	}
@@ -113,13 +127,16 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 
 		SharedSlotProfileRetriever sharedSlotProfileRetriever = sharedSlotProfileRetrieverFactory
 			.createFromBulk(new HashSet<>(executionVertexIds));
-		Map<ExecutionVertexID, SlotExecutionVertexAssignment> assignments = executionVertexIds
+		Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executionsByGroup = executionVertexIds
 			.stream()
-			.collect(Collectors.groupingBy(slotSharingStrategy::getExecutionSlotSharingGroup))
+			.collect(Collectors.groupingBy(slotSharingStrategy::getExecutionSlotSharingGroup));
+		Map<ExecutionVertexID, SlotExecutionVertexAssignment> assignments = executionsByGroup
 			.entrySet()
 			.stream()
 			.flatMap(entry -> allocateLogicalSlotsFromSharedSlot(sharedSlotProfileRetriever, entry.getKey(), entry.getValue()))
 			.collect(Collectors.toMap(SlotExecutionVertexAssignment::getExecutionVertexId, a -> a));
+
+		bulkChecker.schedulePendingRequestBulkTimeoutCheck(createBulk(executionsByGroup), allocationTimeout);
 
 		return executionVertexIds.stream().map(assignments::get).collect(Collectors.toList());
 	}
@@ -170,6 +187,28 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 			.getExecutionVertexIds()
 			.stream()
 			.reduce(ResourceProfile.ZERO, (r, e) -> r.merge(resourceProfileRetriever.apply(e)), ResourceProfile::merge);
+	}
+
+	private SharingPhysicalSlotRequestBulk createBulk(Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executions) {
+		Map<ExecutionSlotSharingGroup, ResourceProfile> pendingRequests = executions
+			.keySet()
+			.stream()
+			.collect(Collectors.toMap(
+				group -> group,
+				group -> sharedSlots.get(group).physicalSlotResourceProfile
+			));
+		Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests = new HashMap<>();
+		SharingPhysicalSlotRequestBulk bulk = new SharingPhysicalSlotRequestBulk(executions, pendingRequests, fulfilledRequests);
+		for (ExecutionSlotSharingGroup group : executions.keySet()) {
+			CompletableFuture<PhysicalSlot> slotContextFuture = sharedSlots.get(group).slotContextFuture;
+			slotContextFuture.thenAccept(physicalSlot -> bulk.markFulfilled(group, physicalSlot.getAllocationId()));
+			slotContextFuture.exceptionally(t -> {
+				// clear the bulk to stop the fulfil-ability check
+				bulk.clear();
+				return null;
+			});
+		}
+		return bulk;
 	}
 
 	private class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
@@ -313,6 +352,57 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 				logicalSlotRequestId,
 				executionVertexId,
 				physicalSlotRequestId);
+		}
+	}
+
+	private class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
+		private final Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executions;
+
+		private final Map<ExecutionSlotSharingGroup, ResourceProfile> pendingRequests;
+
+		private final Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests;
+
+		SharingPhysicalSlotRequestBulk(
+			Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executions,
+			Map<ExecutionSlotSharingGroup, ResourceProfile> pendingRequests,
+			Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests) {
+			this.executions = executions;
+			this.pendingRequests = pendingRequests;
+			this.fulfilledRequests = fulfilledRequests;
+		}
+
+		@Override
+		public Collection<ResourceProfile> getPendingRequests() {
+			return pendingRequests.values();
+		}
+
+		@Override
+		public Set<AllocationID> getAllocationIdsOfFulfilledRequests() {
+			return new HashSet<>(fulfilledRequests.values());
+		}
+
+		@Override
+		public void cancel(Throwable cause) {
+			// pending requests must be canceled first otherwise they might be fulfilled by
+			// allocated slots released from this bulk
+			Stream
+				.concat(
+					pendingRequests.keySet().stream(),
+					fulfilledRequests.keySet().stream())
+				.forEach(physicalSlotRequestId -> {
+					for (ExecutionVertexID execution : executions.get(physicalSlotRequestId)) {
+						sharedSlots.get(physicalSlotRequestId).cancelLogicalSlotRequest(execution);
+					}
+				});
+		}
+
+		private void markFulfilled(ExecutionSlotSharingGroup group, AllocationID allocationID) {
+			pendingRequests.remove(group);
+			fulfilledRequests.put(group, allocationID);
+		}
+
+		private void clear() {
+			pendingRequests.clear();
 		}
 	}
 }
