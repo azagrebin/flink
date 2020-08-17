@@ -20,60 +20,17 @@ package org.apache.flink.runtime.jobmaster.slotpool;
 
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
-import org.apache.flink.runtime.jobmaster.SlotRequestId;
 
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 /**
  * Represents a bulk of physical slot requests.
  */
-class PhysicalSlotRequestBulk {
+public interface PhysicalSlotRequestBulk {
+	Collection<ResourceProfile> getPendingRequests();
 
-	private final Map<SlotRequestId, ResourceProfile> pendingRequests;
+	Set<AllocationID> getAllocationIdsOfFulfilledRequests();
 
-	private final Map<SlotRequestId, AllocationID> fulfilledRequests = new HashMap<>();
-
-	private long unfulfillableTimestamp = Long.MAX_VALUE;
-
-	PhysicalSlotRequestBulk(final Collection<PhysicalSlotRequest> physicalSlotRequests) {
-		this.pendingRequests = physicalSlotRequests.stream()
-			.collect(Collectors.toMap(
-				PhysicalSlotRequest::getSlotRequestId,
-				r -> r.getSlotProfile().getPhysicalSlotResourceProfile()));
-	}
-
-	void markRequestFulfilled(final SlotRequestId slotRequestId, final AllocationID allocationID) {
-		pendingRequests.remove(slotRequestId);
-		fulfilledRequests.put(slotRequestId, allocationID);
-	}
-
-	Map<SlotRequestId, ResourceProfile> getPendingRequests() {
-		return Collections.unmodifiableMap(pendingRequests);
-	}
-
-	Map<SlotRequestId, AllocationID> getFulfilledRequests() {
-		return Collections.unmodifiableMap(fulfilledRequests);
-	}
-
-	void markFulfillable() {
-		unfulfillableTimestamp = Long.MAX_VALUE;
-	}
-
-	void markUnfulfillable(final long currentTimestamp) {
-		if (isFulfillable()) {
-			unfulfillableTimestamp = currentTimestamp;
-		}
-	}
-
-	long getUnfulfillableSince() {
-		return unfulfillableTimestamp;
-	}
-
-	private boolean isFulfillable() {
-		return unfulfillableTimestamp == Long.MAX_VALUE;
-	}
+	void cancel(Throwable cause);
 }

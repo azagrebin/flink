@@ -23,6 +23,7 @@ import org.apache.flink.runtime.clusterframework.types.SlotProfile;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutorServiceAdapter;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
+
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -92,6 +93,22 @@ public class PhysicalSlotProviderImplTest {
 		slotFuture.get();
 	}
 
+	@Test
+	public void testIndividualBatchSlotRequestTimeoutCheckIsDisabledOnAllocatingNewSlots() {
+		assertThat(slotPool.isBatchSlotRequestTimeoutCheckEnabled(), is(true));
+
+		allocateSlot(createPhysicalSlotRequest());
+
+		// drain the main thread tasks to ensure BulkSlotProviderImpl#requestNewSlot() to have been invoked
+		drainMainThreadExecutorTasks();
+
+		assertThat(slotPool.isBatchSlotRequestTimeoutCheckEnabled(), is(false));
+	}
+
+	private static void drainMainThreadExecutorTasks() {
+		CompletableFuture.runAsync(() -> {}, mainThreadExecutor).join();
+	}
+
 	private CompletableFuture<PhysicalSlotRequest.Result> allocateSlot(PhysicalSlotRequest request) {
 		return CompletableFuture
 			.supplyAsync(
@@ -108,6 +125,6 @@ public class PhysicalSlotProviderImplTest {
 		return new PhysicalSlotRequest(
 			new SlotRequestId(),
 			SlotProfile.noLocality(ResourceProfile.UNKNOWN),
-			true);
+			false);
 	}
 }

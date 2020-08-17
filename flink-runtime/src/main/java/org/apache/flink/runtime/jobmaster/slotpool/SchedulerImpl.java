@@ -34,6 +34,7 @@ import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.clock.SystemClock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,6 +78,8 @@ public class SchedulerImpl implements Scheduler {
 	@Nonnull
 	private final Map<SlotSharingGroupId, SlotSharingManager> slotSharingManagers;
 
+	private final PhysicalSlotRequestBulkCheckerImpl slotRequestBulkChecker;
+
 	private final BulkSlotProvider bulkSlotProvider;
 
 	public SchedulerImpl(
@@ -98,14 +101,15 @@ public class SchedulerImpl implements Scheduler {
 			"Scheduler is not initialized with proper main thread executor. " +
 				"Call to Scheduler.start(...) required.");
 
-		this.bulkSlotProvider = new BulkSlotProviderImpl(slotSelectionStrategy, slotPool);
+		this.slotRequestBulkChecker = PhysicalSlotRequestBulkCheckerImpl.fromSlotPool(slotPool, SystemClock.getInstance());
+		this.bulkSlotProvider = new BulkSlotProviderImpl(slotSelectionStrategy, slotPool, slotRequestBulkChecker);
 	}
 
 	@Override
 	public void start(@Nonnull ComponentMainThreadExecutor mainThreadExecutor) {
 		this.componentMainThreadExecutor = mainThreadExecutor;
 
-		bulkSlotProvider.start(mainThreadExecutor);
+		slotRequestBulkChecker.start(mainThreadExecutor);
 	}
 
 	//---------------------------
