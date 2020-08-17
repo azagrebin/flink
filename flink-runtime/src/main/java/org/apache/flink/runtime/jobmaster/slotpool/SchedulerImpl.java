@@ -82,6 +82,8 @@ public class SchedulerImpl implements Scheduler {
 
 	private final BulkSlotProvider bulkSlotProvider;
 
+	private final PhysicalSlotProvider physicalSlotProvider;
+
 	public SchedulerImpl(
 		@Nonnull SlotSelectionStrategy slotSelectionStrategy,
 		@Nonnull SlotPool slotPool) {
@@ -103,6 +105,7 @@ public class SchedulerImpl implements Scheduler {
 
 		this.slotRequestBulkChecker = PhysicalSlotRequestBulkCheckerImpl.fromSlotPool(slotPool, SystemClock.getInstance());
 		this.bulkSlotProvider = new BulkSlotProviderImpl(slotSelectionStrategy, slotPool, slotRequestBulkChecker);
+		this.physicalSlotProvider = new PhysicalSlotProviderImpl(slotSelectionStrategy, slotPool);
 	}
 
 	@Override
@@ -577,5 +580,15 @@ public class SchedulerImpl implements Scheduler {
 			final Time timeout) {
 
 		return bulkSlotProvider.allocatePhysicalSlots(physicalSlotRequests, timeout);
+	}
+
+	@Override
+	public CompletableFuture<PhysicalSlotRequest.Result> allocatePhysicalSlot(PhysicalSlotRequest physicalSlotRequest) {
+		return physicalSlotProvider.allocatePhysicalSlot(physicalSlotRequest);
+	}
+
+	@Override
+	public void schedulePendingRequestBulkTimeoutCheck(PhysicalSlotRequestBulk bulk, Time timeout) {
+		slotRequestBulkChecker.schedulePendingRequestBulkTimeoutCheck(bulk, timeout);
 	}
 }

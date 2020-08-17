@@ -42,7 +42,7 @@ import java.util.concurrent.CompletableFuture;
  *         fulfilled as soon as a slot becomes available.</li>
  * </ul>
  */
-public interface SlotProvider extends BulkSlotProvider {
+public interface SlotProvider extends BulkSlotProvider, PhysicalSlotProvider, PhysicalSlotRequestBulkChecker {
 
 	/**
 	 * Starts the slot provider by initializing the main thread executor.
@@ -137,5 +137,13 @@ public interface SlotProvider extends BulkSlotProvider {
 	 */
 	default void cancelSlotRequest(SlotRequestId slotRequestId, Throwable cause) {
 		cancelSlotRequest(slotRequestId, null, cause);
+	}
+
+	default CompletableFuture<PhysicalSlotRequest.Result> allocatePhysicalSlot(PhysicalSlotRequest physicalSlotRequest) {
+		throw new UnsupportedOperationException("Not properly implemented.");
+	}
+
+	default void schedulePendingRequestBulkTimeoutCheck(PhysicalSlotRequestBulk bulk, Time timeout) {
+		throw new UnsupportedOperationException("Not properly implemented.");
 	}
 }
