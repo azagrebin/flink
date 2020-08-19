@@ -19,11 +19,26 @@
 
 package org.apache.flink.runtime.scheduler;
 
+import org.apache.flink.runtime.clusterframework.types.AllocationID;
+import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
+import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
+
+import java.util.function.Function;
+
 /**
  * Interface for {@link ExecutionSlotAllocator} factories.
  */
 public interface ExecutionSlotAllocatorFactory {
 
-	ExecutionSlotAllocator createInstance(PreferredLocationsRetriever preferredLocationsRetriever);
+	default ExecutionSlotAllocator createInstance(PreferredLocationsRetriever preferredLocationsRetriever) {
+		throw new UnsupportedOperationException();
+	}
 
+	default ExecutionSlotAllocator createInstance(
+			PreferredLocationsRetriever preferredLocationsRetriever,
+			SlotSharingStrategy slotSharingStrategy,
+			Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever,
+			Function<ExecutionVertexID, AllocationID> priorAllocationIdRetriever) {
+		return createInstance(preferredLocationsRetriever);
+	}
 }

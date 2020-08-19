@@ -36,12 +36,6 @@ class SlotSharingExecutionSlotAllocatorFactory implements ExecutionSlotAllocator
 
 	private final boolean slotWillBeOccupiedIndefinitely;
 
-	private final SlotSharingStrategy slotSharingStrategy;
-
-	private final Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever;
-
-	private final Function<ExecutionVertexID, AllocationID> priorAllocationIdRetriever;
-
 	private final PhysicalSlotRequestBulkChecker bulkChecker;
 
 	private final Time allocationTimeout;
@@ -49,22 +43,20 @@ class SlotSharingExecutionSlotAllocatorFactory implements ExecutionSlotAllocator
 	SlotSharingExecutionSlotAllocatorFactory(
 			PhysicalSlotProvider slotProvider,
 			boolean slotWillBeOccupiedIndefinitely,
-			SlotSharingStrategy slotSharingStrategy,
-			Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever,
-			Function<ExecutionVertexID, AllocationID> priorAllocationIdRetriever,
 			PhysicalSlotRequestBulkChecker bulkChecker,
 			Time allocationTimeout) {
 		this.slotProvider = slotProvider;
 		this.slotWillBeOccupiedIndefinitely = slotWillBeOccupiedIndefinitely;
-		this.slotSharingStrategy = slotSharingStrategy;
-		this.resourceProfileRetriever = resourceProfileRetriever;
-		this.priorAllocationIdRetriever = priorAllocationIdRetriever;
 		this.bulkChecker = bulkChecker;
 		this.allocationTimeout = allocationTimeout;
 	}
 
 	@Override
-	public ExecutionSlotAllocator createInstance(PreferredLocationsRetriever preferredLocationsRetriever) {
+	public ExecutionSlotAllocator createInstance(
+			PreferredLocationsRetriever preferredLocationsRetriever,
+			SlotSharingStrategy slotSharingStrategy,
+			Function<ExecutionVertexID, ResourceProfile> resourceProfileRetriever,
+			Function<ExecutionVertexID, AllocationID> priorAllocationIdRetriever) {
 		SharedSlotProfileRetrieverFactory sharedSlotProfileRetrieverFactory = new MergingSharedSlotProfileRetrieverFactory(
 			preferredLocationsRetriever,
 			priorAllocationIdRetriever);

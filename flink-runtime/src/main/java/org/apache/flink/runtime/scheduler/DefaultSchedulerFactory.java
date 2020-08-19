@@ -35,8 +35,6 @@ import org.apache.flink.runtime.jobmaster.ExecutionDeploymentTracker;
 import org.apache.flink.runtime.jobmaster.slotpool.SlotProvider;
 import org.apache.flink.runtime.metrics.groups.JobManagerJobMetricGroup;
 import org.apache.flink.runtime.rest.handler.legacy.backpressure.BackPressureStatsTracker;
-import org.apache.flink.runtime.scheduler.strategy.EagerSchedulingStrategy;
-import org.apache.flink.runtime.scheduler.strategy.LazyFromSourcesSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.PipelinedRegionSchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
@@ -114,15 +112,16 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 	}
 
 	static SchedulingStrategyFactory createSchedulingStrategyFactory(final ScheduleMode scheduleMode) {
-		switch (scheduleMode) {
-			case EAGER:
-				return new EagerSchedulingStrategy.Factory();
-			case LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST:
-			case LAZY_FROM_SOURCES:
-				return new LazyFromSourcesSchedulingStrategy.Factory();
-			default:
-				throw new IllegalStateException("Unsupported schedule mode " + scheduleMode);
-		}
+		return new PipelinedRegionSchedulingStrategy.Factory();
+//		switch (scheduleMode) {
+//			case EAGER:
+//				return new EagerSchedulingStrategy.Factory();
+//			case LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST:
+//			case LAZY_FROM_SOURCES:
+//				return new LazyFromSourcesSchedulingStrategy.Factory();
+//			default:
+//				throw new IllegalStateException("Unsupported schedule mode " + scheduleMode);
+//		}
 	}
 
 	private static ExecutionSlotAllocatorFactory createExecutionSlotAllocatorFactory(
@@ -132,9 +131,10 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 			final SchedulingStrategyFactory schedulingStrategyFactory) {
 
 		if (schedulingStrategyFactory instanceof PipelinedRegionSchedulingStrategy.Factory) {
-			return new OneSlotPerExecutionSlotAllocatorFactory(
+			return new SlotSharingExecutionSlotAllocatorFactory(
 				slotProvider,
 				scheduleMode != ScheduleMode.LAZY_FROM_SOURCES_WITH_BATCH_SLOT_REQUEST,
+				slotProvider,
 				slotRequestTimeout);
 		} else {
 			final SlotProviderStrategy slotProviderStrategy = SlotProviderStrategy.from(

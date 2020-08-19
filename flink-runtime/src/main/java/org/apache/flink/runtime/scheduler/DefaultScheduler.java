@@ -20,6 +20,7 @@
 package org.apache.flink.runtime.scheduler;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.common.operators.ResourceSpec;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.blob.BlobWriter;
@@ -37,7 +38,11 @@ import org.apache.flink.runtime.executiongraph.restart.ThrowingRestartStrategy;
 import org.apache.flink.runtime.io.network.partition.JobMasterPartitionTracker;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobGraph;
+import org.apache.flink.runtime.jobgraph.JobVertex;
+import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroup;
+import org.apache.flink.runtime.jobmanager.scheduler.CoLocationGroupDesc;
 import org.apache.flink.runtime.jobmanager.scheduler.NoResourceAvailableException;
+import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.runtime.jobmaster.ExecutionDeploymentTracker;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.ThrowingSlotProvider;
@@ -49,6 +54,7 @@ import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategy;
 import org.apache.flink.runtime.scheduler.strategy.SchedulingStrategyFactory;
 import org.apache.flink.runtime.shuffle.ShuffleMaster;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
+import org.apache.flink.util.AbstractID;
 import org.apache.flink.util.ExceptionUtils;
 
 import org.slf4j.Logger;
@@ -57,6 +63,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -155,9 +162,36 @@ public class DefaultScheduler extends SchedulerBase implements SchedulerOperatio
 			failoverStrategy,
 			restartBackoffTimeStrategy);
 		this.schedulingStrategy = schedulingStrategyFactory.createInstance(this, getSchedulingTopology());
-		this.executionSlotAllocator = checkNotNull(executionSlotAllocatorFactory).createInstance(getPreferredLocationsRetriever());
+		SlotSharingStrategy slotSharingStrategy = createSlotSharingStrategy();
+		this.executionSlotAllocator = checkNotNull(executionSlotAllocatorFactory).createInstance(
+			getPreferredLocationsRetriever(),
+			slotSharingStrategy,
+			executionVertexID -> getExecutionVertex(executionVertexID).getResourceProfile(),
+			executionVertexID -> getExecutionVertex(executionVertexID).getLatestPriorAllocation());
 
 		this.verticesWaitingForRestart = new HashSet<>();
+	}
+
+	private SlotSharingStrategy createSlotSharingStrategy() {
+		Set<SlotSharingGroup> slotSharingGroups = new HashSet<>();
+		Map<AbstractID, CoLocationGroupDesc> coLocationGroupDescs = new HashMap<>();
+		SlotSharingGroup defaultSlotSharingGroup = new SlotSharingGroup();
+		for (JobVertex vertex : getJobGraph().getVertices()) {
+			SlotSharingGroup slotSharingGroup = vertex.getSlotSharingGroup();
+			if (slotSharingGroup == null) {
+				defaultSlotSharingGroup.addVertexToGroup(vertex.getID(), ResourceSpec.ZERO);
+				slotSharingGroup = defaultSlotSharingGroup;
+			}
+			slotSharingGroups.add(slotSharingGroup);
+			CoLocationGroup coLocationGroup = vertex.getCoLocationGroup();
+			if (coLocationGroup != null) {
+				coLocationGroupDescs.putIfAbsent(coLocationGroup.getId(), CoLocationGroupDesc.from(coLocationGroup));
+			}
+		}
+		return new LocalInputPreferredSlotSharingStrategy(
+			getSchedulingTopology(),
+			slotSharingGroups,
+			new HashSet<>(coLocationGroupDescs.values()));
 	}
 
 	// ------------------------------------------------------------------------
