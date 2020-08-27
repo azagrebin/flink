@@ -32,6 +32,8 @@ import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -115,7 +117,7 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 		// in requestedLogicalSlots and eventually in sharedSlots
 		logicalSlotFuture.exceptionally(cause -> {
 			LOG.debug("Failed {}", logMessageBase);
-			cancelLogicalSlotRequest(logicalSlotRequestId);
+			removeLogicalSlotRequest(logicalSlotRequestId);
 			return null;
 		});
 		return logicalSlotFuture;
@@ -131,27 +133,31 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 			slotWillBeOccupiedIndefinitely);
 	}
 
-	void cancelLogicalSlotRequest(ExecutionVertexID executionVertexID) {
-		cancelLogicalSlotRequest(requestedLogicalSlots.getKeyBByKeyA(executionVertexID));
-	}
-
-	private void cancelLogicalSlotRequest(SlotRequestId logicalSlotRequestId) {
-		CompletableFuture<SingleLogicalSlot> logicalSlotFuture = requestedLogicalSlots.getValueByKeyB(logicalSlotRequestId);
+	void cancelLogicalSlotRequest(ExecutionVertexID executionVertexID, @Nullable Throwable cause) {
+		CompletableFuture<SingleLogicalSlot> logicalSlotFuture = requestedLogicalSlots.getValueByKeyA(executionVertexID);
+		SlotRequestId logicalSlotRequestId = requestedLogicalSlots.getKeyBByKeyA(executionVertexID);
 		if (logicalSlotFuture != null) {
-			LOG.debug("Cancel {}", getLogicalSlotString(logicalSlotRequestId));
-			logicalSlotFuture.cancel(false);
-			requestedLogicalSlots.removeKeyB(logicalSlotRequestId);
+			LOG.debug("Cancel {} from {}", getLogicalSlotString(logicalSlotRequestId), executionVertexID);
+			if (cause == null) {
+				logicalSlotFuture.cancel(false);
+			} else {
+				logicalSlotFuture.completeExceptionally(cause);
+			}
 		} else {
-			LOG.debug("No SlotExecutionVertexAssignment for logical {} from physical %s", logicalSlotRequestId);
-		}
-		if (requestedLogicalSlots.values().isEmpty()) {
-			releaseCallback.accept(executionSlotSharingGroup);
+			LOG.debug("No SlotExecutionVertexAssignment for logical {} from physical {}}", logicalSlotRequestId, physicalSlotRequestId);
 		}
 	}
 
 	@Override
 	public void returnLogicalSlot(LogicalSlot logicalSlot) {
-		cancelLogicalSlotRequest(logicalSlot.getSlotRequestId());
+		removeLogicalSlotRequest(logicalSlot.getSlotRequestId());
+	}
+
+	private void removeLogicalSlotRequest(SlotRequestId logicalSlotRequestId) {
+		requestedLogicalSlots.removeKeyB(logicalSlotRequestId);
+		if (requestedLogicalSlots.values().isEmpty()) {
+			releaseCallback.accept(executionSlotSharingGroup);
+		}
 	}
 
 	@Override
@@ -171,6 +177,8 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 				physicalSlotRequestId);
 			logicalSlotFuture.thenAccept(logicalSlot -> logicalSlot.release(cause));
 		}
+		requestedLogicalSlots.clear();
+		releaseCallback.accept(executionSlotSharingGroup);
 	}
 
 	@Override

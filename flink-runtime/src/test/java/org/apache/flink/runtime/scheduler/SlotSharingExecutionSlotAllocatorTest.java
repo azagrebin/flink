@@ -28,6 +28,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobmaster.LogicalSlot;
 import org.apache.flink.runtime.jobmaster.SlotRequestId;
 import org.apache.flink.runtime.jobmaster.TestingPayload;
+import org.apache.flink.runtime.jobmaster.slotpool.DummyPayload;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlot;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotProvider;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequest;
@@ -201,8 +202,10 @@ public class SlotSharingExecutionSlotAllocatorTest {
 
 	@Test
 	public void testReturningLogicalSlotsRemovesSharedSlot() {
-		testLogicalSlotRequestCancellation(
+		// physical slot request is completed and completes logical requests
+		testLogicalSlotRequestCancellationOrRelease(
 			false,
+			true,
 			(context, assignment) -> {
 				try {
 					assignment.getLogicalSlotFuture().get().releaseSlot(null);
@@ -214,7 +217,9 @@ public class SlotSharingExecutionSlotAllocatorTest {
 
 	@Test
 	public void testLogicalSlotCancelsPhysicalSlotRequestAndRemovesSharedSlot() {
-		testLogicalSlotRequestCancellation(
+		// physical slot request is not completed and does not complete logical requests
+		testLogicalSlotRequestCancellationOrRelease(
+			true,
 			true,
 			(context, assignment) -> {
 				context.getAllocator().cancel(assignment.getExecutionVertexId());
@@ -227,34 +232,52 @@ public class SlotSharingExecutionSlotAllocatorTest {
 			});
 	}
 
-	private static void testLogicalSlotRequestCancellation(
+	@Test
+	public void testCompletedLogicalSlotCancelationDoesNotCancelPhysicalSlotRequestAndDoesNotRemoveSharedSlot() {
+		// physical slot request is completed and completes logical requests
+		testLogicalSlotRequestCancellationOrRelease(
+			false,
+			false,
+			(context, assignment) -> {
+				context.getAllocator().cancel(assignment.getExecutionVertexId());
+				try {
+					assignment.getLogicalSlotFuture().get();
+				} catch (InterruptedException | ExecutionException e) {
+					throw new FlinkRuntimeException("Unexpected", e);
+				}
+			});
+	}
+
+	private static void testLogicalSlotRequestCancellationOrRelease(
 			boolean completePhysicalSlotFutureManually,
-			BiConsumer<AllocationContext, SlotExecutionVertexAssignment> cancelAction) {
+			boolean cancelsPhysicalSlotRequestAndRemovesSharedSlot,
+			BiConsumer<AllocationContext, SlotExecutionVertexAssignment> cancelOrReleaseAction) {
 		AllocationContext context = AllocationContext
 			.newBuilder()
-			.addGroup(EV1, EV2)
+			.addGroup(EV1, EV2, EV3)
 			.completePhysicalSlotFutureManually(completePhysicalSlotFutureManually)
 			.build();
 
 		List<SlotExecutionVertexAssignment> assignments = context.allocateSlotsFor(EV1, EV2);
 		assertThat(context.getSlotProvider().getRequests().keySet(), hasSize(1));
 
-		// cancel only one sharing logical slots
-		cancelAction.accept(context, assignments.get(0));
+		// cancel or release only one sharing logical slots
+		cancelOrReleaseAction.accept(context, assignments.get(0));
 		List<SlotExecutionVertexAssignment> assignmentsAfterOneCancellation = context.allocateSlotsFor(EV1, EV2);
 		// there should be no more physical slot allocations, as the first logical slot reuses the previous shared slot
 		assertThat(context.getSlotProvider().getRequests().keySet(), hasSize(1));
 
-		// cancel all sharing logical slots
+		// cancel or release all sharing logical slots
 		for (SlotExecutionVertexAssignment assignment : assignmentsAfterOneCancellation) {
-			cancelAction.accept(context, assignment);
+			cancelOrReleaseAction.accept(context, assignment);
 		}
 		SlotRequestId slotRequestId = context.getSlotProvider().getFirstRequestOrFail().getSlotRequestId();
-		assertThat(context.getSlotProvider().getCancellations().containsKey(slotRequestId), is(true));
+		assertThat(context.getSlotProvider().getCancellations().containsKey(slotRequestId), is(cancelsPhysicalSlotRequestAndRemovesSharedSlot));
 
-		context.allocateSlotsFor(EV1, EV2);
-		// there should be one more physical slot allocation, as the first allocation should be removed after releasing all logical slots
-		assertThat(context.getSlotProvider().getRequests().keySet(), hasSize(2));
+		context.allocateSlotsFor(EV3);
+		// there should be one more physical slot allocation if the first allocation should be removed with all logical slots
+		int expectedNumberOfRequests = cancelsPhysicalSlotRequestAndRemovesSharedSlot ? 2 : 1;
+		assertThat(context.getSlotProvider().getRequests().keySet(), hasSize(expectedNumberOfRequests));
 	}
 
 	@Test
@@ -269,12 +292,19 @@ public class SlotSharingExecutionSlotAllocatorTest {
 				return payload;
 			})
 			.collect(Collectors.toList());
+		SlotRequestId slotRequestId = context.getSlotProvider().getFirstRequestOrFail().getSlotRequestId();
 		TestingPhysicalSlot physicalSlot = context.getSlotProvider().getFirstResponseOrFail().get();
 
 		assertThat(payloads.stream().allMatch(payload -> payload.getTerminalStateFuture().isDone()), is(false));
 		assertThat(physicalSlot.getPayload(), notNullValue());
 		physicalSlot.getPayload().release(new Throwable());
 		assertThat(payloads.stream().allMatch(payload -> payload.getTerminalStateFuture().isDone()), is(true));
+
+		assertThat(context.getSlotProvider().getCancellations().containsKey(slotRequestId), is(true));
+
+		context.allocateSlotsFor(EV1, EV2);
+		// there should be one more physical slot allocation, as the first allocation should be removed after releasing all logical slots
+		assertThat(context.getSlotProvider().getRequests().keySet(), hasSize(2));
 	}
 
 	@Test
@@ -317,18 +347,31 @@ public class SlotSharingExecutionSlotAllocatorTest {
 		fulfilOneOfTwoSlotRequestsAndGetPendingProfile(context, new AllocationID());
 		PhysicalSlotRequestBulk bulk1 = bulkChecker.getBulk();
 		List<SlotExecutionVertexAssignment> assignments2 = context.allocateSlotsFor(EV2);
+
 		// cancelling of (EV1, EV3) releases assignments1 and only one physical slot for EV3
 		// the second physical slot is held by sharing EV2 from the next bulk
 		bulk1.cancel(new Throwable());
+
+		// return completed logical slot to clear shared slpt and release physical slot
+		CompletableFuture<LogicalSlot> ev1slot = assignments1.get(0).getLogicalSlotFuture();
+		boolean ev1failed = ev1slot.isCompletedExceptionally();
+		CompletableFuture<LogicalSlot> ev3slot = assignments1.get(1).getLogicalSlotFuture();
+		boolean ev3failed = ev3slot.isCompletedExceptionally();
+		LogicalSlot slot = ev1failed ? ev3slot.join() : ev1slot.join();
+		releaseLogicalSlot(slot);
+
 		// EV3 needs again a physical slot, therefore there are 3 requests overall
 		context.allocateSlotsFor(EV1, EV3);
-		boolean ev1failed = assignments1.get(0).getLogicalSlotFuture().isCompletedExceptionally();
-		boolean ev3failed = assignments1.get(1).getLogicalSlotFuture().isCompletedExceptionally();
 
 		assertThat(context.getSlotProvider().getRequests().values(), hasSize(3));
 		// either EV1 or EV3 logical slot future is fulfilled before cancellation
 		assertThat(ev1failed != ev3failed, is(true));
 		assertThat(assignments2.get(0).getLogicalSlotFuture().isCompletedExceptionally(), is(false));
+	}
+
+	private static void releaseLogicalSlot(LogicalSlot slot) {
+		slot.tryAssignPayload(new DummyPayload(CompletableFuture.completedFuture(null)));
+		slot.releaseSlot(new Throwable());
 	}
 
 	@Test

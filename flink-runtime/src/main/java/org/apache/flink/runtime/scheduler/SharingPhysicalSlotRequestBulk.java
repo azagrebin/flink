@@ -40,13 +40,13 @@ class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
 
 	private final Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests;
 
-	private final BiConsumer<ExecutionSlotSharingGroup, List<ExecutionVertexID>> logicalSlotRequestCanceller;
+	private final BiConsumer<ExecutionVertexID, Throwable> logicalSlotRequestCanceller;
 
 	SharingPhysicalSlotRequestBulk(
 			Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executions,
 			Map<ExecutionSlotSharingGroup, ResourceProfile> pendingRequests,
 			Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests,
-			BiConsumer<ExecutionSlotSharingGroup, List<ExecutionVertexID>> logicalSlotRequestCanceller) {
+			BiConsumer<ExecutionVertexID, Throwable> logicalSlotRequestCanceller) {
 		this.executions = checkNotNull(executions);
 		this.pendingRequests = checkNotNull(pendingRequests);
 		this.fulfilledRequests = checkNotNull(fulfilledRequests);
@@ -71,7 +71,8 @@ class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
 			.concat(
 				pendingRequests.keySet().stream(),
 				fulfilledRequests.keySet().stream())
-			.forEach(group -> logicalSlotRequestCanceller.accept(group, executions.get(group)));
+			.flatMap(group -> executions.get(group).stream())
+			.forEach(id -> logicalSlotRequestCanceller.accept(id, cause));
 	}
 
 	void markFulfilled(ExecutionSlotSharingGroup group, AllocationID allocationID) {

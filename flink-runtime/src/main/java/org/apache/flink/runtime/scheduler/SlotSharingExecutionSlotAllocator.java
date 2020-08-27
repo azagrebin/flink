@@ -145,7 +145,7 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 			"There is no ExecutionSlotSharingGroup for ExecutionVertexID " + executionVertexId);
 		SharedSlot slot = sharedSlots.get(executionSlotSharingGroup);
 		if (slot != null) {
-			slot.cancelLogicalSlotRequest(executionVertexId);
+			slot.cancelLogicalSlotRequest(executionVertexId, null);
 		} else {
 			LOG.debug("There is no slot for ExecutionSlotSharingGroup of ExecutionVertexID {}", executionVertexId);
 		}
@@ -214,10 +214,9 @@ class SlotSharingExecutionSlotAllocator implements ExecutionSlotAllocator {
 			executions,
 			pendingRequests,
 			fulfilledRequests,
-			(group, executionVertexIds) -> {
-				for (ExecutionVertexID execution : executionVertexIds) {
-					sharedSlots.get(group).cancelLogicalSlotRequest(execution);
-				}
+			(executionVertexId, cause) -> {
+				ExecutionSlotSharingGroup group = slotSharingStrategy.getExecutionSlotSharingGroup(executionVertexId);
+				sharedSlots.get(group).cancelLogicalSlotRequest(executionVertexId, cause);
 			});
 		registerPhysicalSlotRequestBulkCallbacks(executions.keySet(), bulk);
 		return bulk;
