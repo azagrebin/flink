@@ -22,13 +22,13 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 
 /**
- * This class tracks a fulfil-ability timeout of a bulk of physical slot requests.
+ * This class tracks a fulfillability timeout of a bulk of physical slot requests.
  *
- * <p>The check stops when all physical slot requests of the bulk are fulfilled by available or newly allocated slots.
- * The bulk is fulfillable if all its physical slot requests can be fulfilled either by available or
- * newly allocated slots or slots which currently used by other job subtasks.
+ * <p>The check stops when all pending physical slot requests of {@link PhysicalSlotRequestBulk} are fulfilled
+ * by available or newly allocated slots. The bulk is fulfillable if all its physical slot requests can be fulfilled
+ * either by available or newly allocated slots or slots which currently used by other job subtasks.
  * The bulk gets canceled if the timeout occurs and the bulk is not fulfillable.
- * The timeout does not tick while the bulk is fulfillable but not fulfilled yet.
+ * The timeout timer is not running while the bulk is fulfillable but not fulfilled yet.
  */
 public interface PhysicalSlotRequestBulkChecker {
 	/**
@@ -39,7 +39,7 @@ public interface PhysicalSlotRequestBulkChecker {
 	void start(ComponentMainThreadExecutor mainThreadExecutor);
 
 	/**
-	 * Starts tracking the fulfil-ability of a {@link PhysicalSlotRequestBulk} with timeout.
+	 * Starts tracking the fulfillability of a {@link PhysicalSlotRequestBulk} with timeout.
 	 *
 	 * @param bulk {@link PhysicalSlotRequestBulk} to track
 	 * @param timeout timeout after which the bulk should be canceled if it is still not fulfillable.

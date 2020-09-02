@@ -55,7 +55,7 @@ public class BulkSlotProviderImpl implements BulkSlotProvider {
 			final PhysicalSlotRequestBulkChecker slotRequestBulkChecker) {
 		this.slotSelectionStrategy = checkNotNull(slotSelectionStrategy);
 		this.slotPool = checkNotNull(slotPool);
-		this.slotRequestBulkChecker = slotRequestBulkChecker;
+		this.slotRequestBulkChecker = checkNotNull(slotRequestBulkChecker);
 	}
 
 	@Override
@@ -147,11 +147,12 @@ public class BulkSlotProviderImpl implements BulkSlotProvider {
 	}
 
 	private PhysicalSlotRequestBulkImpl createPhysicalSlotRequestBulk(final Collection<PhysicalSlotRequest> physicalSlotRequests) {
-		final PhysicalSlotRequestBulkImpl slotRequestBulk = new PhysicalSlotRequestBulkImpl(physicalSlotRequests
-			.stream()
-			.collect(Collectors.toMap(
-				PhysicalSlotRequest::getSlotRequestId,
-				r -> r.getSlotProfile().getPhysicalSlotResourceProfile())), this::cancelSlotRequest);
+		final PhysicalSlotRequestBulkImpl slotRequestBulk = new PhysicalSlotRequestBulkImpl(
+			physicalSlotRequests
+				.stream()
+				.collect(Collectors.toMap(
+					PhysicalSlotRequest::getSlotRequestId,
+					r -> r.getSlotProfile().getPhysicalSlotResourceProfile())), this::cancelSlotRequest);
 		return slotRequestBulk;
 	}
 }

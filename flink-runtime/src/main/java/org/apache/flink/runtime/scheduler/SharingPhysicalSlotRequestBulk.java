@@ -21,15 +21,16 @@ package org.apache.flink.runtime.scheduler;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequestBulk;
+import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequestBulkChecker;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.stream.Stream;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -45,11 +46,10 @@ class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
 	SharingPhysicalSlotRequestBulk(
 			Map<ExecutionSlotSharingGroup, List<ExecutionVertexID>> executions,
 			Map<ExecutionSlotSharingGroup, ResourceProfile> pendingRequests,
-			Map<ExecutionSlotSharingGroup, AllocationID> fulfilledRequests,
 			BiConsumer<ExecutionVertexID, Throwable> logicalSlotRequestCanceller) {
 		this.executions = checkNotNull(executions);
 		this.pendingRequests = checkNotNull(pendingRequests);
-		this.fulfilledRequests = checkNotNull(fulfilledRequests);
+		this.fulfilledRequests = new HashMap<>();
 		this.logicalSlotRequestCanceller = checkNotNull(logicalSlotRequestCanceller);
 	}
 
@@ -67,12 +67,16 @@ class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
 	public void cancel(Throwable cause) {
 		// pending requests must be canceled first otherwise they might be fulfilled by
 		// allocated slots released from this bulk
-		Stream
-			.concat(
-				pendingRequests.keySet().stream(),
-				fulfilledRequests.keySet().stream())
-			.flatMap(group -> executions.get(group).stream())
-			.forEach(id -> logicalSlotRequestCanceller.accept(id, cause));
+		for (ExecutionSlotSharingGroup group : pendingRequests.keySet()) {
+			for (ExecutionVertexID id : executions.get(group)) {
+				logicalSlotRequestCanceller.accept(id, cause);
+			}
+		}
+		for (ExecutionSlotSharingGroup group : fulfilledRequests.keySet()) {
+			for (ExecutionVertexID id : executions.get(group)) {
+				logicalSlotRequestCanceller.accept(id, cause);
+			}
+		}
 	}
 
 	void markFulfilled(ExecutionSlotSharingGroup group, AllocationID allocationID) {
@@ -80,7 +84,13 @@ class SharingPhysicalSlotRequestBulk implements PhysicalSlotRequestBulk {
 		fulfilledRequests.put(group, allocationID);
 	}
 
-	void clear() {
+	/**
+	 * Clear the pending requests.
+	 *
+	 * <p>The method can be used to make the bulk fulfilled and stop the fulfillability check
+	 * in {@link PhysicalSlotRequestBulkChecker}.
+	 */
+	void clearPendingRequests() {
 		pendingRequests.clear();
 	}
 }

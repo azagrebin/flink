@@ -91,7 +91,7 @@ public class BulkSlotProviderImplTest extends TestLogger {
 
 		slotPool = new SlotPoolBuilder(mainThreadExecutor).build();
 
-		PhysicalSlotRequestBulkCheckerImpl slotRequestBulkChecker = PhysicalSlotRequestBulkCheckerImpl.fromSlotPool(slotPool, clock);
+		PhysicalSlotRequestBulkCheckerImpl slotRequestBulkChecker = PhysicalSlotRequestBulkCheckerImpl.createFromSlotPool(slotPool, clock);
 		slotRequestBulkChecker.start(mainThreadExecutor);
 		bulkSlotProvider = new BulkSlotProviderImpl(LocationPreferenceSlotSelectionStrategy.createDefault(), slotPool, slotRequestBulkChecker);
 	}

@@ -163,7 +163,7 @@ public class DefaultSchedulerFactory implements SchedulerNGFactory {
 			final Time slotRequestTimeout) {
 		final SlotSelectionStrategy slotSelectionStrategy = selectSlotSelectionStrategy(jobMasterConfiguration);
 		final PhysicalSlotRequestBulkChecker bulkChecker = PhysicalSlotRequestBulkCheckerImpl
-			.fromSlotPool(slotPool, SystemClock.getInstance());
+			.createFromSlotPool(slotPool, SystemClock.getInstance());
 		final BulkSlotProvider bulkSlotProvider = new BulkSlotProviderImpl(slotSelectionStrategy, slotPool, bulkChecker);
 		final ExecutionSlotAllocatorFactory allocatorFactory = new OneSlotPerExecutionSlotAllocatorFactory(
 			bulkSlotProvider,

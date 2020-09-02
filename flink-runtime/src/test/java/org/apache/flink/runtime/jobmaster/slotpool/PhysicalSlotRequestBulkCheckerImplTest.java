@@ -54,7 +54,7 @@ import static org.junit.Assert.fail;
  */
 public class PhysicalSlotRequestBulkCheckerImplTest extends TestLogger {
 
-	private static final Time TIMEOUT = Time.milliseconds(100L);
+	private static final Time TIMEOUT = Time.milliseconds(50L);
 
 	private static ScheduledExecutorService singleThreadScheduledExecutorService;
 
@@ -243,8 +243,7 @@ public class PhysicalSlotRequestBulkCheckerImplTest extends TestLogger {
 
 	private PhysicalSlot addOneSlot() {
 		final PhysicalSlot slot = createPhysicalSlot();
-		slots.add(slot);
-
+		CompletableFuture.runAsync(() -> slots.add(slot), mainThreadExecutor).join();
 		return slot;
 	}
 

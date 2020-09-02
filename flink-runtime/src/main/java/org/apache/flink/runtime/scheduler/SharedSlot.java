@@ -89,7 +89,10 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 	}
 
 	CompletableFuture<LogicalSlot> allocateLogicalSlot(ExecutionVertexID executionVertexId) {
-		Preconditions.checkArgument(executionSlotSharingGroup.getExecutionVertexIds().contains(executionVertexId));
+		Preconditions.checkArgument(
+			executionSlotSharingGroup.getExecutionVertexIds().contains(executionVertexId),
+			"Trying to allocate a logical slot for execution %s which is not in the ExecutionSlotSharingGroup",
+			executionVertexId);
 		CompletableFuture<SingleLogicalSlot> logicalSlotFuture = requestedLogicalSlots.getValueByKeyA(executionVertexId);
 		if (logicalSlotFuture != null) {
 			LOG.debug("Request for {} already exists", getLogicalSlotString(executionVertexId));
@@ -113,7 +116,7 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 		requestedLogicalSlots.put(executionVertexId, logicalSlotRequestId, logicalSlotFuture);
 
 		// If the physical slot request fails (slotContextFuture), it will also fail the logicalSlotFuture.
-		// Therefore, the next `exceptionally` callback will cancelLogicalSlotRequest and do the cleanup
+		// Therefore, the next `exceptionally` callback will call removeLogicalSlotRequest and do the cleanup
 		// in requestedLogicalSlots and eventually in sharedSlots
 		logicalSlotFuture.exceptionally(cause -> {
 			LOG.debug("Failed {}", logMessageBase);
@@ -138,6 +141,7 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 		SlotRequestId logicalSlotRequestId = requestedLogicalSlots.getKeyBByKeyA(executionVertexID);
 		if (logicalSlotFuture != null) {
 			LOG.debug("Cancel {} from {}", getLogicalSlotString(logicalSlotRequestId), executionVertexID);
+			// If the logicalSlotFuture was not completed and now it fails, the exceptionally callback will also call removeLogicalSlotRequest
 			if (cause == null) {
 				logicalSlotFuture.cancel(false);
 			} else {
@@ -200,5 +204,12 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 			logicalSlotRequestId,
 			executionVertexId,
 			physicalSlotRequestId);
+	}
+
+	/**
+	 * Returns whether the shared slot has no assigned logical slot requests.
+	 */
+	boolean isEmpty() {
+		return requestedLogicalSlots.size() == 0;
 	}
 }

@@ -22,6 +22,7 @@ import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.clusterframework.types.AllocationID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
 import org.apache.flink.runtime.clusterframework.types.SlotProfile;
+import org.apache.flink.runtime.concurrent.ComponentMainThreadExecutor;
 import org.apache.flink.runtime.executiongraph.utils.SimpleAckingTaskManagerGateway;
 import org.apache.flink.runtime.instance.SimpleSlotContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -37,8 +38,8 @@ import org.apache.flink.runtime.jobmaster.slotpool.PhysicalSlotRequestBulkChecke
 import org.apache.flink.runtime.scheduler.SharedSlotProfileRetriever.SharedSlotProfileRetrieverFactory;
 import org.apache.flink.runtime.scheduler.strategy.ExecutionVertexID;
 import org.apache.flink.runtime.taskmanager.LocalTaskManagerLocation;
-import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.function.BiConsumerWithException;
 
 import org.junit.Test;
 
@@ -57,7 +58,6 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -201,22 +201,16 @@ public class SlotSharingExecutionSlotAllocatorTest {
 	}
 
 	@Test
-	public void testReturningLogicalSlotsRemovesSharedSlot() {
+	public void testReturningLogicalSlotsRemovesSharedSlot() throws Exception {
 		// physical slot request is completed and completes logical requests
 		testLogicalSlotRequestCancellationOrRelease(
 			false,
 			true,
-			(context, assignment) -> {
-				try {
-					assignment.getLogicalSlotFuture().get().releaseSlot(null);
-				} catch (InterruptedException | ExecutionException e) {
-					throw new FlinkRuntimeException("Unexpected", e);
-				}
-			});
+			(context, assignment) -> assignment.getLogicalSlotFuture().get().releaseSlot(null));
 	}
 
 	@Test
-	public void testLogicalSlotCancelsPhysicalSlotRequestAndRemovesSharedSlot() {
+	public void testLogicalSlotCancelsPhysicalSlotRequestAndRemovesSharedSlot() throws Exception {
 		// physical slot request is not completed and does not complete logical requests
 		testLogicalSlotRequestCancellationOrRelease(
 			true,
@@ -233,25 +227,21 @@ public class SlotSharingExecutionSlotAllocatorTest {
 	}
 
 	@Test
-	public void testCompletedLogicalSlotCancelationDoesNotCancelPhysicalSlotRequestAndDoesNotRemoveSharedSlot() {
+	public void testCompletedLogicalSlotCancelationDoesNotCancelPhysicalSlotRequestAndDoesNotRemoveSharedSlot() throws Exception {
 		// physical slot request is completed and completes logical requests
 		testLogicalSlotRequestCancellationOrRelease(
 			false,
 			false,
 			(context, assignment) -> {
 				context.getAllocator().cancel(assignment.getExecutionVertexId());
-				try {
-					assignment.getLogicalSlotFuture().get();
-				} catch (InterruptedException | ExecutionException e) {
-					throw new FlinkRuntimeException("Unexpected", e);
-				}
+				assignment.getLogicalSlotFuture().get();
 			});
 	}
 
 	private static void testLogicalSlotRequestCancellationOrRelease(
 			boolean completePhysicalSlotFutureManually,
 			boolean cancelsPhysicalSlotRequestAndRemovesSharedSlot,
-			BiConsumer<AllocationContext, SlotExecutionVertexAssignment> cancelOrReleaseAction) {
+			BiConsumerWithException<AllocationContext, SlotExecutionVertexAssignment, Exception> cancelOrReleaseAction) throws Exception {
 		AllocationContext context = AllocationContext
 			.newBuilder()
 			.addGroup(EV1, EV2, EV3)
@@ -470,7 +460,7 @@ public class SlotSharingExecutionSlotAllocatorTest {
 			private boolean completePhysicalSlotFutureManually = false;
 			private boolean completeSlotProfileFutureManually = false;
 			private boolean slotWillBeOccupiedIndefinitely = false;
-			private PhysicalSlotRequestBulkChecker bulkChecker = (bulk, timeout) -> {};
+			private PhysicalSlotRequestBulkChecker bulkChecker = new TestingPhysicalSlotRequestBulkChecker();
 
 			private Builder addGroup(ExecutionVertexID... group) {
 				groups.add(group);
@@ -689,6 +679,11 @@ public class SlotSharingExecutionSlotAllocatorTest {
 	private static class TestingPhysicalSlotRequestBulkChecker implements PhysicalSlotRequestBulkChecker {
 		private PhysicalSlotRequestBulk bulk;
 		private Time timeout;
+
+		@Override
+		public void start(ComponentMainThreadExecutor mainThreadExecutor) {
+
+		}
 
 		@Override
 		public void schedulePendingRequestBulkTimeoutCheck(PhysicalSlotRequestBulk bulk, Time timeout) {

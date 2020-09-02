@@ -175,7 +175,7 @@ public class PhysicalSlotRequestBulkCheckerImpl implements PhysicalSlotRequestBu
 		return slots.stream().filter(slot -> slot.getResourceProfile().isMatching(requestResourceProfile)).findFirst();
 	}
 
-	public static PhysicalSlotRequestBulkCheckerImpl fromSlotPool(final SlotPool slotPool, final Clock clock) {
+	public static PhysicalSlotRequestBulkCheckerImpl createFromSlotPool(final SlotPool slotPool, final Clock clock) {
 		return new PhysicalSlotRequestBulkCheckerImpl(() -> getAllSlotInfos(slotPool), clock);
 	}
 
