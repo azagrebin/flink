@@ -199,10 +199,15 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 
 	@Override
 	public void returnLogicalSlot(LogicalSlot logicalSlot) {
-		removeLogicalSlotRequest(logicalSlot.getSlotRequestId());
+		// if the shared slot is already being released in release() loop,
+		// we do not remove it to avoid ConcurrentModificationException.
+		if (state == State.ALLOCATED) {
+			removeLogicalSlotRequest(logicalSlot.getSlotRequestId());
+		}
 	}
 
 	private void removeLogicalSlotRequest(SlotRequestId logicalSlotRequestId) {
+		LOG.debug("Remove {}", getLogicalSlotString(logicalSlotRequestId));
 		Preconditions.checkState(
 			requestedLogicalSlots.removeKeyB(logicalSlotRequestId) != null,
 			"Trying to remove a logical slot request which has been either already removed or never created.");
@@ -215,6 +220,8 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 			slotContextFuture.isDone(),
 			"Releasing of the shared slot is expected only from its successfully allocated physical slot ({})",
 			physicalSlotRequestId);
+		LOG.debug("Release shared slot ({})", physicalSlotRequestId);
+		state = State.RELEASING;
 		for (ExecutionVertexID executionVertexId : requestedLogicalSlots.keySetA()) {
 			LOG.debug("Release {}", getLogicalSlotString(executionVertexId));
 			CompletableFuture<SingleLogicalSlot> logicalSlotFuture =
@@ -231,8 +238,9 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 	}
 
 	private void releaseExternally() {
-		if (state == State.ALLOCATED && requestedLogicalSlots.values().isEmpty()) {
+		if (state != State.RELEASED && requestedLogicalSlots.values().isEmpty()) {
 			state = State.RELEASED;
+			LOG.debug("Release shared slot externally ({})", physicalSlotRequestId);
 			externalReleaseCallback.accept(executionSlotSharingGroup);
 		}
 	}
@@ -267,6 +275,7 @@ class SharedSlot implements SlotOwner, PhysicalSlot.Payload {
 
 	private enum State {
 		ALLOCATED,
+		RELEASING,
 		RELEASED
 	}
 }
