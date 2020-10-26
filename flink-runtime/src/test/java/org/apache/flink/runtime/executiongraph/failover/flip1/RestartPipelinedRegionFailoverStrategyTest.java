@@ -238,10 +238,10 @@ public class RestartPipelinedRegionFailoverStrategyTest extends TestLogger {
 		TestingSchedulingTopology topology = new TestingSchedulingTopology();
 
 		TestingSchedulingExecutionVertex v1 = topology.newExecutionVertex(ExecutionState.FINISHED);
-		TestingSchedulingExecutionVertex v2 = topology.newExecutionVertex(ExecutionState.FINISHED);
+		TestingSchedulingExecutionVertex v2 = topology.newExecutionVertex(ExecutionState.FAILED);
 		TestingSchedulingExecutionVertex v3 = topology.newExecutionVertex(ExecutionState.RUNNING);
-		TestingSchedulingExecutionVertex v4 = topology.newExecutionVertex(ExecutionState.RUNNING);
-		TestingSchedulingExecutionVertex v5 = topology.newExecutionVertex(ExecutionState.FAILED);
+		TestingSchedulingExecutionVertex v4 = topology.newExecutionVertex(ExecutionState.CANCELING);
+		TestingSchedulingExecutionVertex v5 = topology.newExecutionVertex(ExecutionState.SCHEDULED);
 		TestingSchedulingExecutionVertex v6 = topology.newExecutionVertex(ExecutionState.CANCELED);
 
 		topology.connect(v1, v2, ResultPartitionType.PIPELINED);
@@ -263,11 +263,11 @@ public class RestartPipelinedRegionFailoverStrategyTest extends TestLogger {
 	/**
 	 * Tests region failover does not restart vertexes which are already in initial CREATED state.
 	 * <pre>
-	 *     (v1) --|--> (v2)
+	 *     (v1) ---> (v2) --|--> (v3) ---> (v4) --|--> (v5) ---> (v6)
 	 *
-	 *            ^
-	 *            |
-	 *       (blocking)
+	 *           ^          ^          ^          ^          ^
+	 *           |          |          |          |          |
+	 *     (pipelined) (blocking) (pipelined) (blocking) (pipelined)
 	 * </pre>
 	 * Component 1: 1,2; component 2: 3,4; component 3: 5,6
 	 */
@@ -276,15 +276,23 @@ public class RestartPipelinedRegionFailoverStrategyTest extends TestLogger {
 		TestingSchedulingTopology topology = new TestingSchedulingTopology();
 
 		TestingSchedulingExecutionVertex v1 = topology.newExecutionVertex(ExecutionState.CREATED);
-		TestingSchedulingExecutionVertex v2 = topology.newExecutionVertex(ExecutionState.CREATED);
+		TestingSchedulingExecutionVertex v2 = topology.newExecutionVertex(ExecutionState.FAILED);
+		TestingSchedulingExecutionVertex v3 = topology.newExecutionVertex(ExecutionState.FAILED);
+		TestingSchedulingExecutionVertex v4 = topology.newExecutionVertex(ExecutionState.CANCELING);
+		TestingSchedulingExecutionVertex v5 = topology.newExecutionVertex(ExecutionState.CANCELED);
+		TestingSchedulingExecutionVertex v6 = topology.newExecutionVertex(ExecutionState.CREATED);
 
-		topology.connect(v1, v2, ResultPartitionType.BLOCKING);
+		topology.connect(v1, v2, ResultPartitionType.PIPELINED);
+		topology.connect(v2, v3, ResultPartitionType.BLOCKING);
+		topology.connect(v3, v4, ResultPartitionType.PIPELINED);
+		topology.connect(v4, v5, ResultPartitionType.BLOCKING);
+		topology.connect(v5, v6, ResultPartitionType.PIPELINED);
 
-		FailoverStrategy strategy = new RestartPipelinedRegionFailoverStrategy(topology);
+		RestartPipelinedRegionFailoverStrategy strategy = new RestartPipelinedRegionFailoverStrategy(topology);
 
-		verifyThatFailedExecution(strategy, v2).restarts();
-		TestingSchedulingResultPartition v1out = v2.getConsumedResults().iterator().next();
-		verifyThatFailedExecution(strategy, v2).partitionConnectionCause(v1out).restarts();
+		verifyThatFailedExecution(strategy, v3).restarts(v3, v4);
+		TestingSchedulingResultPartition v2out = v3.getConsumedResults().iterator().next();
+		verifyThatFailedExecution(strategy, v3).partitionConnectionCause(v2out).restarts(v3, v4);
 	}
 
 	private static VerificationContext verifyThatFailedExecution(

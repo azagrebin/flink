@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Optional;
@@ -49,6 +50,12 @@ public class RestartPipelinedRegionFailoverStrategy implements FailoverStrategy 
 
 	/** The log object used for debugging. */
 	private static final Logger LOG = LoggerFactory.getLogger(RestartPipelinedRegionFailoverStrategy.class);
+
+	private static final Set<ExecutionState> STATES_TO_RESTART = EnumSet.of(
+			ExecutionState.SCHEDULED,
+			ExecutionState.DEPLOYING,
+			ExecutionState.RUNNING,
+			ExecutionState.FINISHED);
 
 	/** The topology containing info about all the vertices and result partitions. */
 	private final SchedulingTopology topology;
@@ -122,12 +129,7 @@ public class RestartPipelinedRegionFailoverStrategy implements FailoverStrategy 
 		// calculate the tasks to restart based on the result of regions to restart
 		Set<ExecutionVertexID> tasksToRestart = new HashSet<>();
 		for (SchedulingPipelinedRegion region : getRegionsToRestart(failedRegion)) {
-			for (SchedulingExecutionVertex vertex : region.getVertices()) {
-				// we do not need to restart tasks which are already in the initial state
-				if (vertex.getState() != ExecutionState.CREATED) {
-					tasksToRestart.add(vertex.getId());
-				}
-			}
+			region.getVertices().forEach(vertex -> tasksToRestart.add(vertex.getId()));
 		}
 
 		// the previous failed partition will be recovered. remove its failed state from the checker
@@ -158,38 +160,71 @@ public class RestartPipelinedRegionFailoverStrategy implements FailoverStrategy 
 		regionsToVisit.add(failedRegion);
 		while (!regionsToVisit.isEmpty()) {
 			SchedulingPipelinedRegion regionToRestart = regionsToVisit.poll();
+			if (regionToRestart == failedRegion || checkWhetherToRestartRegion(regionToRestart)) {
+				regionsToRestart.add(regionToRestart);
+				visitUnavailableProducers(visitedRegions, regionsToVisit, regionToRestart);
+				visitConsumers(visitedRegions, regionsToVisit, regionToRestart);
 
-			// an involved region should be restarted
-			regionsToRestart.add(regionToRestart);
-
-			// if a needed input result partition is not available, its producer region is involved
-			for (SchedulingExecutionVertex vertex : regionToRestart.getVertices()) {
-				for (SchedulingResultPartition consumedPartition : vertex.getConsumedResults()) {
-					if (!resultPartitionAvailabilityChecker.isAvailable(consumedPartition.getId())) {
-						SchedulingPipelinedRegion producerRegion = topology.getPipelinedRegionOfVertex(consumedPartition.getProducer().getId());
-						if (!visitedRegions.contains(producerRegion)) {
-							visitedRegions.add(producerRegion);
-							regionsToVisit.add(producerRegion);
-						}
-					}
-				}
-			}
-
-			// all consumer regions of an involved region should be involved
-			for (SchedulingExecutionVertex vertex : regionToRestart.getVertices()) {
-				for (SchedulingResultPartition producedPartition : vertex.getProducedResults()) {
-					for (SchedulingExecutionVertex consumerVertex : producedPartition.getConsumers()) {
-						SchedulingPipelinedRegion consumerRegion = topology.getPipelinedRegionOfVertex(consumerVertex.getId());
-						if (!visitedRegions.contains(consumerRegion)) {
-							visitedRegions.add(consumerRegion);
-							regionsToVisit.add(consumerRegion);
-						}
-					}
-				}
 			}
 		}
 
 		return regionsToRestart;
+	}
+
+	/**
+	 * Whether to restart a region.
+	 *
+	 * <p>Restart a region if any its execution would otherwise reach the FINISHED
+	 * {@link ExecutionState} without restart.
+	 * Hence we do not need to restart the region if all its executions are already not going
+	 * to be done and have one of the following {@link ExecutionState}:
+	 * CREATED, CANCELING, CANCELED, CANCELING, FAILED.
+	 */
+	private static boolean checkWhetherToRestartRegion(SchedulingPipelinedRegion regionToRestart) {
+		for (SchedulingExecutionVertex vertex : regionToRestart.getVertices()) {
+			if (STATES_TO_RESTART.contains(vertex.getState())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void visitConsumers(
+			Set<SchedulingPipelinedRegion> visitedRegions,
+			Queue<SchedulingPipelinedRegion> regionsToVisit,
+			SchedulingPipelinedRegion regionToRestart) {
+		// all consumer regions of an involved region should be involved
+		for (SchedulingExecutionVertex vertex : regionToRestart.getVertices()) {
+			for (SchedulingResultPartition producedPartition : vertex.getProducedResults()) {
+				for (SchedulingExecutionVertex consumerVertex : producedPartition.getConsumers()) {
+					SchedulingPipelinedRegion consumerRegion = topology.getPipelinedRegionOfVertex(
+							consumerVertex.getId());
+					if (!visitedRegions.contains(consumerRegion)) {
+						visitedRegions.add(consumerRegion);
+						regionsToVisit.add(consumerRegion);
+					}
+				}
+			}
+		}
+	}
+
+	private void visitUnavailableProducers(
+			Set<SchedulingPipelinedRegion> visitedRegions,
+			Queue<SchedulingPipelinedRegion> regionsToVisit,
+			SchedulingPipelinedRegion regionToRestart) {
+		// if a needed input result partition is not available, its producer region is involved
+		for (SchedulingExecutionVertex vertex : regionToRestart.getVertices()) {
+			for (SchedulingResultPartition consumedPartition : vertex.getConsumedResults()) {
+				if (!resultPartitionAvailabilityChecker.isAvailable(consumedPartition.getId())) {
+					SchedulingPipelinedRegion producerRegion = topology.getPipelinedRegionOfVertex(
+							consumedPartition.getProducer().getId());
+					if (!visitedRegions.contains(producerRegion)) {
+						visitedRegions.add(producerRegion);
+						regionsToVisit.add(producerRegion);
+					}
+				}
+			}
+		}
 	}
 
 	// ------------------------------------------------------------------------
