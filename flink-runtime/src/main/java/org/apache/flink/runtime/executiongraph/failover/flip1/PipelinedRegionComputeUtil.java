@@ -23,9 +23,6 @@ import org.apache.flink.runtime.topology.BaseTopology;
 import org.apache.flink.runtime.topology.Result;
 import org.apache.flink.runtime.topology.Vertex;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -42,16 +39,8 @@ import static org.apache.flink.util.Preconditions.checkState;
  */
 public final class PipelinedRegionComputeUtil {
 
-	private static final Logger LOG = LoggerFactory.getLogger(PipelinedRegionComputeUtil.class);
-
 	public static <V extends Vertex<?, ?, V, R>, R extends Result<?, ?, V, R>> Set<Set<V>> computePipelinedRegions(
 			final BaseTopology<?, ?, V, R> topology) {
-
-		// currently we let a job with co-location constraints fail as one region
-		// putting co-located vertices in the same region with each other can be a future improvement
-		if (topology.containsCoLocationConstraints()) {
-			return Collections.singleton(buildOneRegionForAllVertices(topology));
-		}
 
 		final Map<V, Set<V>> vertexToRegion = buildRawRegions(topology);
 
@@ -112,19 +101,6 @@ public final class PipelinedRegionComputeUtil {
 		}
 		largerSet.addAll(smallerSet);
 		return largerSet;
-	}
-
-	private static <V extends Vertex<?, ?, V, ?>> Set<V> buildOneRegionForAllVertices(
-			final BaseTopology<?, ?, V, ?> topology) {
-
-		LOG.warn("Cannot decompose the topology into individual failover regions due to use of " +
-			"Co-Location constraints (iterations). Job will fail over as one holistic unit.");
-
-		final Set<V> allVertices = Collections.newSetFromMap(new IdentityHashMap<>());
-		for (V vertex : topology.getVertices()) {
-			allVertices.add(vertex);
-		}
-		return allVertices;
 	}
 
 	private static <V extends Vertex<?, ?, V, ?>> Set<Set<V>> uniqueRegions(final Map<V, Set<V>> vertexToRegion) {
