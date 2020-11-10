@@ -106,7 +106,7 @@ public class TestingSchedulingTopology implements SchedulingTopology {
 		vertexRegions = new HashMap<>();
 
 		final Set<Set<SchedulingExecutionVertex>> rawRegions =
-			PipelinedRegionComputeUtil.computePipelinedRegions(this);
+			PipelinedRegionComputeUtil.computePipelinedRegions(getVertices(), containsCoLocationConstraints);
 
 		for (Set<SchedulingExecutionVertex> rawRegion : rawRegions) {
 			final Set<TestingSchedulingExecutionVertex> vertices = rawRegion.stream()
