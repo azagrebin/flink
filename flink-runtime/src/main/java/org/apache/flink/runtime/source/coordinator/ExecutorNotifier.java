@@ -130,7 +130,13 @@ public class ExecutorNotifier implements AutoCloseable {
 		workerExecutor.scheduleAtFixedRate(() -> {
 			try {
 				T result = callable.call();
-				executorToNotify.execute(() -> handler.accept(result, null));
+				executorToNotify.execute(() -> {
+//					try {
+						handler.accept(result, null);
+//					} catch (Throwable t) {
+//						LOG.error("Failed to notifyReadyAsync", t);
+//					}
+				});
 			} catch (Throwable t) {
 				executorToNotify.execute(() -> handler.accept(null, t));
 			}
