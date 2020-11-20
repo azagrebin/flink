@@ -19,20 +19,26 @@
 package org.apache.flink.connector.file.src;
 
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.file.src.reader.TextLineFormat;
 import org.apache.flink.core.fs.Path;
-import org.apache.flink.runtime.testutils.MiniClusterResourceConfiguration;
+import org.apache.flink.runtime.minicluster.MiniCluster;
+import org.apache.flink.runtime.minicluster.RpcServiceSharing;
+import org.apache.flink.runtime.minicluster.TestingMiniCluster;
+import org.apache.flink.runtime.minicluster.TestingMiniClusterConfiguration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.operators.collect.ClientAndIterator;
-import org.apache.flink.test.util.MiniClusterWithClientResource;
+import org.apache.flink.streaming.util.TestStreamEnvironment;
 import org.apache.flink.util.TestLogger;
 import org.apache.flink.util.function.FunctionWithException;
 
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
+import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -61,13 +67,6 @@ public class FileSourceTextLinesITCase extends TestLogger {
 	@ClassRule
 	public static final TemporaryFolder TMP_FOLDER = new TemporaryFolder();
 
-	@ClassRule
-	public static final MiniClusterWithClientResource MINI_CLUSTER = new MiniClusterWithClientResource(
-		new MiniClusterResourceConfiguration.Builder()
-			.setNumberTaskManagers(1)
-			.setNumberSlotsPerTaskManager(PARALLELISM)
-			.build());
-
 	// ------------------------------------------------------------------------
 
 	/**
@@ -83,21 +82,13 @@ public class FileSourceTextLinesITCase extends TestLogger {
 		// write some junk to hidden files test that common hidden file patterns are filtered by default
 		writeHiddenJunkFiles(testDir);
 
-		final FileSource<String> source = FileSource
-				.forRecordStreamFormat(new TextLineFormat(), Path.fromLocalFile(testDir))
-				.build();
+		try (MiniCluster miniCluster = createAndStartTestingMiniCluster(new Configuration())) {
+			final List<String> result = DataStreamUtils.collectBoundedStream(
+				createFileSourceStream(miniCluster, testDir, null, null),
+				"Bounded TextFiles Test");
 
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(PARALLELISM);
-
-		final DataStream<String> stream = env.fromSource(
-				source,
-				WatermarkStrategy.noWatermarks(),
-				"file-source");
-
-		final List<String> result = DataStreamUtils.collectBoundedStream(stream, "Bounded TextFiles Test");
-
-		verifyResult(result);
+			verifyResult(result);
+		}
 	}
 
 	/**
@@ -106,47 +97,91 @@ public class FileSourceTextLinesITCase extends TestLogger {
 	 */
 	@Test
 	public void testContinuousTextFileSource() throws Exception {
+		testContinuousTextFileSource(false);
+	}
+
+	/**
+	 * This test runs a job reading continuous input (files appearing over time)
+	 * with a stream record format (text lines) and restarts TaskManager.
+	 */
+	@Test
+	public void testContinuousTextFileSourceWithTaskManagerFailover() throws Exception {
+		testContinuousTextFileSource(true);
+	}
+
+	private void testContinuousTextFileSource(boolean failTaskManager) throws Exception {
 		final File testDir = TMP_FOLDER.newFolder();
 
-		final FileSource<String> source = FileSource
-				.forRecordStreamFormat(new TextLineFormat(), Path.fromLocalFile(testDir))
-				.monitorContinuously(Duration.ofMillis(5))
-				.build();
+		try (TestingMiniCluster miniCluster = createAndStartTestingMiniCluster(new Configuration())) {
+			final DataStream<String> stream =
+				createFileSourceStream(miniCluster, testDir, Duration.ofMillis(5L), Duration.ofMillis(10L));
 
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(PARALLELISM);
-
-		final DataStream<String> stream = env.fromSource(
-				source,
-				WatermarkStrategy.noWatermarks(),
-				"file-source");
-
-		final ClientAndIterator<String> client =
+			final ClientAndIterator<String> client =
 				DataStreamUtils.collectWithClient(stream, "Continuous TextFiles Monitoring Test");
 
-		// write one file, execute, and wait for its result
-		// that way we know that the application was running and the source has
-		// done its first chunk of work already
+			// write one file, execute, and wait for its result
+			// that way we know that the application was running and the source has
+			// done its first chunk of work already
 
-		final int numLinesFirst = LINES_PER_FILE[0].length;
-		final int numLinesAfter = LINES.length - numLinesFirst;
+			final int numLinesFirst = LINES_PER_FILE[0].length;
+			final int numLinesAfter = LINES.length - numLinesFirst;
 
-		writeFile(testDir, 0);
-		final List<String> result1 = DataStreamUtils.collectRecordsFromUnboundedStream(client, numLinesFirst);
+			writeFile(testDir, 0);
+			final List<String> result1 = DataStreamUtils.collectRecordsFromUnboundedStream(
+				client,
+				numLinesFirst);
 
-		// write the remaining files over time, after that collect the final result
-		for (int i = 1; i < LINES_PER_FILE.length; i++) {
-			Thread.sleep(10);
-			writeFile(testDir, i);
+			// write the remaining files over time, after that collect the final result
+			for (int i = 1; i < LINES_PER_FILE.length; i++) {
+				Thread.sleep(10);
+				writeFile(testDir, i);
+				if (failTaskManager && i == LINES_PER_FILE.length / 3) {
+					restartTaskManager(miniCluster);
+				}
+			}
+
+			final List<String> result2 = DataStreamUtils.collectRecordsFromUnboundedStream(
+				client,
+				numLinesAfter);
+
+			// shut down the job, now that we have all the results we expected.
+			client.client.cancel().get();
+
+			result1.addAll(result2);
+			verifyResult(result1);
 		}
+	}
 
-		final List<String> result2 = DataStreamUtils.collectRecordsFromUnboundedStream(client, numLinesAfter);
+	private static DataStream<String> createFileSourceStream(
+			final MiniCluster miniCluster,
+			final File testDir,
+			@Nullable final Duration discoveryInterval,
+			@Nullable final Duration checkpointingInterval) throws Exception {
+		final FileSource.FileSourceBuilder<String> fileSourceBuilder = FileSource
+			.forRecordStreamFormat(new TextLineFormat(), Path.fromLocalFile(testDir));
+		if (discoveryInterval != null) {
+			fileSourceBuilder.monitorContinuously(discoveryInterval);
+		}
+		final FileSource<String> source = fileSourceBuilder.build();
+		final StreamExecutionEnvironment env = new TestStreamEnvironment(
+			miniCluster,
+			PARALLELISM);
+		if (checkpointingInterval != null) {
+			env.enableCheckpointing(checkpointingInterval.toMillis());
+		}
+		return env.fromSource(
+			source,
+			WatermarkStrategy.noWatermarks(),
+			"file-source");
+	}
 
-		// shut down the job, now that we have all the results we expected.
-		client.client.cancel().get();
-
-		result1.addAll(result2);
-		verifyResult(result1);
+	private static void restartTaskManager(TestingMiniCluster miniCluster) throws Exception {
+		try {
+			miniCluster.terminateTaskExecutor(0).get();
+		} finally {
+			Thread.sleep(100);
+			miniCluster.startTaskExecutor();
+		}
 	}
 
 	// ------------------------------------------------------------------------
@@ -307,5 +342,19 @@ public class FileSourceTextLinesITCase extends TestLogger {
 		assertTrue(parent.mkdirs() || parent.exists());
 
 		assertTrue(stagingFile.renameTo(file));
+	}
+
+	private static TestingMiniCluster createAndStartTestingMiniCluster(
+			Configuration configuration) throws Exception {
+		TestingMiniCluster miniCluster = new TestingMiniCluster(
+			new TestingMiniClusterConfiguration.Builder()
+				.setNumTaskManagers(1)
+				.setNumSlotsPerTaskManager(PARALLELISM)
+				.setConfiguration(configuration)
+				.setRpcServiceSharing(RpcServiceSharing.DEDICATED)
+				.build(),
+			null);
+		miniCluster.start();
+		return miniCluster;
 	}
 }
