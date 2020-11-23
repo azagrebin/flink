@@ -18,13 +18,24 @@
 
 package org.apache.flink.connector.file.src;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.file.src.reader.TextLineFormat;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
+import org.apache.flink.runtime.checkpoint.CheckpointRecoveryFactory;
+import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
+import org.apache.flink.runtime.checkpoint.StandaloneCheckpointIDCounter;
+import org.apache.flink.runtime.highavailability.nonha.embedded.TestingEmbeddedHaServices;
 import org.apache.flink.runtime.minicluster.MiniCluster;
 import org.apache.flink.runtime.minicluster.RpcServiceSharing;
 import org.apache.flink.runtime.minicluster.TestingMiniCluster;
 import org.apache.flink.runtime.minicluster.TestingMiniClusterConfiguration;
+import org.apache.flink.runtime.testingUtils.TestingUtils;
+import org.apache.flink.runtime.testutils.RecoverableCompletedCheckpointStore;
+import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -34,6 +45,7 @@ import org.apache.flink.util.TestLogger;
 import org.apache.flink.util.function.FunctionWithException;
 
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -52,6 +64,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 import java.util.zip.GZIPOutputStream;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -70,23 +84,51 @@ public class FileSourceTextLinesITCase extends TestLogger {
 
 	private static TestingMiniCluster miniCluster;
 
+	private static TestingEmbeddedHaServices highAvailabilityServices;
+
+	private static CompletedCheckpointStore checkpointStore;
+
 	@BeforeClass
 	public static void setupClass() throws Exception  {
+		highAvailabilityServices = new HaServices(TestingUtils.defaultExecutor(),
+			() -> checkpointStore,
+			new StandaloneCheckpointIDCounter());
+
+		final Configuration configuration = createConfiguration();
+
 		miniCluster = new TestingMiniCluster(
 			new TestingMiniClusterConfiguration.Builder()
+				.setConfiguration(configuration)
 				.setNumTaskManagers(1)
 				.setNumSlotsPerTaskManager(PARALLELISM)
 				.setRpcServiceSharing(RpcServiceSharing.DEDICATED)
 				.build(),
-			null);
+			() -> highAvailabilityServices);
 
 		miniCluster.start();
+	}
+
+	private static Configuration createConfiguration() throws IOException {
+		final Configuration configuration = new Configuration();
+		configuration.set(CheckpointingOptions.STATE_BACKEND, "filesystem");
+		final String checkPointDir = Path.fromLocalFile(TMP_FOLDER.newFolder()).toUri().toString();
+		configuration.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, checkPointDir);
+		return configuration;
+	}
+
+	@Before
+	public void setup() {
+		checkpointStore = new RecoverableCompletedCheckpointStore();
 	}
 
 	@AfterClass
 	public static void teardownClass() throws Exception {
 		if (miniCluster != null) {
 			miniCluster.close();
+		}
+		if (highAvailabilityServices != null) {
+			highAvailabilityServices.closeAndCleanupAllData();
+			highAvailabilityServices = null;
 		}
 	}
 
@@ -116,7 +158,7 @@ public class FileSourceTextLinesITCase extends TestLogger {
 	 */
 	@Test
 	public void testContinuousTextFileSource() throws Exception {
-		testContinuousTextFileSource(false);
+		testContinuousTextFileSource(FailoverType.NONE);
 	}
 
 	/**
@@ -125,10 +167,19 @@ public class FileSourceTextLinesITCase extends TestLogger {
 	 */
 	@Test
 	public void testContinuousTextFileSourceWithTaskManagerFailover() throws Exception {
-		testContinuousTextFileSource(true);
+		testContinuousTextFileSource(FailoverType.TM);
 	}
 
-	private void testContinuousTextFileSource(boolean failTaskManager) throws Exception {
+	/**
+	 * This test runs a job reading continuous input (files appearing over time)
+	 * with a stream record format (text lines) and triggers JobManager failover.
+	 */
+	@Test
+	public void testContinuousTextFileSourceWithJobManagerFailover() throws Exception {
+		testContinuousTextFileSource(FailoverType.JM);
+	}
+
+	private void testContinuousTextFileSource(FailoverType type) throws Exception {
 		final File testDir = TMP_FOLDER.newFolder();
 
 		final DataStream<String> stream =
@@ -136,6 +187,7 @@ public class FileSourceTextLinesITCase extends TestLogger {
 
 		final ClientAndIterator<String> client =
 			DataStreamUtils.collectWithClient(stream, "Continuous TextFiles Monitoring Test");
+		final JobID jobId = client.client.getJobID();
 
 		// write one file, execute, and wait for its result
 		// that way we know that the application was running and the source has
@@ -153,8 +205,8 @@ public class FileSourceTextLinesITCase extends TestLogger {
 		for (int i = 1; i < LINES_PER_FILE.length; i++) {
 			Thread.sleep(10);
 			writeFile(testDir, i);
-			if (failTaskManager && i == LINES_PER_FILE.length / 3) {
-				restartTaskManager();
+			if (i == LINES_PER_FILE.length / 3) {
+				triggerFailover(type, jobId);
 			}
 		}
 
@@ -184,12 +236,31 @@ public class FileSourceTextLinesITCase extends TestLogger {
 			miniCluster,
 			PARALLELISM);
 		if (checkpointingInterval != null) {
-			env.enableCheckpointing(checkpointingInterval.toMillis());
+			env.enableCheckpointing(checkpointingInterval.toMillis(), CheckpointingMode.EXACTLY_ONCE);
 		}
 		return env.fromSource(
 			source,
 			WatermarkStrategy.noWatermarks(),
 			"file-source");
+	}
+
+	private static void triggerFailover(FailoverType type, JobID jobId) throws Exception {
+		switch (type) {
+			case NONE:
+				break;
+			case TM:
+				restartTaskManager();
+				break;
+			case JM:
+				triggerJobManagerFailover(jobId);
+				break;
+		}
+	}
+
+	private static void triggerJobManagerFailover(JobID jobId) throws Exception {
+		highAvailabilityServices.revokeJobMasterLeadership(jobId).get();
+		Thread.sleep(100);
+		highAvailabilityServices.grantJobMasterLeadership(jobId).get();
 	}
 
 	private static void restartTaskManager() throws Exception {
@@ -359,5 +430,57 @@ public class FileSourceTextLinesITCase extends TestLogger {
 		assertTrue(parent.mkdirs() || parent.exists());
 
 		assertTrue(stagingFile.renameTo(file));
+	}
+
+	private enum FailoverType {
+		NONE,
+		TM,
+		JM
+	}
+
+	private static class HaServices extends TestingEmbeddedHaServices {
+		private final Supplier<CompletedCheckpointStore> completedCheckpointStoreFactory;
+		private final CheckpointIDCounter checkpointIDCounter;
+
+		private HaServices(
+				Executor executor,
+				Supplier<CompletedCheckpointStore> completedCheckpointStoreFactory,
+				CheckpointIDCounter checkpointIDCounter) {
+			super(executor);
+			this.completedCheckpointStoreFactory = completedCheckpointStoreFactory;
+			this.checkpointIDCounter = checkpointIDCounter;
+		}
+
+		@Override
+		public CheckpointRecoveryFactory getCheckpointRecoveryFactory() {
+			return new CheckpointRecoveryFactoryWithSettableStore(
+				completedCheckpointStoreFactory,
+				checkpointIDCounter);
+		}
+	}
+
+	private static class CheckpointRecoveryFactoryWithSettableStore implements CheckpointRecoveryFactory {
+		private final Supplier<CompletedCheckpointStore> completedCheckpointStoreFactory;
+		private final CheckpointIDCounter checkpointIDCounter;
+
+		private CheckpointRecoveryFactoryWithSettableStore(
+				Supplier<CompletedCheckpointStore> completedCheckpointStoreFactory,
+				CheckpointIDCounter checkpointIDCounter) {
+			this.completedCheckpointStoreFactory = completedCheckpointStoreFactory;
+			this.checkpointIDCounter = checkpointIDCounter;
+		}
+
+		@Override
+		public CompletedCheckpointStore createCheckpointStore(
+				JobID jobId,
+				int maxNumberOfCheckpointsToRetain,
+				ClassLoader userClassLoader) {
+			return completedCheckpointStoreFactory.get();
+		}
+
+		@Override
+		public CheckpointIDCounter createCheckpointIDCounter(JobID jobId) {
+			return checkpointIDCounter;
+		}
 	}
 }
